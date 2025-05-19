@@ -98,7 +98,7 @@
   ];
 
   # SSH agent service
-  programs.ssh.startAgent = true;
+  # programs.ssh.startAgent = true;
   services.gpg-agent = {
     enable = true;
     enableZshIntegration = true;
