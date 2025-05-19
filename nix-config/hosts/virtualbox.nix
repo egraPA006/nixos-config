@@ -15,9 +15,6 @@
     version = 2;
   };
   boot.loader.efi.canTouchEfiVariables = true;
-  # Enable QEMU guest agent
-  services.virtualbox.enable = true;
-
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
   # on your system were taken. It's perfectly fine and recommended to leave
