@@ -15,11 +15,11 @@
     '';
 
     # Basic configuration
-    ohMyZsh = {
-      enable = true;
-      plugins = [ "git" "sudo" "fzf" "direnv" ];
-      theme = "robbyrussell"; # Simple classic theme
-    };
+    # ohMyZsh = {
+    #   enable = true;
+    #   plugins = [ "git" "sudo" "fzf" "direnv" ];
+    #   theme = "robbyrussell"; # Simple classic theme
+    # };
 
     # Local configuration
     initExtra = ''
