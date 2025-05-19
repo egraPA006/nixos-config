@@ -2,10 +2,11 @@
 
 {
   imports = [
-    ./modules/apps.nix
-    ./modules/sway.nix
-    ./modules/system.nix
-    ./modules/utilities.nix
+    ../modules/apps.nix
+    ../modules/sway.nix
+    ../modules/system.nix
+    ../modules/utilities.nix
+    ./harware-config.nix
   ];
 
   # Basic system configuration
@@ -36,6 +37,7 @@
   };
 
   # Enable QEMU guest agent
+  services.virtualbox.enable = true;
   services.qemuGuest.enable = true;
 
   # This value determines the NixOS release from which the default

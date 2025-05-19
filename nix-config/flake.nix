@@ -10,9 +10,9 @@
   };
 
   outputs = { self, nixpkgs, home-manager, ... }@inputs: let
-    supportedSystems = [ "laptop" "qemu" ];
+    supportedSystems = [ "laptop" "virtualbox" ];
     # !!! USER CONFIG: Change this to switch profiles !!!
-    selectedSystem = "laptop";
+    selectedSystem = "virtualbox";
   in {
     nixosConfigurations =  {
       "${selectedSystem}" = nixpkgs.lib.nixosSystem {
