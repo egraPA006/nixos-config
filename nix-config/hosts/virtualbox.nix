@@ -14,7 +14,7 @@
     enable = true;
     version = 2;
   };
-  boot.loader.efi.canTouchEFIVariables = true;
+  boot.loader.efi.canTouchEfiVariables = true;
   # Enable QEMU guest agent
   services.virtualbox.enable = true;
 
