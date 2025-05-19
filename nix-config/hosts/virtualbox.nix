@@ -6,7 +6,7 @@
     ../modules/sway.nix
     ../modules/system.nix
     ../modules/utillities.nix
-    ../hosts/hardware-configuration.nix
+    ../hardware-configuration.nix
   ];
 
   # Basic system configuration
