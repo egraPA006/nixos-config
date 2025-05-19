@@ -84,7 +84,7 @@
   };
 
   # Ensure zsh is default shell
-  users.egrapa = {
+  users.users.users.egrapa = {
     shell = pkgs.zsh;
   };
 
