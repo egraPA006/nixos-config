@@ -6,7 +6,7 @@
     ../modules/sway.nix
     ../modules/system.nix
     ../modules/utillities.nix
-    ./harware-config.nix
+    ./hardware-configuration.nix
   ];
 
   # Basic system configuration
@@ -16,25 +16,25 @@
     device = "/dev/vda"; # QEMU virtual disk
   };
 
-  # QEMU-specific hardware settings
-  boot.initrd.availableKernelModules = [
-    "ahci"
-    "sd_mod"
-    "sr_mod"
-    "virtio_pci"
-    "virtio_blk"
-    "virtio_net"
-    "virtio_scsi"
-  ];
+  # # QEMU-specific hardware settings
+  # boot.initrd.availableKernelModules = [
+  #   "ahci"
+  #   "sd_mod"
+  #   "sr_mod"
+  #   "virtio_pci"
+  #   "virtio_blk"
+  #   "virtio_net"
+  #   "virtio_scsi"
+  # ];
 
-  # Use virtio drivers for better performance
-  boot.kernelModules = [ "virtio" "virtio_pci" "virtio_blk" "virtio_net" ];
+  # # Use virtio drivers for better performance
+  # boot.kernelModules = [ "virtio" "virtio_pci" "virtio_blk" "virtio_net" ];
 
-  # Filesystem configuration
-  fileSystems."/" = {
-    device = "/dev/vda1";
-    fsType = "ext4";
-  };
+  # # Filesystem configuration
+  # fileSystems."/" = {
+  #   device = "/dev/vda1";
+  #   fsType = "ext4";
+  # };
 
   # Enable QEMU guest agent
   services.virtualbox.enable = true;
