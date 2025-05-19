@@ -5,7 +5,7 @@
     ../modules/apps.nix
     ../modules/sway.nix
     ../modules/system.nix
-    ../modules/utilities.nix
+    ../modules/utillities.nix
     ./harware-config.nix
   ];
 
@@ -38,7 +38,6 @@
 
   # Enable QEMU guest agent
   services.virtualbox.enable = true;
-  services.qemuGuest.enable = true;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
