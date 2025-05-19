@@ -8,11 +8,11 @@
     enableCompletion = true;
 
     # Set as default shell
-    shellInit = ''
-      # Set ZSH as default shell
-      [ -f ~/.zshrc ] || touch ~/.zshrc
-      export SHELL=${pkgs.zsh}/bin/zsh
-    '';
+    # shellInit = ''
+    #   # Set ZSH as default shell
+    #   [ -f ~/.zshrc ] || touch ~/.zshrc
+    #   export SHELL=${pkgs.zsh}/bin/zsh
+    # '';
 
     # Basic configuration
     # ohMyZsh = {
