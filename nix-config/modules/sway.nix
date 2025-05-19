@@ -39,9 +39,9 @@
   ];
 
   ##### Required Services #####
-  services.xdg.portal = {
-    enable = true;
-    wlr.enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-wlr ];
-  };
+  # services.xdg.portal = {
+  #   enable = true;
+  #   wlr.enable = true;
+  #   extraPortals = [ pkgs.xdg-desktop-portal-wlr ];
+  # };
 }
