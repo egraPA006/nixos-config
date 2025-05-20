@@ -15,14 +15,14 @@
         system = "x86_64-linux";
         modules = [
           (./hosts/virtualbox/configuration.nix)
-          home-manager.nixosModules.home-manager
-          {
-            home-manager = {
-              useUserPackages = true;
-              useGlobalPkgs = true;
-              users.egrapa = import ./hosts/virtualbox/home.nix;
-            };
-          }
+          # home-manager.nixosModules.home-manager
+          # {
+          #   home-manager = {
+          #     useUserPackages = true;
+          #     useGlobalPkgs = true;
+          #     users.test = import ./hosts/virtualbox/home.nix;
+          #   };
+          # }
         ];
       };
       laptop = nixpkgs.lib.nixosSystem {

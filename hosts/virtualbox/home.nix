@@ -9,8 +9,8 @@
 
   # Basic Home Manager settings
   home = {
-    username = "egrapa";  # Replace with your actual username
-    homeDirectory = lib.mkForce "/home/egrapa";
+    username = "test";  # Replace with your actual username
+    homeDirectory = lib.mkForce "/home/test";
     stateVersion = "24.11";     # Match your NixOS version
 
     # Packages that should be installed specifically for the user
