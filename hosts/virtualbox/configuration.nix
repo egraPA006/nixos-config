@@ -9,8 +9,8 @@
   # Bootloader.
   boot.loader.grub = {
     enable = true;
-    device = "/dev/sda"
-  }
+    device = "/dev/sda";
+  };
   boot.loader.efi.canTouchEfiVariables = false;
 
   networking.hostName = "nixos-vm";
