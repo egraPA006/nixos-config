@@ -2,13 +2,9 @@
 
 {
   home.packages = with pkgs; [
-    # Core utilities
-    wget
-    curl
-    git
-    neofetch
     # Web browsers
     firefox
+    librewolf
 
     # Media
     vlc
@@ -19,8 +15,5 @@
 
     # Chat
     telegram-desktop
-
-    # Development
-    vscode
   ];
 }

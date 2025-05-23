@@ -6,6 +6,8 @@
     # ./sway.nix
     # ./zsh.nix
     ../../home/shell.nix
+    ../../home/apps.nix
+    ../../home/configs/vscode.nix
   ];
 
   # Basic Home Manager settings

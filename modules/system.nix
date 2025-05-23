@@ -53,7 +53,8 @@
   # System-wide packages (no GUI apps!)
   environment.systemPackages = with pkgs; [
   ];
+  programs.zsh.enable = true;
   nixpkgs.config.allowUnfree = true;
-
+  users.defaultUserShell = pkgs.zsh;
   system.stateVersion = "24.11";
 }

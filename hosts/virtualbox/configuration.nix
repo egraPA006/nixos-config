@@ -13,7 +13,11 @@
     ];
 
   # Bootloader.
-  boot.loader.systemd-boot.enable = true;
+  boot.loader.systemd-boot = {
+    enable = true;
+    configurationLimit = 5;
+  };
+  
   boot.loader.efi.canTouchEfiVariables = true;
 
   networking.hostName = "r2d2-vm"; # Define your hostname.
