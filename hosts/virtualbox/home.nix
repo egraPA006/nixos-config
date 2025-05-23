@@ -5,7 +5,7 @@
     # ./neovim.nix
     # ./sway.nix
     # ./zsh.nix
-    ../../home/plasma.nix
+    ../../home/shell.nix
   ];
 
   # Basic Home Manager settings
