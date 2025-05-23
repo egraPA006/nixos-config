@@ -9,6 +9,7 @@
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
       ../../modules/system.nix
+      ../../modules/plasma.nix
     ];
 
   # Bootloader.
@@ -16,7 +17,7 @@
   boot.loader.efi.canTouchEfiVariables = true;
 
   networking.hostName = "r2d2-vm"; # Define your hostname.
-  
+
   # Define a user account. Don't forget to set a password with ‘passwd’.
   # TODO change to egrapa
   users.users.test = {
