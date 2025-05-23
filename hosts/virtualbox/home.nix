@@ -5,6 +5,7 @@
     # ./neovim.nix
     # ./sway.nix
     # ./zsh.nix
+    ../../home/plasma.nix
   ];
 
   # Basic Home Manager settings
@@ -24,20 +25,20 @@
   programs.home-manager.enable = true;
 
   # GTK/Qt theming (optional but recommended for Sway)
-  gtk.enable = true;
-  qt.enable = true;
+  # gtk.enable = true;
+  # qt.enable = true;
 
   # XDG Desktop Portal configuration (required for Wayland)
-  xdg = {
-    enable = true;
-    portal = {
-      enable = true;
-      extraPortals = with pkgs; [
-        xdg-desktop-portal-wlr
-        xdg-desktop-portal-gtk
-      ];
-    };
-  };
+  # xdg = {
+  #   enable = true;
+  #   portal = {
+  #     enable = true;
+  #     extraPortals = with pkgs; [
+  #       xdg-desktop-portal-wlr
+  #       xdg-desktop-portal-gtk
+  #     ];
+  #   };
+  # };
 
   # Systemd services for user session
   # services = {

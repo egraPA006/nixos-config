@@ -1,6 +1,5 @@
 { config, pkgs, ... }:
 {
-  sound.enable = true;
   services.pipewire = {
     enable = true;
     alsa.enable = true;
@@ -15,11 +14,11 @@
       };
     };
   };
-  xdg.portal = {
-    enable = true;
-    wlr.enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-  };
+  # xdg.portal = {
+  #   enable = true;
+  #   wlr.enable = true;
+  #   extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+  # };
 
   # Hardware (GPU, input, etc.)
   # hardware.opengl = {
@@ -45,7 +44,7 @@
   console.keyMap = "us";
 
   # Kernel tweaks for Wayland
-  boot.kernelParams = [ "quiet" "udev.log_priority=3" ];
+  # boot.kernelParams = [ "quiet" "udev.log_priority=3" ];
 
   # Security (needed for swaylock, etc.)
   security.pam.services.swaylock = {};
@@ -55,8 +54,6 @@
   environment.systemPackages = with pkgs; [
   ];
   nixpkgs.config.allowUnfree = true;
-
-  services.openssh.enable = true;
 
   system.stateVersion = "24.11";
 }
