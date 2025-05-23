@@ -12,17 +12,16 @@
   outputs = { self, nixpkgs, home-manager, ... }@inputs: {
     nixosConfigurations = {
       virtualbox = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
         modules = [
           (./hosts/virtualbox/configuration.nix)
-          # home-manager.nixosModules.home-manager
-          # {
-          #   home-manager = {
-          #     useUserPackages = true;
-          #     useGlobalPkgs = true;
-          #     users.test = import ./hosts/virtualbox/home.nix;
-          #   };
-          # }
+          home-manager.nixosModules.home-manager
+          {
+            home-manager = {
+              useUserPackages = true;
+              useGlobalPkgs = true;
+              users.test = import ./hosts/virtualbox/home.nix; # TODO: change to egrapa
+            };
+          }
         ];
       };
       laptop = nixpkgs.lib.nixosSystem {
