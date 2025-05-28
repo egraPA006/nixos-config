@@ -3,12 +3,32 @@
 {
   programs.git = {
     enable = true;
+    userName = "Egor Pustovoytenko";
+    userEmail = "puseg2006@gmail.com";
+    extraConfig = {
+      core = {
+        # editor = "vim";  # Change to your preferred editor
+        pager = "less -FRX";
+        autocrlf = "input";
+      };
+      init = {
+        defaultBranch = "main";
+      };
+    };
+    ignores = [
+      # "*~"
+      # "*.swp"
+      # ".DS_Store"
+      # "*.pyc"
+      ".vscode"
+      "__pycache__"
+      # "node_modules/"
+      # "result"
+    ];
   };
-  #   # package = pkgs.git;
 
-  #   # # User info (change these)
-  #   # userName = "Egor Pustovoytenko";
-  #   # userEmail = "puseg2006@gmail.com";
+  # User info
+  
 
   #   # # Core settings
   #   # extraConfig = {

@@ -3,7 +3,7 @@
 {
   home.packages = with pkgs; [
     # Web browsers
-    firefox
+    # firefox
     librewolf
 
     # Media

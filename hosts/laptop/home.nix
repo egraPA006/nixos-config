@@ -8,6 +8,7 @@
     ../../home/shell.nix
     ../../home/apps.nix
     ../../home/configs/vscode.nix
+    ../../home/dev.nix
   ];
 
   # Basic Home Manager settings

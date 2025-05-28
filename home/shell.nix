@@ -18,6 +18,7 @@
       fgrep = "fgrep --color=auto";
       egrep = "egrep --color=auto";
       ssh = "TERM=xterm-256color ssh";
+      nixos-update = "sudo nixos-rebuild --flake /home/egrapa/nixospconfig#laptop switch";
     };
 
     history = {
@@ -30,11 +31,11 @@
 
     initContent = ''
       # Better directory navigation
-      setopt AUTO_CD
-      setopt CORRECT
-      setopt CORRECT_ALL
-      setopt INTERACTIVE_COMMENTS
-      setopt EXTENDED_GLOB
+      # setopt AUTO_CD
+      # setopt CORRECT
+      # setopt CORRECT_ALL
+      # setopt INTERACTIVE_COMMENTS
+      # setopt EXTENDED_GLOB
 
       # SSH Agent setup
       if [ -z "$SSH_AUTH_SOCK" ]; then

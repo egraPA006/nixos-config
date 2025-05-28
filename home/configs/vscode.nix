@@ -22,7 +22,7 @@
         # Rust
         rust-lang.rust-analyzer
         tamasfe.even-better-toml
-        serayuzgur.crates
+        # serayuzgur.crates
 
         # Python
         ms-python.python
@@ -38,7 +38,7 @@
 
         # Other useful extensions
         usernamehw.errorlens
-        mkhl.direnv
+        # mkhl.direnv
         yzhang.markdown-all-in-one
         gruntfuggly.todo-tree
       ];
