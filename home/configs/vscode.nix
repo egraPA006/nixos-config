@@ -55,10 +55,10 @@
         # Language specific settings
         "[nix]".editor.tabSize = 2;
         "[python]".editor.tabSize = 4;
-        "python.linting.enabled" = true;
-        "python.linting.pylintEnabled" = true;
-        "python.formatting.provider" = "black";
-        "python.analysis.typeCheckingMode" = "basic";
+        # "python.linting.enabled" = true;
+        # "python.linting.pylintEnabled" = true;
+        # "python.formatting.provider" = "black";
+        # "python.analysis.typeCheckingMode" = "basic";
 
         # Rust settings
         "rust-analyzer.checkOnSave.command" = "clippy";
@@ -99,11 +99,10 @@
     nil
     nixpkgs-fmt
     rust-analyzer
-    python311Packages.python-lsp-server
     cmake-language-server
     ccls
     clang-tools
-    jupyter
+    # jupyter
   ];
   programs.git.extraConfig.core.editor = "code";
 }

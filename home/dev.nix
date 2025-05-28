@@ -5,7 +5,6 @@
     # C/C++ toolchain
     gcc
     cmake
-    make
 
     # Rust toolchain (use rustup from shell instead if you prefer)
     rustc
