@@ -19,6 +19,7 @@
       egrep = "egrep --color=auto";
       ssh = "TERM=xterm-256color ssh";
       nixos-update = "sudo nixos-rebuild --flake /home/egrapa/nixos-config\\#laptop switch";
+      nixos-edit = "code /home/egrapa/nixos-config";
     };
 
     history = {
@@ -53,5 +54,7 @@
     fd
     ripgrep
     neofetch
+    unzip
+    zip
   ];
 }
