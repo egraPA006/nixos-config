@@ -13,8 +13,19 @@
     ];
 
   # Use the systemd-boot EFI boot loader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  boot.loader = {
+  grub = {
+    enable = true;
+    efiSupport = true;
+    useOSProber = true;
+    configurationLimit = 5;
+    device = "nodev";
+  };
+  efi = {
+    canTouchEfiVariables = true;
+    efiSysMountPoint = "/boot"; 
+  };
+};
 
   networking.hostName = "r2d2"; # Define your hostname.
   # Pick only one of the below networking options.
