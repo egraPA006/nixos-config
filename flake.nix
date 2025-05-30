@@ -7,9 +7,13 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    plasma-manager = {
+      url = "github:pjones/plasma-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, home-manager, ... }@inputs: {
+  outputs = { self, nixpkgs, home-manager, plasma-manager, ... }@inputs: {
     nixosConfigurations = {
       virtualbox = nixpkgs.lib.nixosSystem {
         modules = [
@@ -33,7 +37,13 @@
             home-manager = {
               useUserPackages = true;
               useGlobalPkgs = true;
-              users.egrapa = import ./hosts/laptop/home.nix;
+              extraSpecialArgs = { inherit plasma-manager; };
+              users.egrapa = { pkgs, plasma-manager, ... }: {
+                imports = [
+                  plasma-manager.homeManagerModules.plasma-manager
+                  ./hosts/laptop/home.nix
+                ];
+              };
             };
           }
         ];
