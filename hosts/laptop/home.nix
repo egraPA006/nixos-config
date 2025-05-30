@@ -9,6 +9,7 @@
     ../../home/apps.nix
     ../../home/configs/vscode.nix
     ../../home/dev.nix
+    ../../home/configs/plasma.nix
   ];
 
   # Basic Home Manager settings

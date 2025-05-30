@@ -8,8 +8,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     plasma-manager = {
-      url = "github:pjones/plasma-manager";
+      url = "github:nix-community/plasma-manager";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
     };
   };
 
@@ -37,13 +38,8 @@
             home-manager = {
               useUserPackages = true;
               useGlobalPkgs = true;
-              extraSpecialArgs = { inherit plasma-manager; };
-              users.egrapa = { pkgs, plasma-manager, ... }: {
-                imports = [
-                  plasma-manager.homeManagerModules.plasma-manager
-                  ./hosts/laptop/home.nix
-                ];
-              };
+              sharedModules = [ plasma-manager.homeManagerModules.plasma-manager ];
+              users.egrapa = import ./hosts/laptop/home.nix;
             };
           }
         ];
