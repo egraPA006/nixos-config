@@ -2,8 +2,7 @@
 {
   xdg.portal = {
     enable = true;
-    extraPortals = [ ];
-    configPackages = [ ];
+    config.common.default = "gnome";
   };
 
   services.xserver.enable = true;
