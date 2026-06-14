@@ -8,5 +8,6 @@
     ./networking.nix
     ./apps.nix
     ./shell.nix
+    ./vpn.nix
   ];
 }

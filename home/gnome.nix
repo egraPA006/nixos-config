@@ -14,7 +14,7 @@
 
     "org/gnome/shell" = {
       favorite-apps = [
-        "org.gnome.Terminal.desktop"
+        "org.gnome.Console.desktop"
         "chromium-browser.desktop"
         "org.gnome.Nautilus.desktop"
         "org.telegram.desktop.desktop"

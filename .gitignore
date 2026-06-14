@@ -1,2 +1,4 @@
 result
 result-*
+secrets/*
+!secrets/*.example

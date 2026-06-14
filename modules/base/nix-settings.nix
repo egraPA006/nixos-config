@@ -2,6 +2,8 @@
 {
   nixpkgs.config.allowUnfree = true;
 
+  boot.loader.systemd-boot.configurationLimit = 5;
+
   nix = {
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
