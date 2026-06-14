@@ -10,27 +10,7 @@ Personal NixOS flake for `re-1` (PC) and `la1n` (laptop).
 
 Download from [nixos.org](https://nixos.org/download). Use the minimal ISO.
 
-### 2. Enable flakes
-
-Both `nix-command` and flakes are disabled by default on the live installer. Enable them for the current session:
-
-```bash
-alias nix='nix --extra-experimental-features "nix-command flakes"'
-alias sudo='sudo '
-```
-
-### 3. Collect hardware config
-
-Do this before disko so `/mnt` is still empty and btrfs probing can't interfere:
-
-```bash
-nixos-generate-config --show-hardware-config --no-filesystems
-```
-
-Keep this output handy — you'll paste it into `hosts/<hostname>/hardware.nix` in step 5.
-Key things to keep: `boot.initrd.availableKernelModules`, `nixpkgs.hostPlatform`.
-
-### 4. Clone this repo
+### 2. Clone this repo
 
 ```bash
 nix-shell -p git
@@ -38,28 +18,26 @@ git clone https://github.com/egrapa/nixos-config /tmp/nixos-config
 cd /tmp/nixos-config
 ```
 
-### 5. Merge hardware config
+### 3. Generate hardware config
 
-Paste the output from step 3 into `hosts/<hostname>/hardware.nix`, replacing the placeholder.
-
-### 6. Partition disks with disko
-
-> **re-1** — wipes nvme0n1 (system), nvme1n1 (/data/fast), sda (/data/slow). Double-check device names with `lsblk` first.
+Do this before disko so `/mnt` is still empty and btrfs probing can't interfere:
 
 ```bash
-sudo nix run github:nix-community/disko -- --mode disko hosts/re-1/disko.nix
+bash scripts/hardware.sh <hostname>
 ```
 
-### 7. Copy repo to /mnt
+### 4. Partition disks
+
+> Double-check device names with `lsblk` before proceeding — this wipes disks.
 
 ```bash
-cp -r /tmp/nixos-config /mnt/etc/nixos
+bash scripts/disko.sh <hostname>
 ```
 
-### 8. Install
+### 5. Install
 
 ```bash
-sudo nixos-install --flake .#re-1   # or la1n
+bash scripts/install.sh <hostname>
 ```
 
 Then reboot. Set password for egrapa with `passwd` on first login.
@@ -75,12 +53,13 @@ Then reboot. Set password for egrapa with `passwd` on first login.
 | Command | What it does |
 |---|---|
 | `rebuild` | Apply config changes (`nixos-rebuild switch`) |
-| `update` | Snapshot root + home as `pre-update`, pull latest packages, rebuild |
+| `rollback` | Roll back to previous NixOS generation |
+| `gc` | Garbage collect all old generations (system + user) and clean boot entries |
+| `update` | Delete previous auto snapshot, create a fresh one, pull latest packages, rebuild |
 | `snap "label"` | Manual labeled snapshot of root + home, kept until removed |
 | `snapls` | List all snapshots |
 | `snaprb N` | Roll back root + home filesystem to snapshot N |
 | `snaprm N` | Delete snapshot N from root + home |
-| `snapclean` | Delete old `pre-update` snapshots, keeps only the most recent one |
 
 **Data disks (games, music, projects — independent from system):**
 
@@ -92,22 +71,19 @@ Then reboot. Set password for egrapa with `passwd` on first login.
 | `dsnaprb-slow N` | Roll back `/data/slow` only to snapshot N |
 | `dsnaprm N` | Delete snapshot N from both data disks |
 
+**VPN (AmneziaWG):**
+
+| Command | What it does |
+|---|---|
+| `vpn-on` | Start VPN |
+| `vpn-off` | Stop VPN |
+| `vpn-status` | Show VPN service status |
+
+> Config is not in the repo. Place your `awg0.conf` at `secrets/awg0.conf` (gitignored) before rebuilding — the activation script copies it to `/etc/amneziawg/awg0.conf` automatically.
+
 ### Roll back NixOS generation
 
-```bash
-sudo nixos-rebuild switch --rollback
-# or pick a generation at boot (systemd-boot shows them)
-```
-
-### Garbage collect
-
-Runs automatically weekly. To do it manually:
-
-```bash
-sudo nix-collect-garbage -d       # system
-nix-collect-garbage -d            # user
-sudo nixos-rebuild boot --flake .#re-1  # clean up boot entries too
-```
+Use `rollback` alias, or pick a previous generation at boot from the systemd-boot menu.
 
 ---
 

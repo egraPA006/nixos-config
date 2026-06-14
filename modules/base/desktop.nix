@@ -1,5 +1,11 @@
 { pkgs, ... }:
 {
+  xdg.portal = {
+    enable = true;
+    extraPortals = [ ];
+    configPackages = [ ];
+  };
+
   services.xserver.enable = true;
   services.xserver.xkb = {
     layout = "us,ru";
