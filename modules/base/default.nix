@@ -8,6 +8,7 @@
     ./networking.nix
     ./apps.nix
     ./shell.nix
+    ./snapper.nix
     ./vpn.nix
   ];
 }

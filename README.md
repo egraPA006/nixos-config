@@ -68,24 +68,35 @@ Then reboot. Set password for egrapa with `passwd` on first login.
 
 ## Day-to-day
 
-### Rebuild after config changes
+### Aliases
 
-```bash
-sudo nixos-rebuild switch --flake /home/egrapa/prog/nixos-config#re-1
-```
+**System (root + home):**
 
-### Roll back
+| Command | What it does |
+|---|---|
+| `rebuild` | Apply config changes (`nixos-rebuild switch`) |
+| `update` | Snapshot root + home as `pre-update`, pull latest packages, rebuild |
+| `snap "label"` | Manual labeled snapshot of root + home, kept until removed |
+| `snapls` | List all snapshots |
+| `snaprb N` | Roll back root + home filesystem to snapshot N |
+| `snaprm N` | Delete snapshot N from root + home |
+| `snapclean` | Delete old `pre-update` snapshots, keeps only the most recent one |
+
+**Data disks (games, music, projects — independent from system):**
+
+| Command | What it does |
+|---|---|
+| `dsnap "label"` | Manual snapshot of `/data/fast` + `/data/slow` |
+| `dsnapls` | List data snapshots |
+| `dsnaprb-fast N` | Roll back `/data/fast` only to snapshot N |
+| `dsnaprb-slow N` | Roll back `/data/slow` only to snapshot N |
+| `dsnaprm N` | Delete snapshot N from both data disks |
+
+### Roll back NixOS generation
 
 ```bash
 sudo nixos-rebuild switch --rollback
 # or pick a generation at boot (systemd-boot shows them)
-```
-
-### Update inputs
-
-```bash
-nix flake update
-sudo nixos-rebuild switch --flake .#re-1
 ```
 
 ### Garbage collect
