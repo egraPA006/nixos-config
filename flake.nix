@@ -17,6 +17,9 @@
     nixosConfigurations = {
       re-1 = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          activeProfiles = import ./hosts/re-1/active-profiles.nix;
+        };
         modules = [
           disko.nixosModules.disko
           home-manager.nixosModules.home-manager
@@ -25,6 +28,9 @@
       };
       la1n = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          activeProfiles = import ./hosts/la1n/active-profiles.nix;
+        };
         modules = [
           disko.nixosModules.disko
           home-manager.nixosModules.home-manager

@@ -10,15 +10,39 @@ Personal NixOS flake for `re-1` (PC) and `la1n` (laptop).
 
 Download from [nixos.org](https://nixos.org/download). Use the minimal ISO.
 
-### 2. Clone this repo
+### 2. Enable flakes
+
+Both `nix-command` and flakes are disabled by default on the live installer. Enable them for the current session:
+
+```bash
+alias nix='nix --extra-experimental-features "nix-command flakes"'
+alias sudo='sudo '
+```
+
+### 3. Collect hardware config
+
+Do this before disko so `/mnt` is still empty and btrfs probing can't interfere:
+
+```bash
+nixos-generate-config --show-hardware-config --no-filesystems
+```
+
+Keep this output handy — you'll paste it into `hosts/<hostname>/hardware.nix` in step 5.
+Key things to keep: `boot.initrd.availableKernelModules`, `nixpkgs.hostPlatform`.
+
+### 4. Clone this repo
 
 ```bash
 nix-shell -p git
-git clone https://github.com/egrapa/nixos-config /mnt/etc/nixos  # or any path
-cd /mnt/etc/nixos
+git clone https://github.com/egrapa/nixos-config /tmp/nixos-config
+cd /tmp/nixos-config
 ```
 
-### 3. Partition disks with disko
+### 5. Merge hardware config
+
+Paste the output from step 3 into `hosts/<hostname>/hardware.nix`, replacing the placeholder.
+
+### 6. Partition disks with disko
 
 > **re-1** — wipes nvme0n1 (system), nvme1n1 (/data/fast), sda (/data/slow). Double-check device names with `lsblk` first.
 
@@ -26,16 +50,13 @@ cd /mnt/etc/nixos
 sudo nix run github:nix-community/disko -- --mode disko hosts/re-1/disko.nix
 ```
 
-### 4. Generate and merge hardware config
+### 7. Copy repo to /mnt
 
 ```bash
-nixos-generate-config --show-hardware-config
+cp -r /tmp/nixos-config /mnt/etc/nixos
 ```
 
-Copy the output into `hosts/<hostname>/hardware.nix`, replacing the placeholder.
-Key things to keep from generated output: `boot.initrd.availableKernelModules`, detected filesystems, `nixpkgs.hostPlatform`.
-
-### 5. Install
+### 8. Install
 
 ```bash
 sudo nixos-install --flake .#re-1   # or la1n

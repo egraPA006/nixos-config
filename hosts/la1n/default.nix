@@ -8,8 +8,6 @@
     ../../modules/profiles
   ];
 
-  _module.args.activeProfiles = import ./active-profiles.nix;
-
   networking.hostName = "la1n";
 
   boot.loader.systemd-boot.enable = true;
