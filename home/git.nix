@@ -2,20 +2,19 @@
 {
   programs.git = {
     enable = true;
-    userName  = "Egor Pustovoytenko";
-    userEmail = "puseg2006@gmail.com";
 
-    extraConfig = {
+    settings = {
+      user.name  = "Egor Pustovoytenko";
+      user.email = "puseg2006@gmail.com";
       init.defaultBranch = "main";
       pull.rebase = false;
       core.editor = "vim";
-    };
-
-    aliases = {
-      st = "status";
-      co = "checkout";
-      br = "branch";
-      lg = "log --oneline --graph --decorate --all";
+      alias = {
+        st = "status";
+        co = "checkout";
+        br = "branch";
+        lg = "log --oneline --graph --decorate --all";
+      };
     };
   };
 }
