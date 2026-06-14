@@ -16,9 +16,8 @@
     dsnaprm = "sudo snapper -c fast delete $argv[1] && sudo snapper -c slow delete $argv[1]";
   };
 
-  programs.fish.functions.snapclean = {
-    description = "Delete all pre-update snapshots except the most recent one";
-    body = ''
+  programs.fish.shellInit = ''
+    function snapclean --description "Delete all pre-update snapshots except the most recent one"
       for cfg in root home
         set ids (sudo snapper -c $cfg list --columns number,description | string trim | awk '$2 == "pre-update" {print $1}' | head -n -1)
         if test (count $ids) -gt 0
@@ -28,8 +27,8 @@
           echo "[$cfg] nothing to clean"
         end
       end
-    '';
-  };
+    end
+  '';
 
   environment.systemPackages = with pkgs; [
     vim
