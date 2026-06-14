@@ -22,7 +22,7 @@
   users.users.egrapa = {
     isNormalUser = true;
     extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
-    shell = pkgs.bash;
+    shell = pkgs.fish;
   };
 
   home-manager = {
