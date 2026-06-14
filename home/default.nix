@@ -4,6 +4,7 @@
     ./bash.nix
     ./vscode.nix
     ./git.nix
+    ./gnome.nix
   ];
 
   home.username = "egrapa";

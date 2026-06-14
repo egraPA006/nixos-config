@@ -28,6 +28,7 @@
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
+    extraSpecialArgs = { hostname = "la1n"; };
     users.egrapa = import ../../home;
   };
 
