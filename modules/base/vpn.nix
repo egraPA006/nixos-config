@@ -19,7 +19,14 @@ let
   '';
 in
 {
-  environment.etc."amneziawg/awg0.conf".source = /home/egrapa/nixos-config/secrets/awg0.conf;
+  system.activationScripts.amneziawg-config = ''
+    mkdir -p /etc/amneziawg
+    src="/home/egrapa/nixos-config/secrets/awg0.conf"
+    if [ -f "$src" ]; then
+      cp "$src" /etc/amneziawg/awg0.conf
+      chmod 600 /etc/amneziawg/awg0.conf
+    fi
+  '';
 
   environment.systemPackages = with pkgs; [
     amneziawg-tools
