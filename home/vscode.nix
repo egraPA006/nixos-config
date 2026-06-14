@@ -6,11 +6,7 @@
     mutableExtensionsDir = true;
     profiles.default.extensions = with pkgs.vscode-extensions; [
       jnoortheen.nix-ide
-      ms-vscode.cpptools
-      rust-lang.rust-analyzer
-      ms-python.python
-      ms-python.vscode-pylance
-      tamasfe.even-better-toml
+      anthropic.claude-code
     ];
 
     profiles.default.userSettings = {

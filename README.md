@@ -112,13 +112,9 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `virt-osdev` | QEMU with cross-arch support (extends virt-general) |
 | `music-lite` | NAM guitar amp sim + low-latency PipeWire |
 | `music-full` | Reaper + yabridge + Wine VST support (extends music-lite) |
-| `dev-cpp` | GCC, Clang, CMake, GDB, Valgrind |
-| `dev-rust` | rustup + cargo tools |
-| `dev-python-ml` | Python + numpy/pandas/sklearn/jupyter + uv |
-| `dev-osdev` | QEMU + nasm + cross-compile toolchain stubs |
-| `dev-fpga` | Distrobox + Podman (for Quartus etc.) |
-
 Profiles can overlap freely — e.g. `virt-general` + `gaming-full` at the same time is fine.
+
+Dev environments are handled per-project via `nix develop` / `devShell` in each project's `flake.nix`.
 
 ---
 

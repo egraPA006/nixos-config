@@ -23,6 +23,7 @@ in
     description = "AmneziaWG VPN";
     after = [ "network.target" ];
     wantedBy = [];
+    unitConfig.WantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -33,8 +34,8 @@ in
   };
 
   programs.fish.shellAliases = {
-    vpn-on     = "sudo systemctl start amneziawg";
-    vpn-off    = "sudo systemctl stop amneziawg";
+    vpn-on     = "sudo systemctl enable --now amneziawg";
+    vpn-off    = "sudo systemctl disable --now amneziawg";
     vpn-status = "sudo systemctl status amneziawg";
   };
 }

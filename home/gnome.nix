@@ -1,5 +1,52 @@
-{ hostname, ... }:
+{ hostname, lib, ... }:
 {
+  xdg.configFile."monitors.xml" = lib.mkIf (hostname == "re-1") {
+    force = true;
+    text = ''
+      <monitors version="2">
+        <configuration>
+          <layoutmode>logical</layoutmode>
+          <logicalmonitor>
+            <x>0</x>
+            <y>0</y>
+            <scale>1</scale>
+            <primary>yes</primary>
+            <monitor>
+              <monitorspec>
+                <connector>DP-3</connector>
+                <vendor>HPN</vendor>
+                <product>HP X27q</product>
+                <serial>6CM14208Y0</serial>
+              </monitorspec>
+              <mode>
+                <width>2560</width>
+                <height>1440</height>
+                <rate>59.951</rate>
+              </mode>
+            </monitor>
+          </logicalmonitor>
+          <logicalmonitor>
+            <x>2560</x>
+            <y>234</y>
+            <scale>1</scale>
+            <monitor>
+              <monitorspec>
+                <connector>HDMI-1</connector>
+                <vendor>SAM</vendor>
+                <product>SAMSUNG</product>
+                <serial>0x01000e00</serial>
+              </monitorspec>
+              <mode>
+                <width>1920</width>
+                <height>1080</height>
+                <rate>60.000</rate>
+              </mode>
+            </monitor>
+          </logicalmonitor>
+        </configuration>
+      </monitors>
+    '';
+  };
   xdg.mimeApps = {
     enable = true;
     defaultApplications = {

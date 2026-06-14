@@ -4,7 +4,6 @@ let
     "gaming-lite" "gaming-full"
     "virt-general" "virt-osdev"
     "music-lite" "music-full"
-    "dev-cpp" "dev-rust" "dev-python-ml" "dev-osdev" "dev-fpga"
   ];
 
   nixosProfile = pkgs.writeShellApplication {
