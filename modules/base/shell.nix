@@ -4,7 +4,7 @@
   programs.fish.shellAliases = {
     rebuild = "sudo nixos-rebuild switch --flake /home/egrapa/nixos-config#${config.networking.hostName}";
     rollback = "sudo nixos-rebuild switch --rollback";
-    gc = "sudo nix-collect-garbage -d && nix-collect-garbage -d && sudo nixos-rebuild boot --flake /home/egrapa/nixos-config#${config.networking.hostName}";
+    gc = "sudo nix-collect-garbage --delete-older-than 14d && nix-collect-garbage --delete-older-than 14d && sudo nixos-rebuild boot --flake /home/egrapa/nixos-config#${config.networking.hostName}";
     snap = "sudo snapper -c root create -d $argv[1] && sudo snapper -c home create -d $argv[1]";
     snapls = "echo '=== root ===' && sudo snapper -c root list && echo '=== home ===' && sudo snapper -c home list";
     snaprb = "sudo snapper -c root undochange $argv[1]..0 && sudo snapper -c home undochange $argv[1]..0";

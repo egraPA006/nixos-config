@@ -15,6 +15,11 @@
 
   zramSwap.enable = true;
 
+  systemd.tmpfiles.rules = [
+    "z /data/fast 0755 egrapa users -"
+    "z /data/slow 0755 egrapa users -"
+  ];
+
   services.hardware.openrgb.enable = true;
 
   users.users.egrapa = {
