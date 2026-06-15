@@ -43,6 +43,10 @@
                   mountpoint = "/.snapshots";
                   mountOptions = [ "compress=zstd" "noatime" ];
                 };
+                "@home_snapshots" = {
+                  mountpoint = "/home/.snapshots";
+                  mountOptions = [ "compress=zstd" "noatime" ];
+                };
               };
             };
           };
@@ -58,10 +62,18 @@
         partitions.data = {
           size = "100%";
           content = {
-            type = "filesystem";
-            format = "btrfs";
-            mountpoint = "/data/fast";
-            mountOptions = [ "compress=zstd" "noatime" ];
+            type = "btrfs";
+            extraArgs = [ "-L" "fast" "-f" ];
+            subvolumes = {
+              "@fast" = {
+                mountpoint = "/data/fast";
+                mountOptions = [ "compress=zstd" "noatime" ];
+              };
+              "@fast_snapshots" = {
+                mountpoint = "/data/fast/.snapshots";
+                mountOptions = [ "compress=zstd" "noatime" ];
+              };
+            };
           };
         };
       };
@@ -75,10 +87,18 @@
         partitions.data = {
           size = "100%";
           content = {
-            type = "filesystem";
-            format = "btrfs";
-            mountpoint = "/data/slow";
-            mountOptions = [ "compress=zstd" "noatime" ];
+            type = "btrfs";
+            extraArgs = [ "-L" "slow" "-f" ];
+            subvolumes = {
+              "@slow" = {
+                mountpoint = "/data/slow";
+                mountOptions = [ "compress=zstd" "noatime" ];
+              };
+              "@slow_snapshots" = {
+                mountpoint = "/data/slow/.snapshots";
+                mountOptions = [ "compress=zstd" "noatime" ];
+              };
+            };
           };
         };
       };
