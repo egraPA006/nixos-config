@@ -13,6 +13,9 @@
   services.desktopManager.gnome.enable = true;
   services.displayManager.gdm = {
     enable = true;
+    settings = {
+      greeter.MultiMonitor = "mirror";
+    };
   };
 
   environment.systemPackages = with pkgs.gnomeExtensions; [
