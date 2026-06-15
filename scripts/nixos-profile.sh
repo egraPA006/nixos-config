@@ -1,5 +1,5 @@
 HOSTNAME_VAL=$(hostname)
-CONFIG_DIR="${NIXOS_CONFIG_DIR:-/home/egrapa/prog/nixos-config}"
+CONFIG_DIR="${NIXOS_CONFIG_DIR:-/home/egrapa/nixos-config}"
 PROFILES_FILE="${CONFIG_DIR}/hosts/${HOSTNAME_VAL}/active-profiles.nix"
 
 VALID_PROFILES=(
