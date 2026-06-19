@@ -6,7 +6,11 @@
     ../../modules/base
     ../../modules/hardware/nvidia.nix
     ../../modules/profiles
+    ../../modules/hotspot.nix
   ];
+
+  hotspot.enable = true;
+  hotspot.wifiInterface = "wlp8s0";
 
   networking.hostName = "re-1";
 
