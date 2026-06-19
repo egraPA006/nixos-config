@@ -81,6 +81,15 @@ Then reboot. Set password for egrapa with `passwd` on first login.
 
 > Config is not in the repo. Place your `awg0.conf` at `secrets/awg0.conf` (gitignored) before rebuilding — the activation script copies it to `/etc/amneziawg/awg0.conf` automatically.
 
+**Hotspot (re-1):**
+
+| Command | What it does |
+|---|---|
+| `hotspot start` | Bring up the WiFi AP (`<hostname>-hotspot`), routes traffic through VPN |
+| `hotspot stop` | Tear down the WiFi AP |
+
+> PSK is not in the repo. Copy `secrets/hotspot.conf.example` to `secrets/hotspot.conf` (gitignored) and set your password before rebuilding — the activation script installs the NetworkManager connection profile automatically.
+
 ### Roll back NixOS generation
 
 Use `rollback` alias, or pick a previous generation at boot from the systemd-boot menu.
