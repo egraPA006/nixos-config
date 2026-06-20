@@ -13,7 +13,23 @@
     };
   };
 
-  outputs = { self, nixpkgs, home-manager, disko }: {
+  outputs = { self, nixpkgs, home-manager, disko }:
+  let
+    pkgs = nixpkgs.legacyPackages.x86_64-linux;
+  in {
+    devShells.x86_64-linux.cpp = pkgs.mkShell {
+      packages = with pkgs; [
+        gcc
+        clang
+        clang-tools
+        meson
+        ninja
+        pkg-config
+        gdb
+        cmake
+      ];
+    };
+
     nixosConfigurations = {
       re-1 = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
