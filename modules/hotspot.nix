@@ -63,6 +63,10 @@ in
           *) echo "Usage: pino hotspot start|stop" >&2; exit 1 ;;
         esac
       '';
+      fishCompletions = ''
+        complete -c pino -f -n '__fish_seen_subcommand_from hotspot' -a start -d 'Bring up AP'
+        complete -c pino -f -n '__fish_seen_subcommand_from hotspot' -a stop  -d 'Tear down AP'
+      '';
     };
 
     networking.firewall.trustedInterfaces = [ cfg.wifiInterface ];

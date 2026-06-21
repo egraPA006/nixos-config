@@ -41,6 +41,13 @@ in
         Set a layout in GNOME Settings → Displays, then: pino monitor save <name>
     '';
     script = ''monitor "$@"'';
+    fishCompletions = ''
+      complete -c pino -f -n '__fish_seen_subcommand_from monitor' -a list   -d 'List saved profiles'
+      complete -c pino -f -n '__fish_seen_subcommand_from monitor' -a status -d 'Show current display layout'
+      complete -c pino -f -n '__fish_seen_subcommand_from monitor' -a switch -d 'Apply a saved profile'
+      complete -c pino -f -n '__fish_seen_subcommand_from monitor' -a save   -d 'Save current layout as a profile'
+      complete -c pino -f -n '__fish_seen_subcommand_from monitor' -a rm     -d 'Delete a saved profile'
+    '';
   };
 
   environment.gnome.excludePackages = with pkgs; [

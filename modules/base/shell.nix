@@ -62,6 +62,16 @@ in
           pino snap data <...>       Data disk snapshots  (pino snap data help)
       '';
       script = builtins.readFile ../pino/snap.sh;
+      fishCompletions = ''
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a ls      -d 'List snapshots'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a rb      -d 'Roll back to snapshot N'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a rm      -d 'Delete snapshot N'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a data    -d '/data snapshots'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data'     -a ls      -d 'List data snapshots'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data'     -a rb-fast -d 'Roll back /data/fast to N'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data'     -a rb-slow -d 'Roll back /data/slow to N'
+        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data'     -a rm      -d 'Delete data snapshot N'
+      '';
     };
   };
 

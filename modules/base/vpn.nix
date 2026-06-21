@@ -54,5 +54,10 @@ in
         Config: secrets/awg0.conf (gitignored).
     '';
     script = builtins.readFile ../pino/vpn.sh;
+    fishCompletions = ''
+      complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a on     -d 'Start VPN + enable autostart'
+      complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a off    -d 'Stop VPN + disable autostart'
+      complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a status -d 'Show service status'
+    '';
   };
 }

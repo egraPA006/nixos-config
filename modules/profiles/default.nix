@@ -35,5 +35,12 @@ in
         Active profiles: hosts/<hostname>/active-profiles.nix
     '';
     script = ''nixos-profile "$@"'';
+    fishCompletions = ''
+      complete -c pino -f -n '__fish_seen_subcommand_from profile' -a list    -d 'List available profiles'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile' -a status  -d 'Show active profiles'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and __fish_seen_subcommand_from enable disable' -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from list status enable disable' -a enable  -d 'Enable a profile and rebuild'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from list status enable disable' -a disable -d 'Disable a profile and rebuild'
+    '';
   };
 }
