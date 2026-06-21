@@ -48,6 +48,20 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    pino.subcommands.hotspot = {
+      description = "WiFi access point";
+      script = ''
+        case "''${1:-}" in
+          start|stop) hotspot "''${1:-}" ;;
+          help|*)
+            echo "pino hotspot — WiFi AP  (SSID: ${ssid})"
+            echo "  pino hotspot start   Bring up AP, traffic routed via VPN"
+            echo "  pino hotspot stop    Tear down AP"
+            ;;
+        esac
+      '';
+    };
+
     networking.firewall.trustedInterfaces = [ cfg.wifiInterface ];
 
     networking.nat = {

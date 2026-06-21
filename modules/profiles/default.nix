@@ -22,4 +22,9 @@ in
   }) activeProfiles;
 
   environment.systemPackages = [ nixosProfile ];
+
+  pino.subcommands.profile = {
+    description = "Manage NixOS profiles  (gaming, dev-cpp, ...)";
+    script = ''nixos-profile "$@"'';
+  };
 }

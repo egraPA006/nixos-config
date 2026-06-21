@@ -46,61 +46,33 @@ Then reboot. Set password for egrapa with `passwd` on first login.
 
 ## Day-to-day
 
-### Aliases
+Everything is under one CLI: **`pino`**.
 
-**System (root + home):**
-
-| Command | What it does |
-|---|---|
-| `rebuild` | Apply config changes (`nixos-rebuild switch`) |
-| `rollback` | Roll back to previous NixOS generation |
-| `gc` | Garbage collect all old generations (system + user) and clean boot entries |
-| `update` | Delete previous auto snapshot, create a fresh one, pull latest packages, rebuild |
-| `snap "label"` | Manual labeled snapshot of root + home, kept until removed |
-| `snapls` | List all snapshots |
-| `snaprb N` | Roll back root + home filesystem to snapshot N |
-| `snaprm N` | Delete snapshot N from root + home |
-
-**Data disks (games, music, projects — independent from system):**
+```
+pino help                        show all commands
+pino <command> help              detailed help for that command
+```
 
 | Command | What it does |
 |---|---|
-| `dsnap "label"` | Manual snapshot of `/data/fast` + `/data/slow` |
-| `dsnapls` | List data snapshots |
-| `dsnaprb-fast N` | Roll back `/data/fast` only to snapshot N |
-| `dsnaprb-slow N` | Roll back `/data/slow` only to snapshot N |
-| `dsnaprm N` | Delete snapshot N from both data disks |
+| `pino rebuild` | Apply config changes (`nixos-rebuild switch`) |
+| `pino rollback` | Roll back to previous NixOS generation |
+| `pino gc` | Garbage-collect old generations and clean boot entries |
+| `pino update` | Snapshot, update flake inputs, rebuild |
+| `pino profile list/status/enable/disable` | Manage NixOS profiles |
+| `pino monitor list/status/switch/save` | Manage display profiles |
+| `pino snap <label>` | Snapshot root + home |
+| `pino snap ls/rb/rm` | List / roll back / delete snapshots |
+| `pino snap data <label>` | Snapshot `/data/fast` + `/data/slow` |
+| `pino snap data ls/rb-fast/rb-slow/rm` | Data snapshot operations |
+| `pino vpn on/off/status` | AmneziaWG VPN |
+| `pino hotspot start/stop` | WiFi access point (re-1) |
 
-**VPN (AmneziaWG):**
+> VPN config: place `awg0.conf` at `secrets/awg0.conf` (gitignored) — activation script copies it to `/etc/amneziawg/awg0.conf`.
 
-| Command | What it does |
-|---|---|
-| `vpn-on` | Start VPN |
-| `vpn-off` | Stop VPN |
-| `vpn-status` | Show VPN service status |
+> Hotspot PSK: copy `secrets/hotspot.conf.example` → `secrets/hotspot.conf` (gitignored) and set your password.
 
-> Config is not in the repo. Place your `awg0.conf` at `secrets/awg0.conf` (gitignored) before rebuilding — the activation script copies it to `/etc/amneziawg/awg0.conf` automatically.
-
-**Hotspot (re-1):**
-
-| Command | What it does |
-|---|---|
-| `hotspot start` | Bring up the WiFi AP (`<hostname>-hotspot`), routes traffic through VPN |
-| `hotspot stop` | Tear down the WiFi AP |
-
-> PSK is not in the repo. Copy `secrets/hotspot.conf.example` to `secrets/hotspot.conf` (gitignored) and set your password before rebuilding — the activation script installs the NetworkManager connection profile automatically.
-
-**Monitor profiles (re-1):**
-
-| Command | What it does |
-|---|---|
-| `monitor list` | List saved display profiles |
-| `monitor status` | Show current display layout |
-| `monitor switch <name>` | Apply a saved profile |
-| `monitor save <name>` | Save current GNOME display layout as a profile |
-
-Profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation: `single` (DP-3 only) and `dual` (DP-3 + HDMI-1 TV).
-Set up a new layout in GNOME Settings → Displays, then run `monitor save <name>` to capture it.
+> Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino monitor save <name>` to capture it.
 
 ### Roll back NixOS generation
 
@@ -153,14 +125,18 @@ hosts/
     active-profiles.nix      # managed by nixos-profile CLI
   la1n/  (same layout)
 modules/
+  pino.nix                   # pino CLI framework — defines pino.subcommands option
   base/                      # always-on: GNOME, PipeWire, networking, apps
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
   profiles/                  # one file per profile + loader (default.nix)
 scripts/
-  nixos-profile.sh           # CLI source (built into nixos-profile binary)
-  monitor.py                 # CLI source (built into monitor binary)
+  nixos-profile.sh           # built into nixos-profile (delegates from pino profile)
+  monitor.py                 # built into monitor (delegates from pino monitor)
+  pino-snap.sh               # snap subcommand source
+  pino-update.sh             # update subcommand source
+  pino-vpn.sh                # vpn subcommand source
 home/                        # home-manager: bash (blesh), vscode, git
 ```
 

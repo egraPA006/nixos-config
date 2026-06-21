@@ -1,6 +1,7 @@
 { ... }:
 {
   imports = [
+    ../pino.nix
     ./nix-settings.nix
     ./locale.nix
     ./desktop.nix

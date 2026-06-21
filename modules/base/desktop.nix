@@ -27,6 +27,11 @@ in
     tiling-assistant
   ]) ++ [ monitorTool ];
 
+  pino.subcommands.monitor = {
+    description = "Manage display profiles";
+    script = ''monitor "$@"'';
+  };
+
   environment.gnome.excludePackages = with pkgs; [
     gnome-photos
     gnome-tour

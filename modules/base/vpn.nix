@@ -32,7 +32,6 @@ in
     };
   };
 
-  # Restores VPN state on boot if the user had it enabled
   systemd.services.amneziawg-autostart = {
     description = "AmneziaWG VPN autostart";
     after = [ "network.target" "amneziawg.service" ];
@@ -44,9 +43,8 @@ in
     };
   };
 
-  programs.fish.shellAliases = {
-    vpn-on     = "sudo mkdir -p /var/lib/amneziawg && sudo touch /var/lib/amneziawg/autostart && sudo systemctl start amneziawg";
-    vpn-off    = "sudo rm -f /var/lib/amneziawg/autostart && sudo systemctl stop amneziawg";
-    vpn-status = "sudo systemctl status amneziawg";
+  pino.subcommands.vpn = {
+    description = "AmneziaWG VPN";
+    script = builtins.readFile ../../scripts/pino-vpn.sh;
   };
 }
