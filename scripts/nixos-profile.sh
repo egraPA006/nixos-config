@@ -28,7 +28,7 @@ is_valid() {
 }
 
 get_active() {
-  grep -oP '"\K[^"]+(?=")' "$PROFILES_FILE" 2>/dev/null || true
+  grep -oP '"\K[^"]+(?=")' "$PROFILES_FILE" 2>/dev/null | grep -v '^\s*$' || true
 }
 
 write_profiles() {
