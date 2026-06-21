@@ -51,6 +51,19 @@ in
       script = builtins.readFile ../pino/update.sh;
     };
 
+    info = {
+      description = "Show system info with Pino art";
+      helpText = ''
+        pino info — neofetch-style system info with Pino art
+          Art source: modules/pino/pino-art.sh  (paste any chafa printf here)
+      '';
+      script = ''
+        mapfile -t _art < <(
+        ${builtins.readFile ../pino/pino-art.sh}
+        )
+      '' + builtins.readFile ../pino/pino-info.sh;
+    };
+
     snap = {
       description = "Manage btrfs snapshots";
       helpText = ''
