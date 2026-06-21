@@ -35,6 +35,7 @@ in
         pino monitor status             Show current display layout
         pino monitor switch <name>      Apply a saved profile
         pino monitor save   <name>      Save current GNOME layout as a profile
+        pino monitor rm     <name>      Delete a saved profile
 
         Profiles stored in ~/.config/monitor-profiles/
         Set a layout in GNOME Settings → Displays, then: pino monitor save <name>

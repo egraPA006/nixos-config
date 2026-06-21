@@ -60,7 +60,7 @@ pino <command> help              detailed help for that command
 | `pino gc` | Garbage-collect old generations and clean boot entries |
 | `pino update` | Snapshot, update flake inputs, rebuild |
 | `pino profile list/status/enable/disable` | Manage NixOS profiles |
-| `pino monitor list/status/switch/save` | Manage display profiles |
+| `pino monitor list/status/switch/save/rm` | Manage display profiles |
 | `pino snap <label>` | Snapshot root + home |
 | `pino snap ls/rb/rm` | List / roll back / delete snapshots |
 | `pino snap data <label>` | Snapshot `/data/fast` + `/data/slow` |
