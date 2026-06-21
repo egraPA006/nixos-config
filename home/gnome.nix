@@ -44,7 +44,7 @@ in
         for i in range(mons.n_children()):
             mon  = mons.get_child_value(i)
             spec = mon.get_child_value(0)
-            if spec.get_child_value(0).get_string()[0] != conn:
+            if spec.get_child_value(0).get_string() != conn:
                 continue
             modes = mon.get_child_value(1)
             for j in range(modes.n_children()):
@@ -52,7 +52,7 @@ in
                 if (m.get_child_value(1).get_int32()    == w and
                     m.get_child_value(2).get_int32()    == h and
                     abs(m.get_child_value(3).get_double() - r) < 1.0):
-                    return m.get_child_value(0).get_string()[0]
+                    return m.get_child_value(0).get_string()
         return None
 
     def hdmi_active(result):
@@ -61,7 +61,7 @@ in
             lm   = lms.get_child_value(i)
             mons = lm.get_child_value(5)
             for j in range(mons.n_children()):
-                if mons.get_child_value(j).get_child_value(0).get_string()[0] == HDMI:
+                if mons.get_child_value(j).get_child_value(0).get_string() == HDMI:
                     return True
         return False
 
