@@ -55,6 +55,7 @@ pino <command> help              detailed help for that command
 
 | Command | What it does |
 |---|---|
+| `pino info` | Neofetch-style system info with Pino art |
 | `pino rebuild` | Apply config changes (`nixos-rebuild switch`) |
 | `pino rollback` | Roll back to previous NixOS generation |
 | `pino gc` | Garbage-collect old generations and clean boot entries |
@@ -73,6 +74,24 @@ pino <command> help              detailed help for that command
 > Hotspot PSK: copy `secrets/hotspot.conf.example` → `secrets/hotspot.conf` (gitignored) and set your password.
 
 > Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino monitor save <name>` to capture it.
+
+### Updating the pino info art
+
+`pino info` shows a colorful half-block image of Pino (Ergo Proxy) alongside system info.
+To swap the art, generate a new one with [chafa](https://hpjansson.org/chafa/) and paste it into `modules/pino/pino-art.sh`:
+
+```bash
+# generate art (tweak --size to taste, ~40x24 is the sweet spot)
+chafa your-image.png --size 40x24
+
+# paste the output printf "..." into:
+modules/pino/pino-art.sh
+
+# then rebuild
+pino rebuild
+```
+
+The info layout auto-detects the art's width and height — no manual adjustments needed.
 
 ### Roll back NixOS generation
 
@@ -126,7 +145,9 @@ hosts/
   la1n/  (same layout)
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
-  pino/                      # bash fragments read by pino subcommand registrations
+  pino/
+    pino-art.sh              # ← paste new chafa art here, then pino rebuild
+    pino-info.sh             # info layout (auto-adapts to art dimensions)
   base/                      # always-on: GNOME, PipeWire, networking, apps
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
