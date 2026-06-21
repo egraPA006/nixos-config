@@ -14,7 +14,12 @@
   programs.steam = {
     enable = true;
     remotePlay.openFirewall = true;
-    gamescopeSession.enable = true;
+    gamescopeSession = {
+      enable = true;
+      args = [
+        "--force-grab-cursor"
+      ];
+    };
     extraCompatPackages = with pkgs; [ proton-ge-bin ];
     package = pkgs.steam.override {
       extraProfile = ''

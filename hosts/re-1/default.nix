@@ -26,6 +26,14 @@
 
   services.hardware.openrgb.enable = true;
 
+  environment.etc."systemd/sleep.conf.d/nosuspend.conf".text = ''
+    [Sleep]
+    AllowSuspend=no
+    AllowHibernation=no
+    AllowSuspendThenHibernate=no
+    AllowHybridSleep=no
+  '';
+
   users.users.egrapa = {
     isNormalUser = true;
     extraGroups = [
