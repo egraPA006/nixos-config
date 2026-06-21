@@ -1,0 +1,9 @@
+Drop .nam model files here.
+Content is gitignored (like secrets/).
+
+Get models from: https://tonehunt.org
+
+Usage:
+  pino music list
+  pino music start <model-name>
+  pino music stop

@@ -2,3 +2,7 @@ result
 result-*
 secrets/*
 !secrets/*.example
+data/**
+!data/**/
+!data/**/.gitkeep
+!data/**/README
