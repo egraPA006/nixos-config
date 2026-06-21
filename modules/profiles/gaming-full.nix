@@ -1,5 +1,11 @@
 { pkgs, ... }:
 {
+  services.udev.extraRules = ''
+    # Moza (Gudsen) ttyACM devices — uaccess so any logged-in user can reach them
+    SUBSYSTEM=="tty", KERNEL=="ttyACM*", ATTRS{idVendor}=="346e", ACTION=="add", MODE="0666", TAG+="uaccess"
+    # uinput — needed to create virtual joysticks
+    SUBSYSTEM=="misc", KERNEL=="uinput", OPTIONS+="static_node=uinput", TAG+="uaccess"
+  '';
   programs.gamescope = {
     enable = true;
     capSysNice = true;
