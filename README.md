@@ -68,6 +68,9 @@ pino <command> help              detailed help for that command
 | `pino snap data ls/rb-fast/rb-slow/rm` | Data snapshot operations |
 | `pino vpn on/off/status` | AmneziaWG VPN |
 | `pino hotspot start/stop` | WiFi access point (re-1) |
+| `pino music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
+| `pino music-lite set-latency <samples>` | Adjust PipeWire quantum at runtime |
+| `pino music-lite set-volume <percent>` | Output level (100=default, >100 boosts) |
 
 > VPN config: place `awg0.conf` at `secrets/awg0.conf` (gitignored) — activation script copies it to `/etc/amneziawg/awg0.conf`.
 
