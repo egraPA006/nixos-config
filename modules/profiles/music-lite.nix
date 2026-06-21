@@ -145,12 +145,13 @@ EOF
         esac
       '';
       fishCompletions = ''
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite' -a list        -d 'List available models'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite' -a start       -d 'Load a model into PipeWire'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite' -a stop        -d 'Stop the running node'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite' -a status      -d 'Show running status'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite' -a log         -d 'Show last jalv output'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite' -a set-latency -d 'Set PipeWire quantum'
+        set -l ml_no_sub 'not __fish_seen_subcommand_from list start stop status log set-latency'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a list        -d 'List available models'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a start       -d 'Load a model into PipeWire'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a stop        -d 'Stop the running node'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a status      -d 'Show running status'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a log         -d 'Show last jalv output'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-latency -d 'Set PipeWire quantum'
         complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from start' \
           -a "(ls ${ampsDir}/*.nam 2>/dev/null | string replace -r '.*/' ''' | string replace '.nam' ''')" \
           -d 'NAM model'
