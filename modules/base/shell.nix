@@ -48,7 +48,7 @@ in
           3. Runs: nix flake update
           4. Runs: nixos-rebuild switch
       '';
-      script = builtins.readFile ../../scripts/pino-update.sh;
+      script = builtins.readFile ../pino/update.sh;
     };
 
     snap = {
@@ -61,7 +61,7 @@ in
           pino snap rm <N>           Delete snapshot N
           pino snap data <...>       Data disk snapshots  (pino snap data help)
       '';
-      script = builtins.readFile ../../scripts/pino-snap.sh;
+      script = builtins.readFile ../pino/snap.sh;
     };
   };
 

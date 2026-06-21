@@ -53,6 +53,6 @@ in
 
         Config: secrets/awg0.conf (gitignored).
     '';
-    script = builtins.readFile ../../scripts/pino-vpn.sh;
+    script = builtins.readFile ../pino/vpn.sh;
   };
 }

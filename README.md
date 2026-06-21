@@ -126,17 +126,18 @@ hosts/
   la1n/  (same layout)
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
+  pino/                      # bash fragments read by pino subcommand registrations
   base/                      # always-on: GNOME, PipeWire, networking, apps
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
   profiles/                  # one file per profile + loader (default.nix)
-scripts/
-  nixos-profile.sh           # built into nixos-profile (delegates from pino profile)
-  monitor.py                 # built into monitor (delegates from pino monitor)
-  pino-snap.sh               # snap subcommand source
-  pino-update.sh             # update subcommand source
-  pino-vpn.sh                # vpn subcommand source
+scripts/                     # installation helpers (run once, not part of the built system)
+  hardware.sh                # generate hardware.nix for a new host
+  disko.sh                   # partition disks
+  install.sh                 # run nixos-install
+  nixos-profile.sh           # built into nixos-profile binary
+  monitor.py                 # built into monitor binary
 home/                        # home-manager: bash (blesh), vscode, git
 ```
 
