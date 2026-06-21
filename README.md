@@ -90,6 +90,18 @@ Then reboot. Set password for egrapa with `passwd` on first login.
 
 > PSK is not in the repo. Copy `secrets/hotspot.conf.example` to `secrets/hotspot.conf` (gitignored) and set your password before rebuilding — the activation script installs the NetworkManager connection profile automatically.
 
+**Monitor profiles (re-1):**
+
+| Command | What it does |
+|---|---|
+| `monitor list` | List saved display profiles |
+| `monitor status` | Show current display layout |
+| `monitor switch <name>` | Apply a saved profile |
+| `monitor save <name>` | Save current GNOME display layout as a profile |
+
+Profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation: `single` (DP-3 only) and `dual` (DP-3 + HDMI-1 TV).
+Set up a new layout in GNOME Settings → Displays, then run `monitor save <name>` to capture it.
+
 ### Roll back NixOS generation
 
 Use `rollback` alias, or pick a previous generation at boot from the systemd-boot menu.
@@ -121,6 +133,8 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `virt-osdev` | QEMU with cross-arch support (extends virt-general) |
 | `music-lite` | NAM guitar amp sim + low-latency PipeWire |
 | `music-full` | Reaper + yabridge + Wine VST support (extends music-lite) |
+| `dev-cpp` | GCC, Clang, CMake, Meson, Ninja, GDB + VSCode clangd/meson extensions |
+
 Profiles can overlap freely — e.g. `virt-general` + `gaming-full` at the same time is fine.
 
 Dev environments are handled per-project via `nix develop` / `devShell` in each project's `flake.nix`.
@@ -146,6 +160,7 @@ modules/
   profiles/                  # one file per profile + loader (default.nix)
 scripts/
   nixos-profile.sh           # CLI source (built into nixos-profile binary)
+  monitor.py                 # CLI source (built into monitor binary)
 home/                        # home-manager: bash (blesh), vscode, git
 ```
 
