@@ -49,7 +49,7 @@ let
 
   pino = pkgs.writeShellApplication {
     name = "pino";
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = with pkgs; [ coreutils gnugrep ];
     text = ''
       cmd="''${1:-}"
       shift || true

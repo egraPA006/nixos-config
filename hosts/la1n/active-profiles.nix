@@ -1,2 +1,2 @@
-# Managed by nixos-profile. Do not edit manually.
+# Managed by pino profile. Do not edit manually.
 []

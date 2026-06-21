@@ -90,10 +90,10 @@ Profiles are optional modules (gaming, music, dev tools, etc.) toggled via a CLI
 They are fully removed when disabled — no leftover packages.
 
 ```bash
-nixos-profile list                  # show available profiles
-nixos-profile status                # show what's active on this machine
-nixos-profile enable  gaming-full   # enable + rebuild
-nixos-profile disable gaming-full   # disable + rebuild
+pino profile list                   # show available profiles
+pino profile status                 # show what's active on this machine
+pino profile enable  gaming-full    # enable + rebuild
+pino profile disable gaming-full    # disable + rebuild
 ```
 
 Active profiles are stored per-host in `hosts/<hostname>/active-profiles.nix`.
@@ -126,7 +126,7 @@ hosts/
     default.nix              # host config (boot, user, imports)
     hardware.nix             # generated hardware config (placeholder → replace)
     disko.nix                # declarative disk layout
-    active-profiles.nix      # managed by nixos-profile CLI
+    active-profiles.nix      # managed by pino profile CLI
   la1n/  (same layout)
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
@@ -142,7 +142,6 @@ scripts/                     # installation helpers (run once, not part of the b
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
   install.sh                 # run nixos-install
-  nixos-profile.sh           # built into nixos-profile binary
   monitor.py                 # built into monitor binary
 home/                        # home-manager: bash (blesh), vscode, git
 ```
