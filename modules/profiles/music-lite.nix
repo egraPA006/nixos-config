@@ -38,7 +38,6 @@ in
           pino music list              List available .nam models
           pino music start <name>      Load a model as a PipeWire node
           pino music stop              Stop the running node
-          pino music stop all          Stop all running NAM nodes
           pino music status            Show whether a node is running
           pino music log               Show last jalv output
 
@@ -105,10 +104,7 @@ EOF
             ;;
 
           stop)
-            if [ "''${2:-}" = "all" ]; then
-              pkill -f "jalv.*${pluginUri}" 2>/dev/null && echo "Stopped all NAM nodes" || echo "No NAM nodes running"
-              rm -f "$PID_FILE"
-            elif [ -f "$PID_FILE" ]; then
+            if [ -f "$PID_FILE" ]; then
               pid="''$(cat "$PID_FILE")"
               kill "$pid" 2>/dev/null && echo "Stopped (PID $pid)" || echo "Already stopped"
               rm -f "$PID_FILE"
@@ -135,7 +131,7 @@ EOF
             ;;
 
           *)
-            echo "Usage: pino music list|start <model>|stop [all]|status|log"
+            echo "Usage: pino music list|start <model>|stop|status|log"
             exit 1
             ;;
         esac
@@ -149,8 +145,7 @@ EOF
         complete -c pino -f -n '__fish_seen_subcommand_from music; and __fish_seen_subcommand_from start' \
           -a "(ls ${ampsDir}/*.nam 2>/dev/null | string replace -r '.*/' ''' | string replace '.nam' ''')" \
           -d 'NAM model'
-        complete -c pino -f -n '__fish_seen_subcommand_from music; and __fish_seen_subcommand_from stop' \
-          -a 'all' -d 'Kill all NAM nodes'
+
       '';
     };
 
