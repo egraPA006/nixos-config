@@ -109,9 +109,15 @@ in
     class TVIndicator extends SystemIndicator {
         _init(script) {
             super._init();
-            this._script = script;
-            this._toggle = new TVToggle();
-            this._toggle.connect('clicked', () => this._onToggle());
+            this._script  = script;
+            this._syncing = false; // guard: don't react to programmatic checked changes
+            this._toggle  = new TVToggle();
+            // notify::checked fires AFTER checked is updated — always has the new value.
+            // Use it instead of 'clicked' to avoid timing ambiguity.
+            this._toggle.connect('notify::checked', () => {
+                if (this._syncing) return;
+                this._run([this._toggle.checked ? 'dual' : 'single']);
+            });
             this.quickSettingsItems.push(this._toggle);
             this._syncState();
         }
@@ -134,11 +140,11 @@ in
         }
 
         _syncState() {
-            this._run(['status'], out => { this._toggle.checked = out === 'on'; });
-        }
-
-        _onToggle() {
-            this._run([this._toggle.checked ? 'dual' : 'single']);
+            this._run(['status'], out => {
+                this._syncing = true;
+                this._toggle.checked = out === 'on';
+                this._syncing = false;
+            });
         }
 
         destroy() {
