@@ -7,8 +7,6 @@
     profiles.default.extensions = with pkgs.vscode-extensions; [
       jnoortheen.nix-ide
       anthropic.claude-code
-      llvm-vs-code-extensions.vscode-clangd
-      mesonbuild.mesonbuild
     ];
 
     profiles.default.userSettings = {
@@ -20,8 +18,6 @@
       "nix.enableLanguageServer" = true;
       "nix.serverPath" = "nil";
       "claude-code.executablePath" = "/etc/profiles/per-user/egrapa/bin/claude";
-      "clangd.path" = "${pkgs.clang-tools}/bin/clangd";
-      "clangd.arguments" = [ "--header-insertion=never" "--clang-tidy" ];
     };
   };
 

@@ -5,7 +5,6 @@
     ./vscode.nix
     ./git.nix
     ./gnome.nix
-    ./cpp.nix
   ];
 
   home.username = "egrapa";
