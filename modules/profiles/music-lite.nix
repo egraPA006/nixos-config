@@ -41,6 +41,7 @@ in
           pino music-lite status                Show whether a node is running
           pino music-lite log                   Show last jalv output
           pino music-lite set-latency <samples> Set PipeWire quantum (32/64/128/256)
+          pino music-lite set-volume <percent>  Set output level (100=default, 200=+6dB)
 
           Models: ${ampsDir}  (synced from ${srcDir} on rebuild)
           Once started, connect guitar in → NAM → output in qpwgraph.
@@ -49,6 +50,8 @@ in
       script = ''
         AMPS_DIR="${ampsDir}"
         PID_FILE="/tmp/pino-music.pid"
+        HOLDER_PID_FILE="/tmp/pino-music-holder.pid"
+        CTRL_PIPE="/tmp/pino-music-ctrl"
         STATE_DIR="/tmp/pino-music-state"
         LOG_FILE="/tmp/pino-music.log"
 
@@ -89,7 +92,12 @@ in
     ] .
 EOF
 
-            jalv -i -l "$STATE_DIR" "${pluginUri}" > "$LOG_FILE" 2>&1 &
+            rm -f "$CTRL_PIPE"
+            mkfifo "$CTRL_PIPE"
+            sleep infinity > "$CTRL_PIPE" &
+            echo $! > "$HOLDER_PID_FILE"
+
+            jalv -l "$STATE_DIR" "${pluginUri}" < "$CTRL_PIPE" > "$LOG_FILE" 2>&1 &
             echo $! > "$PID_FILE"
 
             sleep 1
@@ -100,6 +108,8 @@ EOF
             else
               echo "NAM failed to start — check log: pino music-lite log"
               cat "$LOG_FILE" >&2
+              kill "''$(cat "$HOLDER_PID_FILE")" 2>/dev/null || true
+              rm -f "$PID_FILE" "$HOLDER_PID_FILE" "$CTRL_PIPE"
               exit 1
             fi
             ;;
@@ -112,6 +122,8 @@ EOF
             else
               echo "Not running"
             fi
+            [ -f "$HOLDER_PID_FILE" ] && kill "''$(cat "$HOLDER_PID_FILE")" 2>/dev/null || true
+            rm -f "$HOLDER_PID_FILE" "$CTRL_PIPE"
             ;;
 
           status)
@@ -138,25 +150,37 @@ EOF
             echo "Quantum set to $quantum samples"
             ;;
 
+          set-volume)
+            volume="''${2:-}"
+            [ -z "$volume" ] && { echo "Usage: pino music-lite set-volume <percent>"; echo "100 = default (0 dB), 200 = +6 dB, 50 = -6 dB"; exit 1; }
+            [ ! -p "$CTRL_PIPE" ] && { echo "NAM not running"; exit 1; }
+            db=$(awk "BEGIN { printf \"%.2f\", 20 * log($volume / 100) / log(10) }")
+            echo "output_level = $db" > "$CTRL_PIPE"
+            echo "Volume: $volume% → output_level $db dB"
+            ;;
+
           *)
-            echo "Usage: pino music-lite list|start <model>|stop|status|log|set-latency <samples>"
+            echo "Usage: pino music-lite list|start <model>|stop|status|log|set-latency <samples>|set-volume <percent>"
             exit 1
             ;;
         esac
       '';
       fishCompletions = ''
-        set -l ml_no_sub 'not __fish_seen_subcommand_from list start stop status log set-latency'
+        set -l ml_no_sub 'not __fish_seen_subcommand_from list start stop status log set-latency set-volume'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a list        -d 'List available models'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a start       -d 'Load a model into PipeWire'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a stop        -d 'Stop the running node'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a status      -d 'Show running status'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a log         -d 'Show last jalv output'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-latency -d 'Set PipeWire quantum'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-volume  -d 'Set output level (100=default)'
         complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from start' \
           -a "(ls ${ampsDir}/*.nam 2>/dev/null | string replace -r '.*/' ''' | string replace '.nam' ''')" \
           -d 'NAM model'
         complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from set-latency' \
           -a '32 64 128 256' -d 'samples'
+        complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from set-volume' \
+          -a '50 75 100 125 150 200' -d '%'
       '';
     };
 
