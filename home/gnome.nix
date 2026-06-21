@@ -1,23 +1,11 @@
-{ hostname, lib, ... }:
+{ hostname, lib, pkgs, ... }:
 let
-  lockPanelExt = "hide-lock-panel@local";
   monitorTvExt = "monitor-tv@re-1";
+  python3      = "${pkgs.python3}/bin/python3";
 in
 {
-  # Minimal GNOME Shell extension: hides the top panel while the lock screen
-  # is active so Quick Settings (WiFi, BT, etc.) are not reachable without
-  # first unlocking. Volume media keys still work without the panel.
-  xdg.dataFile."gnome-shell/extensions/${lockPanelExt}/metadata.json".text =
-    builtins.toJSON {
-      name        = "Hide panel on lock screen";
-      description = "Hides the system panel while the screen is locked";
-      uuid        = lockPanelExt;
-      "shell-version" = [ "45" "46" "47" "48" "49" "50" ];
-      version     = 1;
-    };
-
-  # Quick Settings toggle: single monitor (DP-3 only) or + TV (HDMI-1).
-  # Positions match monitors.xml. Uses Mutter DisplayConfig D-Bus directly.
+  # Quick Settings toggle: single monitor (DP-3) or + TV (HDMI-1).
+  # Uses a Python subprocess for all D-Bus work so the shell never blocks.
   xdg.dataFile."gnome-shell/extensions/${monitorTvExt}/metadata.json".text =
     builtins.toJSON {
       name        = "Monitor TV switch";
@@ -27,22 +15,88 @@ in
       version     = 1;
     };
 
+  # switch.py – called by the extension; handles Mutter DisplayConfig D-Bus.
+  xdg.dataFile."gnome-shell/extensions/${monitorTvExt}/switch.py".text = ''
+    #!/usr/bin/env python3
+    """Usage: switch.py [status|single|dual]"""
+    import sys
+    import gi
+    gi.require_version('Gio', '2.0')
+    gi.require_version('GLib', '2.0')
+    from gi.repository import Gio, GLib
+
+    DEST  = 'org.gnome.Mutter.DisplayConfig'
+    PATH  = '/org/gnome/Mutter/DisplayConfig'
+    IFACE = 'org.gnome.Mutter.DisplayConfig'
+    DP3   = 'DP-3'
+    HDMI  = 'HDMI-1'
+
+    def proxy():
+        return Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+            DEST, PATH, IFACE, None)
+
+    def call(p, method, args=None):
+        return p.call_sync(method, args, Gio.DBusCallFlags.NONE, -1, None)
+
+    def find_mode(result, conn, w, h, r):
+        mons = result.get_child_value(1)
+        for i in range(mons.n_children()):
+            mon  = mons.get_child_value(i)
+            spec = mon.get_child_value(0)
+            if spec.get_child_value(0).get_string()[0] != conn:
+                continue
+            modes = mon.get_child_value(1)
+            for j in range(modes.n_children()):
+                m = modes.get_child_value(j)
+                if (m.get_child_value(1).get_int32()    == w and
+                    m.get_child_value(2).get_int32()    == h and
+                    abs(m.get_child_value(3).get_double() - r) < 1.0):
+                    return m.get_child_value(0).get_string()[0]
+        return None
+
+    def hdmi_active(result):
+        lms = result.get_child_value(2)
+        for i in range(lms.n_children()):
+            lm   = lms.get_child_value(i)
+            mons = lm.get_child_value(5)
+            for j in range(mons.n_children()):
+                if mons.get_child_value(j).get_child_value(0).get_string()[0] == HDMI:
+                    return True
+        return False
+
+    action = sys.argv[1] if len(sys.argv) > 1 else 'status'
+    p      = proxy()
+    state  = call(p, 'GetCurrentState')
+
+    if action == 'status':
+        print('on' if hdmi_active(state) else 'off')
+        sys.exit(0)
+
+    serial   = state.get_child_value(0).get_uint32()
+    dp3_mode = find_mode(state, DP3, 2560, 1440, 59.951)
+    if not dp3_mode:
+        print('DP-3 mode not found', file=sys.stderr)
+        sys.exit(1)
+
+    logmons = [(0, 0, 1.0, 0, True, [(DP3, dp3_mode, {})])]
+    if action == 'dual':
+        hdmi_mode = find_mode(state, HDMI, 1920, 1080, 60.0)
+        if hdmi_mode:
+            logmons.append((2560, 234, 1.0, 0, False, [(HDMI, hdmi_mode, {})]))
+
+    call(p, 'ApplyMonitorsConfig',
+         GLib.Variant('(uua(iiduba(ssa{sv}))a{sv})', (serial, 2, logmons, {})))
+  '';
+
   xdg.dataFile."gnome-shell/extensions/${monitorTvExt}/extension.js".text = ''
     import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
     import { QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
     import * as Main from 'resource:///org/gnome/shell/ui/main.js';
     import Gio from 'gi://Gio';
-    import GLib from 'gi://GLib';
     import GObject from 'gi://GObject';
 
-    const DC_DEST  = 'org.gnome.Mutter.DisplayConfig';
-    const DC_PATH  = '/org/gnome/Mutter/DisplayConfig';
-    const DC_IFACE = 'org.gnome.Mutter.DisplayConfig';
-    const PERSIST  = 2; // persistent config
-
-    // Matches monitors.xml
-    const DP3  = { conn: 'DP-3',   w: 2560, h: 1440, r: 59.951, x: 0,    y: 0,   primary: true  };
-    const HDMI = { conn: 'HDMI-1', w: 1920, h: 1080, r: 60.0,   x: 2560, y: 234, primary: false };
+    const PYTHON3 = '${python3}';
 
     const TVToggle = GObject.registerClass(
     class TVToggle extends QuickToggle {
@@ -53,69 +107,38 @@ in
 
     const TVIndicator = GObject.registerClass(
     class TVIndicator extends SystemIndicator {
-        _init() {
+        _init(script) {
             super._init();
-            this._proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, null,
-                DC_DEST, DC_PATH, DC_IFACE, null);
+            this._script = script;
             this._toggle = new TVToggle();
             this._toggle.connect('clicked', () => this._onToggle());
             this.quickSettingsItems.push(this._toggle);
             this._syncState();
         }
 
-        _state() {
-            return this._proxy
-                .call_sync('GetCurrentState', null, Gio.DBusCallFlags.NONE, -1, null)
-                .recursiveUnpack();
-        }
-
-        // monitors is a((ssss)a(siiddada{sv})a{sv}) after recursiveUnpack:
-        // [ [[connector,vendor,product,sn], [modes...], props], ... ]
-        _findMode(monitors, target) {
-            for (const [[connector], modes] of monitors) {
-                if (connector !== target.conn) continue;
-                for (const [modeId, w, h, r] of modes)
-                    if (w === target.w && h === target.h && Math.abs(r - target.r) < 1.0)
-                        return modeId;
-            }
-            return null;
+        _run(args, onStdout) {
+            try {
+                const flags = onStdout
+                    ? Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE
+                    : Gio.SubprocessFlags.STDERR_SILENCE;
+                const proc = Gio.Subprocess.new([PYTHON3, this._script, ...args], flags);
+                if (onStdout) {
+                    proc.communicate_utf8_async(null, null, (_p, res) => {
+                        try {
+                            const [, out] = _p.communicate_utf8_finish(res);
+                            onStdout(out.trim());
+                        } catch (e) { console.error('monitor-tv:', e.message); }
+                    });
+                }
+            } catch (e) { console.error('monitor-tv run:', e.message); }
         }
 
         _syncState() {
-            try {
-                const [,, logMons] = this._state();
-                // logMons: a(iiduba(ssa{sv})a{sv})
-                // each: [x, y, scale, transform, primary, [[conn, modeId, props],...], props]
-                this._toggle.checked = logMons.some(([,,,,,mons]) =>
-                    mons.some(([c]) => c === HDMI.conn));
-            } catch (e) {
-                console.error('monitor-tv syncState:', e.message);
-            }
+            this._run(['status'], out => { this._toggle.checked = out === 'on'; });
         }
 
         _onToggle() {
-            try {
-                const [serial, monitors] = this._state();
-                const dp3Mode = this._findMode(monitors, DP3);
-                if (!dp3Mode) { console.error('monitor-tv: DP-3 mode not found'); return; }
-
-                const logMons = [
-                    [DP3.x, DP3.y, 1.0, 0, DP3.primary, [[DP3.conn, dp3Mode, {}]]],
-                ];
-                if (this._toggle.checked) {
-                    const hdmiMode = this._findMode(monitors, HDMI);
-                    if (hdmiMode)
-                        logMons.push([HDMI.x, HDMI.y, 1.0, 0, HDMI.primary, [[HDMI.conn, hdmiMode, {}]]]);
-                }
-
-                this._proxy.call_sync(
-                    'ApplyMonitorsConfig',
-                    new GLib.Variant('(uua(iiduba(ssa{sv}))a{sv})', [serial, PERSIST, logMons, {}]),
-                    Gio.DBusCallFlags.NONE, -1, null);
-            } catch (e) {
-                console.error('monitor-tv toggle:', e.message);
-            }
+            this._run([this._toggle.checked ? 'dual' : 'single']);
         }
 
         destroy() {
@@ -127,7 +150,7 @@ in
 
     export default class MonitorTVExtension extends Extension {
         enable() {
-            this._indicator = new TVIndicator();
+            this._indicator = new TVIndicator(this.path + '/switch.py');
             Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
         }
         disable() {
@@ -137,31 +160,6 @@ in
     }
   '';
 
-  xdg.dataFile."gnome-shell/extensions/${lockPanelExt}/extension.js".text = ''
-    import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
-    import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-
-    export default class HideLockPanel extends Extension {
-      enable() {
-        this._id = Main.screenShield.connect('active-changed', () => this._sync());
-        this._sync();
-      }
-      disable() {
-        if (this._id) {
-          Main.screenShield.disconnect(this._id);
-          this._id = null;
-        }
-        this._setQsVisible(true);
-      }
-      _setQsVisible(visible) {
-        const qs = Main.panel.statusArea.quickSettings;
-        if (qs) qs.visible = visible;
-      }
-      _sync() {
-        this._setQsVisible(!Main.screenShield.active);
-      }
-    }
-  '';
   xdg.configFile."monitors.xml" = lib.mkIf (hostname == "re-1") {
     force = true;
     text = ''
@@ -209,6 +207,7 @@ in
       </monitors>
     '';
   };
+
   xdg.mimeApps = {
     enable = true;
     defaultApplications = {
@@ -217,6 +216,7 @@ in
       "text/html"               = "chromium-browser.desktop";
     };
   };
+
   dconf.settings = {
     "org/gnome/desktop/interface" = {
       color-scheme = "prefer-dark";
@@ -240,7 +240,6 @@ in
       enabled-extensions = [
         "clipboard-history@alexsaveau.dev"
         "tiling-assistant@leleat-on-github"
-        lockPanelExt
         monitorTvExt
       ];
     };
