@@ -11,7 +11,7 @@ in
       name        = "Hide panel on lock screen";
       description = "Hides the system panel while the screen is locked";
       uuid        = lockPanelExt;
-      "shell-version" = [ "45" "46" "47" "48" ];
+      "shell-version" = [ "45" "46" "47" "48" "49" "50" ];
       version     = 1;
     };
 
