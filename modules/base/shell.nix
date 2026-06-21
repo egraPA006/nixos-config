@@ -12,7 +12,10 @@ in
         pino rebuild — apply NixOS config changes
           Runs: sudo nixos-rebuild switch --flake ${configDir}#<hostname>
       '';
-      script = ''sudo nixos-rebuild switch --flake "${configDir}#$(hostname)"'';
+      script = ''
+        sudo nixos-rebuild switch --flake "${configDir}#$(hostname)"
+        [[ -n "''${FISH_VERSION:-}" ]] && exec fish
+      '';
     };
 
     rollback = {
