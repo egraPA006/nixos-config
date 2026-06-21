@@ -1,7 +1,7 @@
 { hostname, lib, pkgs, ... }:
 let
   monitorTvExt = "monitor-tv@re-1";
-  python3      = "${pkgs.python3}/bin/python3";
+  python3      = "${pkgs.python3.withPackages (ps: [ ps.pygobject3 ])}/bin/python3";
 in
 {
   # Quick Settings toggle: single monitor (DP-3) or + TV (HDMI-1).
