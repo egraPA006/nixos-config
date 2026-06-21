@@ -8,7 +8,7 @@ in
   pino.subcommands = {
     rebuild = {
       description = "Apply config changes";
-      script = "sudo nixos-rebuild switch --flake ${configDir}#$(hostname)";
+      script = ''sudo nixos-rebuild switch --flake "${configDir}#$(hostname)"'';
     };
     rollback = {
       description = "Roll back to previous NixOS generation";
@@ -19,7 +19,7 @@ in
       script = ''
         sudo nix-collect-garbage --delete-older-than 14d
         nix-collect-garbage --delete-older-than 14d
-        sudo nixos-rebuild boot --flake ${configDir}#$(hostname)
+        sudo nixos-rebuild boot --flake "${configDir}#$(hostname)"
       '';
     };
     update = {
