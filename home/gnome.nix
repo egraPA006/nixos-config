@@ -91,6 +91,21 @@
   };
 
   dconf.settings = {
+    "org/gnome/desktop/session" = {
+      # Screen blanks after 2 min idle — only noticeable when unlocked+idle, no lock triggered
+      idle-delay = lib.hm.gvariant.mkUint32 120;
+    };
+
+    "org/gnome/desktop/screensaver" = {
+      lock-enabled = false;  # Never auto-lock; only manual lock (Super+L) works
+    };
+
+    "org/gnome/settings-daemon/plugins/power" = {
+      idle-dim = false;
+      sleep-inactive-ac-type = "nothing";
+      sleep-inactive-battery-type = "nothing";
+    };
+
     "org/gnome/desktop/interface" = {
       color-scheme = "prefer-dark";
       gtk-theme = "Adwaita-dark";
