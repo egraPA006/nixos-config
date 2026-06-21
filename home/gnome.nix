@@ -29,10 +29,14 @@ in
           Main.screenShield.disconnect(this._id);
           this._id = null;
         }
-        Main.panel.visible = true;
+        this._setQsVisible(true);
+      }
+      _setQsVisible(visible) {
+        const qs = Main.panel.statusArea.quickSettings;
+        if (qs) qs.visible = visible;
       }
       _sync() {
-        Main.panel.visible = !Main.screenShield.active;
+        this._setQsVisible(!Main.screenShield.active);
       }
     }
   '';
