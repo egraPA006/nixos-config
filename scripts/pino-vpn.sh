@@ -13,10 +13,8 @@ case "${1:-}" in
   status)
     sudo systemctl status amneziawg
     ;;
-  help|*)
-    echo "pino vpn — AmneziaWG VPN"
-    echo "  pino vpn on       Start VPN + enable autostart on boot"
-    echo "  pino vpn off      Stop VPN + disable autostart"
-    echo "  pino vpn status   Show service status"
+  *)
+    echo "Usage: pino vpn on|off|status" >&2
+    exit 1
     ;;
 esac

@@ -47,6 +47,7 @@ case "$sub" in
         echo "  pino snap data rb-fast <N>     Roll back /data/fast to snapshot N"
         echo "  pino snap data rb-slow <N>     Roll back /data/slow to snapshot N"
         echo "  pino snap data rm <N>          Delete snapshot N"
+        exit 0
         ;;
       *)
         sudo snapper -c fast create -d "$dsub"
@@ -55,13 +56,9 @@ case "$sub" in
         ;;
     esac
     ;;
-  help|"")
-    echo "pino snap — btrfs snapshots (root + home)"
-    echo "  pino snap <label>          Create snapshot of root + home"
-    echo "  pino snap ls               List snapshots"
-    echo "  pino snap rb <N>           Roll back root + home to snapshot N"
-    echo "  pino snap rm <N>           Delete snapshot N"
-    echo "  pino snap data <...>       Data disk snapshots  (pino snap data help)"
+  "")
+    echo "Usage: pino snap <label|ls|rb N|rm N|data ...>"
+    echo "Run 'pino snap help' for details."
     ;;
   *)
     sudo snapper -c root create -d "$sub"

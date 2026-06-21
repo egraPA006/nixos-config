@@ -2,6 +2,7 @@
 # pino update — delete old pre-update snapshots, snapshot, flake update, rebuild
 CONFIG_DIR="/home/egrapa/nixos-config"
 
+
 echo "Removing old pre-update snapshots..."
 for cfg in root home; do
   ids=$(sudo snapper -c "$cfg" list --columns number,description 2>/dev/null \

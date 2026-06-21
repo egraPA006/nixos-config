@@ -50,14 +50,17 @@ in
   config = lib.mkIf cfg.enable {
     pino.subcommands.hotspot = {
       description = "WiFi access point";
+      helpText = ''
+        pino hotspot — WiFi access point  (SSID: ${ssid})
+          pino hotspot start   Bring up AP, traffic routed via VPN
+          pino hotspot stop    Tear down AP
+
+          PSK: secrets/hotspot.conf (gitignored).
+      '';
       script = ''
         case "''${1:-}" in
           start|stop) hotspot "''${1:-}" ;;
-          help|*)
-            echo "pino hotspot — WiFi AP  (SSID: ${ssid})"
-            echo "  pino hotspot start   Bring up AP, traffic routed via VPN"
-            echo "  pino hotspot stop    Tear down AP"
-            ;;
+          *) echo "Usage: pino hotspot start|stop" >&2; exit 1 ;;
         esac
       '';
     };

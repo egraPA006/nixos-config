@@ -25,6 +25,15 @@ in
 
   pino.subcommands.profile = {
     description = "Manage NixOS profiles  (gaming, dev-cpp, ...)";
+    helpText = ''
+      pino profile — manage NixOS profiles
+        pino profile list               List available profiles
+        pino profile status             Show active profiles on this machine
+        pino profile enable  <name>     Enable a profile and rebuild
+        pino profile disable <name>     Disable a profile and rebuild
+
+        Active profiles: hosts/<hostname>/active-profiles.nix
+    '';
     script = ''nixos-profile "$@"'';
   };
 }

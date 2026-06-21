@@ -45,6 +45,14 @@ in
 
   pino.subcommands.vpn = {
     description = "AmneziaWG VPN";
+    helpText = ''
+      pino vpn — AmneziaWG VPN
+        pino vpn on       Start VPN + enable autostart on boot
+        pino vpn off      Stop VPN + disable autostart
+        pino vpn status   Show service status
+
+        Config: secrets/awg0.conf (gitignored).
+    '';
     script = builtins.readFile ../../scripts/pino-vpn.sh;
   };
 }

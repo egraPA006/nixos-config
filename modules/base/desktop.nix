@@ -29,6 +29,16 @@ in
 
   pino.subcommands.monitor = {
     description = "Manage display profiles";
+    helpText = ''
+      pino monitor — manage GNOME display profiles
+        pino monitor list               List saved profiles
+        pino monitor status             Show current display layout
+        pino monitor switch <name>      Apply a saved profile
+        pino monitor save   <name>      Save current GNOME layout as a profile
+
+        Profiles stored in ~/.config/monitor-profiles/
+        Set a layout in GNOME Settings → Displays, then: pino monitor save <name>
+    '';
     script = ''monitor "$@"'';
   };
 
