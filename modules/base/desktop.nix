@@ -1,4 +1,11 @@
 { pkgs, ... }:
+let
+  python3WithGi = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
+  monitorTool   = pkgs.writeScriptBin "monitor" ''
+    #!${python3WithGi}/bin/python3
+    ${builtins.readFile ../../scripts/monitor.py}
+  '';
+in
 {
   xdg.portal = {
     enable = true;
@@ -15,10 +22,10 @@
     enable = true;
   };
 
-  environment.systemPackages = with pkgs.gnomeExtensions; [
+  environment.systemPackages = (with pkgs.gnomeExtensions; [
     clipboard-history
     tiling-assistant
-  ];
+  ]) ++ [ monitorTool ];
 
   environment.gnome.excludePackages = with pkgs; [
     gnome-photos
