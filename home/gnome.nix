@@ -1,5 +1,41 @@
 { hostname, lib, ... }:
+let
+  lockPanelExt = "hide-lock-panel@local";
+in
 {
+  # Minimal GNOME Shell extension: hides the top panel while the lock screen
+  # is active so Quick Settings (WiFi, BT, etc.) are not reachable without
+  # first unlocking. Volume media keys still work without the panel.
+  xdg.dataFile."gnome-shell/extensions/${lockPanelExt}/metadata.json".text =
+    builtins.toJSON {
+      name        = "Hide panel on lock screen";
+      description = "Hides the system panel while the screen is locked";
+      uuid        = lockPanelExt;
+      "shell-version" = [ "45" "46" "47" "48" ];
+      version     = 1;
+    };
+
+  xdg.dataFile."gnome-shell/extensions/${lockPanelExt}/extension.js".text = ''
+    import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+    import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+    export default class HideLockPanel extends Extension {
+      enable() {
+        this._id = Main.screenShield.connect('active-changed', () => this._sync());
+        this._sync();
+      }
+      disable() {
+        if (this._id) {
+          Main.screenShield.disconnect(this._id);
+          this._id = null;
+        }
+        Main.panel.visible = true;
+      }
+      _sync() {
+        Main.panel.visible = !Main.screenShield.active;
+      }
+    }
+  '';
   xdg.configFile."monitors.xml" = lib.mkIf (hostname == "re-1") {
     force = true;
     text = ''
@@ -78,6 +114,7 @@
       enabled-extensions = [
         "clipboard-history@alexsaveau.dev"
         "tiling-assistant@leleat-on-github"
+        lockPanelExt
       ];
     };
   };
