@@ -49,11 +49,11 @@ in
       '';
       script = ''
         AMPS_DIR="${ampsDir}"
-        PID_FILE="/tmp/pino-music.pid"
-        HOLDER_PID_FILE="/tmp/pino-music-holder.pid"
-        CTRL_PIPE="/tmp/pino-music-ctrl"
-        STATE_DIR="/tmp/pino-music-state"
-        LOG_FILE="/tmp/pino-music.log"
+        PID_FILE="/tmp/pino-music-lite.pid"
+        HOLDER_PID_FILE="/tmp/pino-music-lite-holder.pid"
+        CTRL_PIPE="/tmp/pino-music-lite-ctrl"
+        STATE_DIR="/tmp/pino-music-lite-state"
+        LOG_FILE="/tmp/pino-music-lite.log"
 
         case "''${1:-}" in
           list)
