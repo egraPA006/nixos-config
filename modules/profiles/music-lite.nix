@@ -19,6 +19,7 @@ in
     environment.systemPackages = with pkgs; [
       neural-amp-modeler-lv2
       jalv
+      lingot
     ];
 
     system.activationScripts.music-lite-sync.text = ''
@@ -42,6 +43,8 @@ in
           pino music-lite log                   Show last jalv output
           pino music-lite set-latency <samples> Set PipeWire quantum (32/64/128/256)
           pino music-lite set-volume <percent>  Set output level (100=default, 200=+6dB)
+          pino music-lite tuner                 Start chromatic tuner (lingot)
+          pino music-lite tuner stop            Stop the tuner
 
           Models: ${ampsDir}  (synced from ${srcDir} on rebuild)
           Once started, connect guitar in → NAM → output in qpwgraph.
@@ -159,14 +162,38 @@ EOF
             echo "Volume: $volume% → output_level $db dB"
             ;;
 
+          tuner)
+            TUNER_PID_FILE="/tmp/pino-music-lite-tuner.pid"
+            case "''${2:-}" in
+              stop)
+                if [ -f "$TUNER_PID_FILE" ]; then
+                  pid="''$(cat "$TUNER_PID_FILE")"
+                  kill "$pid" 2>/dev/null && echo "Tuner stopped (PID $pid)" || echo "Already stopped"
+                  rm -f "$TUNER_PID_FILE"
+                else
+                  echo "Tuner not running"
+                fi
+                ;;
+              *)
+                if [ -f "$TUNER_PID_FILE" ] && kill -0 "''$(cat "$TUNER_PID_FILE")" 2>/dev/null; then
+                  echo "Tuner already running (PID ''$(cat "$TUNER_PID_FILE"))"
+                  exit 0
+                fi
+                lingot &
+                echo $! > "$TUNER_PID_FILE"
+                echo "Tuner started (PID ''$(cat "$TUNER_PID_FILE"))"
+                ;;
+            esac
+            ;;
+
           *)
-            echo "Usage: pino music-lite list|start <model>|stop|status|log|set-latency <samples>|set-volume <percent>"
+            echo "Usage: pino music-lite list|start <model>|stop|status|log|set-latency <samples>|set-volume <percent>|tuner [stop]"
             exit 1
             ;;
         esac
       '';
       fishCompletions = ''
-        set -l ml_no_sub 'not __fish_seen_subcommand_from list start stop status log set-latency set-volume'
+        set -l ml_no_sub 'not __fish_seen_subcommand_from list start stop status log set-latency set-volume tuner'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a list        -d 'List available models'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a start       -d 'Load a model into PipeWire'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a stop        -d 'Stop the running node'
@@ -174,6 +201,9 @@ EOF
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a log         -d 'Show last jalv output'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-latency -d 'Set PipeWire quantum'
         complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-volume  -d 'Set output level (100=default)'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a tuner       -d 'Start chromatic tuner (lingot)'
+        complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from tuner' \
+          -a stop -d 'Stop the tuner'
         complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from start' \
           -a "(ls ${ampsDir}/*.nam 2>/dev/null | string replace -r '.*/' ''' | string replace '.nam' ''')" \
           -d 'NAM model'
