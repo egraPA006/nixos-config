@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, activeProfiles, ... }:
 {
   imports = [
     ./hardware.nix
@@ -7,12 +7,7 @@
     ../../modules/hardware/nvidia.nix
     ../../modules/profiles
     ../../modules/hotspot.nix
-  ];
-
-  hotspot.enable = true;
-  hotspot.wifiInterface = "wlp8s0";
-
-  musicLite.localDir = "/data/fast/music-lite";
+  ] ++ lib.optional (builtins.elem "music-lite" activeProfiles) ./music-lite-profile.nix;
 
   networking.hostName = "re-1";
 
