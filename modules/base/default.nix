@@ -11,5 +11,6 @@
     ./shell.nix
     ./snapper.nix
     ./vpn.nix
+    ./pino-top.nix
   ];
 }
