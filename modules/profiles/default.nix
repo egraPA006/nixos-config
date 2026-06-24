@@ -98,6 +98,9 @@ let
           music-lite)
             cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.musicLite.localDir" 2>/dev/null || true)
             ;;
+          music-full)
+            cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.musicFull.localDir" 2>/dev/null || true)
+            ;;
         esac
 
         if [[ ''${#new_active[@]} -eq 0 ]]; then
@@ -144,10 +147,22 @@ in
 {
   imports = map (p: ./. + "/${p}.nix") activeProfiles;
 
-  options.musicLite.localDir = lib.mkOption {
-    type        = lib.types.str;
-    default     = "/home/egrapa/music-lite";
-    description = "Host-local path for music-lite data. Override per-host when using a faster disk.";
+  options = {
+    musicLite.localDir = lib.mkOption {
+      type        = lib.types.str;
+      default     = "/home/egrapa/music-lite";
+      description = "Host-local path for music-lite data. Override per-host when using a faster disk.";
+    };
+    musicFull.localDir = lib.mkOption {
+      type        = lib.types.str;
+      default     = "/home/egrapa/music-full";
+      description = "Host-local path for music-full data (plugins, bridged .so). Override per-host.";
+    };
+    musicFull.winePrefix = lib.mkOption {
+      type        = lib.types.str;
+      default     = "/home/egrapa/music-full/wine-prefix";
+      description = "Wine prefix path for Windows plugin installation. Override per-host.";
+    };
   };
 
   config = {
