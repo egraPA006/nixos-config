@@ -12,8 +12,6 @@
   hotspot.enable = true;
   hotspot.wifiInterface = "wlp8s0";
 
-  musicLite.localDir = "/data/fast/music-lite";
-
   networking.hostName = "re-1";
 
   boot.loader.systemd-boot.enable = true;

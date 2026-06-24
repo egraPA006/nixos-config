@@ -1,2 +1,2 @@
 # Managed by pino profile. Do not edit manually.
-[ "gaming-full" "dev-cpp" "music-lite" ]
+[ "gaming-full" "dev-cpp" ]
