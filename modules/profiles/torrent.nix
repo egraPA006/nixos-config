@@ -146,6 +146,7 @@ in
         complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a status -d 'Show daemon status'
         complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a start  -d 'Start Transmission daemon'
         complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a stop   -d 'Stop Transmission daemon'
+        complete -c pino -F -n '__fish_seen_subcommand_from torrent; and __fish_seen_subcommand_from add'
       '';
     };
   };
