@@ -1,6 +1,6 @@
 { pkgs, ... }:
 {
-  environment.systemPackages = [ pkgs.lm-sensors ];
+  environment.systemPackages = [ pkgs.lm_sensors ];
 
   pino.subcommands.top = {
     description = "System snapshot — temps, CPU/GPU/RAM load, top processes";
@@ -11,7 +11,7 @@
         Note: CPU temp requires sensors-detect to have been run once.
     '';
     script = ''
-      SENSORS="${pkgs.lm-sensors}/bin/sensors"
+      SENSORS="${pkgs.lm_sensors}/bin/sensors"
 
       # ── CPU usage (two /proc/stat samples 0.3 s apart) ──────────────────
       cpu1=$(grep '^cpu ' /proc/stat | awk '{print $2+$3+$4+$5+$6+$7+$8, $5}')
