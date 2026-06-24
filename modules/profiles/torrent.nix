@@ -20,6 +20,7 @@ in
 
     services.transmission = {
       enable        = true;
+      package       = pkgs.transmission_4;
       user          = "egrapa";
       group         = "users";
       openFirewall  = true;
