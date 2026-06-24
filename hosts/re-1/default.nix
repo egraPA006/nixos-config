@@ -1,4 +1,4 @@
-{ pkgs, lib, activeProfiles, ... }:
+{ pkgs, ... }:
 {
   imports = [
     ./hardware.nix
@@ -7,10 +7,12 @@
     ../../modules/hardware/nvidia.nix
     ../../modules/profiles
     ../../modules/hotspot.nix
-  ] ++ lib.optional (builtins.elem "music-full" activeProfiles) ./music-full-profile.nix;
+  ];
 
-  musicLite.localDir = "/data/fast/music-lite";
-  torrent.localDir   = "/data/fast/torrent";
+  musicLite.localDir   = "/data/fast/music-lite";
+  musicFull.localDir   = "/data/fast/music-full";
+  musicFull.winePrefix = "/data/fast/music-full/wine-prefix";
+  torrent.localDir     = "/data/fast/torrent";
 
   networking.hostName = "re-1";
 
