@@ -11,7 +11,7 @@ let
   srcDir    = "${configDir}/data/music-full";
 in
 {
-  imports = [ ./music-lite.nix ];
+  imports = [ ./music-base.nix ];
 
   config = {
     environment.systemPackages = with pkgs; [
