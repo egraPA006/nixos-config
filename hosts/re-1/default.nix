@@ -7,10 +7,10 @@
     ../../modules/hardware/nvidia.nix
     ../../modules/profiles
     ../../modules/hotspot.nix
-  ] ++ lib.optional (builtins.elem "music-lite" activeProfiles) ./music-lite-profile.nix
-    ++ lib.optional (builtins.elem "music-full" activeProfiles) ./music-full-profile.nix;
+  ] ++ lib.optional (builtins.elem "music-full" activeProfiles) ./music-full-profile.nix;
 
-  torrent.localDir = "/data/fast/torrent";
+  musicLite.localDir = "/data/fast/music-lite";
+  torrent.localDir   = "/data/fast/torrent";
 
   networking.hostName = "re-1";
 
