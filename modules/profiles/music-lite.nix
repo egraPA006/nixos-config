@@ -1,6 +1,6 @@
 # Guitar amp sim via NAM (Neural Amp Modeler).
 # Requires PipeWire (already in base).
-{ config, lib, pkgs, ... }:
+{ config, pkgs, ... }:
 let
   cfg        = config.musicLite;
   configDir  = "/home/egrapa/nixos-config";
@@ -10,11 +10,6 @@ let
   modelParam = "${pluginUri}#model";
 in
 {
-  options.musicLite.localDir = lib.mkOption {
-    type        = lib.types.str;
-    description = "Host-local path for music-lite data (synced from repo on activation). Must be set per-host — no default.";
-  };
-
   config = {
     environment.systemPackages = with pkgs; [
       neural-amp-modeler-lv2

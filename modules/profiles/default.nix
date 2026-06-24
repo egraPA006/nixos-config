@@ -1,4 +1,5 @@
 { activeProfiles, lib, ... }:
+
 let
   validProfiles = [
     "gaming-lite" "gaming-full"
@@ -129,6 +130,12 @@ let
 in
 {
   imports = map (p: ./. + "/${p}.nix") activeProfiles;
+
+  options.musicLite.localDir = lib.mkOption {
+    type        = lib.types.str;
+    default     = "/home/egrapa/music-lite";
+    description = "Host-local path for music-lite data. Override per-host when using a faster disk.";
+  };
 
   assertions = map (p: {
     assertion = lib.elem p validProfiles;
