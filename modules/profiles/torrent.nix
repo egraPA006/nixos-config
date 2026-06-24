@@ -34,6 +34,8 @@ in
       };
     };
 
+    systemd.services.transmission.wantedBy = pkgs.lib.mkForce [];
+
     environment.systemPackages = [ config.services.transmission.package ];
 
     pino.subcommands.torrent = {
