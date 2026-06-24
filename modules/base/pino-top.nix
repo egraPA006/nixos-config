@@ -12,7 +12,7 @@
     '';
     script = ''
       SENSORS="${pkgs.lm_sensors}/bin/sensors"
-      INTERVAL=2
+      INTERVAL=1
 
       # ── helpers ────────────────────────────────────────────────────────────
       TW=$(tput cols 2>/dev/null || echo 80)
