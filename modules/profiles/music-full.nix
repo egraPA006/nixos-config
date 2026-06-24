@@ -16,11 +16,11 @@ in
   config = {
     environment.systemPackages = with pkgs; [
       reaper
-      surge-XT
+      surge-xt
       drumgizmo
       yabridge
       yabridgectl
-      wineWowPackages.stable
+      wineWow64Packages.stable
       winetricks
       carla
     ];
@@ -89,7 +89,7 @@ in
           setup)
             echo "Initializing Wine prefix: $WINE_PREFIX"
             mkdir -p "$WINE_PREFIX"
-            ${pkgs.wineWowPackages.stable}/bin/wineboot --init
+            ${pkgs.wineWow64Packages.stable}/bin/wineboot --init
             echo ""
             echo "Configuring yabridge output dir: $BRIDGED_DIR"
             mkdir -p "$BRIDGED_DIR"
@@ -120,7 +120,7 @@ in
             [ -z "$exe" ] && { echo "Usage: pino music-full install <Installer.exe>"; exit 1; }
             [ ! -f "$exe" ] && { echo "File not found: $exe"; exit 1; }
             echo "Running installer in Wine prefix: $WINE_PREFIX"
-            ${pkgs.wineWowPackages.stable}/bin/wine "$exe"
+            ${pkgs.wineWow64Packages.stable}/bin/wine "$exe"
             echo ""
             echo "After installation, run: pino music-full bridge"
             ;;
