@@ -137,6 +137,7 @@ in
     description = "Host-local path for music-lite data. Override per-host when using a faster disk.";
   };
 
+  config = {
   assertions = map (p: {
     assertion = lib.elem p validProfiles;
     message = "Unknown profile '${p}' in active-profiles.nix. Valid: ${lib.concatStringsSep ", " validProfiles}";
@@ -162,4 +163,5 @@ in
       complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from list status enable disable' -a disable -d 'Disable a profile and rebuild'
     '';
   };
+  }; # config
 }
