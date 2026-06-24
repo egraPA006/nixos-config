@@ -37,7 +37,8 @@
       # ── setup ──────────────────────────────────────────────────────────────
       STAT1=$(mktemp)
       STAT2=$(mktemp)
-      trap 'rm -f "$STAT1" "$STAT2"; tput cnorm; printf "\n"' EXIT INT TERM
+      OUTBUF=$(mktemp)
+      trap 'rm -f "$STAT1" "$STAT2" "$OUTBUF"; tput cnorm; printf "\n"' EXIT INT TERM
       tput civis   # hide cursor
 
       grep '^cpu' /proc/stat > "$STAT1"
@@ -85,8 +86,9 @@
         swap_used=$( free -m | awk '/^Swap:/ {printf "%.1f", $3/1024}')
         swap_pct=$(  free -m | awk '/^Swap:/ {printf "%d",   ($2>0 ? 100*$3/$2 : 0)}')
 
-        # ── header ─────────────────────────────────────────────────────────
-        printf '\033[H\033[J'
+        # ── render to buffer, then cat atomically (no flicker) ────────────
+        {
+        printf '\033[H'   # cursor home — overwrite in place, no clear flash
         printf '\n'
         printf '\033[1m\033[36m  pino top\033[0m  ·  %s  ·  %s  \033[2m(Ctrl+C to exit)\033[0m\n' \
           "$(hostname)" "$(date '+%H:%M:%S')"
@@ -197,6 +199,9 @@
           j=$(( j + 1 ))
         done
         printf '\n'
+        printf '\033[J'   # erase any leftover lines below (e.g. if terminal shrank)
+        } > "$OUTBUF"
+        cat "$OUTBUF"
       }
 
       # ── live loop ──────────────────────────────────────────────────────────
