@@ -6,6 +6,7 @@ let
     "virt-general" "virt-osdev"
     "music-lite" "music-full"
     "dev-cpp"
+    "torrent"
   ];
 
   profileScript = ''
@@ -101,6 +102,9 @@ let
           music-full)
             cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.musicFull.localDir" 2>/dev/null || true)
             ;;
+          torrent)
+            cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.torrent.localDir" 2>/dev/null || true)
+            ;;
         esac
 
         if [[ ''${#new_active[@]} -eq 0 ]]; then
@@ -162,6 +166,11 @@ in
       type        = lib.types.str;
       default     = "/home/egrapa/music-full/wine-prefix";
       description = "Wine prefix path for Windows plugin installation. Override per-host.";
+    };
+    torrent.localDir = lib.mkOption {
+      type        = lib.types.str;
+      default     = "/home/egrapa/torrent";
+      description = "Host-local path for Transmission downloads. Override per-host when using a faster disk.";
     };
   };
 
