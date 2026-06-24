@@ -72,17 +72,23 @@ in
           list)
             echo "=== Linux plugins ($LINUX_PLUGINS) ==="
             count=0
-            for f in "$LINUX_PLUGINS"/*.so "$LINUX_PLUGINS"/*.vst3 2>/dev/null; do
-              [ -e "$f" ] && echo "  $(basename "$f")" && count=$((count+1))
+            shopt -s nullglob
+            for f in "$LINUX_PLUGINS"/*.so "$LINUX_PLUGINS"/*.vst3; do
+              echo "  $(basename "$f")"
+              count=$(( count + 1 ))
             done
+            shopt -u nullglob
             [ "$count" = 0 ] && echo "  (none)"
 
             echo ""
             echo "=== Bridged Windows plugins ($BRIDGED_DIR) ==="
             count=0
-            for f in "$BRIDGED_DIR"/*.so 2>/dev/null; do
-              [ -e "$f" ] && echo "  $(basename "$f")" && count=$((count+1))
+            shopt -s nullglob
+            for f in "$BRIDGED_DIR"/*.so; do
+              echo "  $(basename "$f")"
+              count=$(( count + 1 ))
             done
+            shopt -u nullglob
             [ "$count" = 0 ] && echo "  (none — run 'pino music-full bridge' after installing Win plugins)"
             ;;
 
