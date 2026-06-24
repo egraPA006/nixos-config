@@ -93,12 +93,25 @@ let
 
         [[ "$found" == false ]] && { echo "Profile '$profile' is not enabled"; exit 0; }
 
+        cleanup_dir=""
+        case "$profile" in
+          music-lite)
+            cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.musicLite.localDir" 2>/dev/null || true)
+            ;;
+        esac
+
         if [[ ''${#new_active[@]} -eq 0 ]]; then
           write_profiles
         else
           write_profiles "''${new_active[@]}"
         fi
         echo "Disabled: $profile"
+
+        if [[ -n "$cleanup_dir" && -d "$cleanup_dir" ]]; then
+          echo "Removing profile data: $cleanup_dir"
+          rm -rf "$cleanup_dir"
+        fi
+
         rebuild
         ;;
 
