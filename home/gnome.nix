@@ -92,8 +92,7 @@
 
   dconf.settings = {
     "org/gnome/desktop/session" = {
-      # Screen blanks after 2 min idle — only noticeable when unlocked+idle, no lock triggered
-      idle-delay = lib.hm.gvariant.mkUint32 120;
+      idle-delay = lib.hm.gvariant.mkUint32 0;
     };
 
     "org/gnome/desktop/screensaver" = {
