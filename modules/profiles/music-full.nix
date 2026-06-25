@@ -67,7 +67,8 @@ in
           pino music-full setup             Init Wine prefix and configure yabridge
           pino music-full bridge            Sync yabridge (update .so bridges for Win plugins)
           pino music-full bridge-add <dir>  Register a Win plugin directory with yabridge
-          pino music-full install <exe>     Run a Windows plugin installer in the Wine prefix
+          pino music-full install <exe>        Run a Windows plugin installer (with network)
+          pino music-full install-nonet <exe>  Run a Windows plugin installer (network blocked)
           pino music-full reaper [samples]  Launch Reaper (with optional PIPEWIRE_LATENCY, e.g. 128)
           pino music-full prefix            Print Wine prefix path
           pino music-full status            Show plugin counts
@@ -149,6 +150,16 @@ in
             exe="''${2:-}"
             [ -z "$exe" ] && { echo "Usage: pino music-full install <Installer.exe>"; exit 1; }
             [ ! -f "$exe" ] && { echo "File not found: $exe"; exit 1; }
+            echo "Running installer in Wine prefix: $WINE_PREFIX"
+            ${pkgs.wineWow64Packages.stable}/bin/wine "$exe"
+            echo ""
+            echo "After installation, run: pino music-full bridge"
+            ;;
+
+          install-nonet)
+            exe="''${2:-}"
+            [ -z "$exe" ] && { echo "Usage: pino music-full install-nonet <Installer.exe>"; exit 1; }
+            [ ! -f "$exe" ] && { echo "File not found: $exe"; exit 1; }
             echo "Running installer in Wine prefix: $WINE_PREFIX (network blocked)"
             ${wineNonet}/bin/wine-nonet "$exe"
             echo ""
@@ -179,19 +190,21 @@ in
             ;;
 
           *)
-            echo "Usage: pino music-full list|setup|bridge|bridge-add <dir>|install <exe>|prefix|status|reaper [samples]"
+            echo "Usage: pino music-full list|setup|bridge|bridge-add <dir>|install <exe>|install-nonet <exe>|prefix|status|reaper [samples]"
             exit 1
             ;;
         esac
       '';
       fishCompletions = ''
-        set -l mf_no_sub 'not __fish_seen_subcommand_from list setup bridge bridge-add install prefix status reaper'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a list       -d 'List available plugins'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a setup      -d 'Init Wine prefix and yabridge'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge     -d 'Sync yabridge bridges'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge-add -d 'Register a Win plugin directory'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a install    -d 'Run a Windows plugin installer'
+        set -l mf_no_sub 'not __fish_seen_subcommand_from list setup bridge bridge-add install install-nonet prefix status reaper'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a list           -d 'List available plugins'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a setup          -d 'Init Wine prefix and yabridge'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge         -d 'Sync yabridge bridges'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge-add     -d 'Register a Win plugin directory'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a install        -d 'Run a Windows plugin installer (with network)'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a install-nonet  -d 'Run a Windows plugin installer (network blocked)'
         complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from install'
+        complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from install-nonet'
         complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from bridge-add'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a prefix     -d 'Print Wine prefix path'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a status     -d 'Show plugin counts'
