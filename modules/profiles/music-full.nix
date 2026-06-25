@@ -55,6 +55,7 @@ in
           pino music-full bridge            Sync yabridge (update .so bridges for Win plugins)
           pino music-full bridge-add <dir>  Register a Win plugin directory with yabridge
           pino music-full install <exe>     Run a Windows plugin installer in the Wine prefix
+          pino music-full reaper [samples]  Launch Reaper (with optional PIPEWIRE_LATENCY, e.g. 128)
           pino music-full prefix            Print Wine prefix path
           pino music-full status            Show plugin counts
 
@@ -153,14 +154,23 @@ in
             echo "Wine prefix:     $WINE_PREFIX"
             ;;
 
+          reaper)
+            samples="''${2:-}"
+            if [ -n "$samples" ]; then
+              PIPEWIRE_LATENCY="''${samples}/48000" reaper &
+            else
+              reaper &
+            fi
+            ;;
+
           *)
-            echo "Usage: pino music-full list|setup|bridge|bridge-add <dir>|install <exe>|prefix|status"
+            echo "Usage: pino music-full list|setup|bridge|bridge-add <dir>|install <exe>|prefix|status|reaper [samples]"
             exit 1
             ;;
         esac
       '';
       fishCompletions = ''
-        set -l mf_no_sub 'not __fish_seen_subcommand_from list setup bridge bridge-add install prefix status'
+        set -l mf_no_sub 'not __fish_seen_subcommand_from list setup bridge bridge-add install prefix status reaper'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a list       -d 'List available plugins'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a setup      -d 'Init Wine prefix and yabridge'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge     -d 'Sync yabridge bridges'
@@ -170,6 +180,10 @@ in
         complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from bridge-add'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a prefix     -d 'Print Wine prefix path'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a status     -d 'Show plugin counts'
+        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a reaper     -d 'Launch Reaper (optional: samples for low latency)'
+        complete -c pino -f -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from reaper' -a '64'  -d '64 samples (~1.3ms)'
+        complete -c pino -f -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from reaper' -a '128' -d '128 samples (~2.7ms)'
+        complete -c pino -f -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from reaper' -a '256' -d '256 samples (~5.3ms)'
       '';
     };
   };
