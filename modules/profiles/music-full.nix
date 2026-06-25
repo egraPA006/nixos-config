@@ -33,6 +33,7 @@ in
         mkdir -p "${cfg.localDir}/plugins/linux-bridged"
         ${pkgs.rsync}/bin/rsync -a --delete "${srcDir}/plugins/linux/" "${cfg.localDir}/plugins/linux/"
         ${pkgs.rsync}/bin/rsync -a --delete "${srcDir}/plugins/win/"   "${cfg.localDir}/plugins/win/"
+        chown -R egrapa:users "${cfg.localDir}"
       else
         echo "music-full-sync: $parent not available, skipping" >&2
       fi
