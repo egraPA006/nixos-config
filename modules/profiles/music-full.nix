@@ -27,9 +27,10 @@ in
       wineWow64Packages.stable
       winetricks
       carla
-      firejail
       wineNonet
     ];
+
+    programs.firejail.enable = true;
 
     system.activationScripts.music-full-sync.text = ''
       parent="$(dirname "${cfg.localDir}")"
