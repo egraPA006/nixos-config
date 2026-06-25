@@ -149,8 +149,8 @@ in
             exe="''${2:-}"
             [ -z "$exe" ] && { echo "Usage: pino music-full install <Installer.exe>"; exit 1; }
             [ ! -f "$exe" ] && { echo "File not found: $exe"; exit 1; }
-            echo "Running installer in Wine prefix: $WINE_PREFIX"
-            ${pkgs.wineWow64Packages.stable}/bin/wine "$exe"
+            echo "Running installer in Wine prefix: $WINE_PREFIX (network blocked)"
+            ${wineNonet}/bin/wine-nonet "$exe"
             echo ""
             echo "After installation, run: pino music-full bridge"
             ;;
