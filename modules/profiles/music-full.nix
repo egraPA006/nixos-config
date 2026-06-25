@@ -31,8 +31,10 @@ in
         mkdir -p "${cfg.localDir}/plugins/linux"
         mkdir -p "${cfg.localDir}/plugins/win"
         mkdir -p "${cfg.localDir}/plugins/linux-bridged"
+        mkdir -p "${cfg.localDir}/nki"
         ${pkgs.rsync}/bin/rsync -a "${srcDir}/plugins/linux/" "${cfg.localDir}/plugins/linux/"
         ${pkgs.rsync}/bin/rsync -a "${srcDir}/plugins/win/"   "${cfg.localDir}/plugins/win/"
+        ${pkgs.rsync}/bin/rsync -a "${srcDir}/nki/"           "${cfg.localDir}/nki/"
         chown -R egrapa:users "${cfg.localDir}"
 
         yabridgectl_cfg="/home/egrapa/.config/yabridgectl/config.toml"
@@ -62,11 +64,13 @@ in
         Plugin source dirs (commit .dll/.so files here):
           Windows: ${srcDir}/plugins/win/
           Linux:   ${srcDir}/plugins/linux/
+          NKI:     ${srcDir}/nki/
 
         Fast local dirs (synced on rebuild, read by Reaper):
           Windows DLLs:    ${cfg.localDir}/plugins/win/
           Linux plugins:   ${cfg.localDir}/plugins/linux/
           Bridged (.so):   ${cfg.localDir}/plugins/linux-bridged/
+          NKI instruments: ${cfg.localDir}/nki/
           Wine prefix:     ${cfg.winePrefix}
       '';
       script = ''
