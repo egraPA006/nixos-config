@@ -31,9 +31,16 @@ in
         mkdir -p "${cfg.localDir}/plugins/linux"
         mkdir -p "${cfg.localDir}/plugins/win"
         mkdir -p "${cfg.localDir}/plugins/linux-bridged"
-        ${pkgs.rsync}/bin/rsync -a          "${srcDir}/plugins/linux/" "${cfg.localDir}/plugins/linux/"
-        ${pkgs.rsync}/bin/rsync -a          "${srcDir}/plugins/win/"   "${cfg.localDir}/plugins/win/"
+        ${pkgs.rsync}/bin/rsync -a "${srcDir}/plugins/linux/" "${cfg.localDir}/plugins/linux/"
+        ${pkgs.rsync}/bin/rsync -a "${srcDir}/plugins/win/"   "${cfg.localDir}/plugins/win/"
         chown -R egrapa:users "${cfg.localDir}"
+
+        yabridgectl_cfg="/home/egrapa/.config/yabridgectl/config.toml"
+        mkdir -p "$(dirname "$yabridgectl_cfg")"
+        if ! grep -qF "${cfg.localDir}/plugins/win" "$yabridgectl_cfg" 2>/dev/null; then
+          printf '\n[[directories]]\npath = "%s"\n' "${cfg.localDir}/plugins/win" >> "$yabridgectl_cfg"
+        fi
+        chown -R egrapa:users "/home/egrapa/.config/yabridgectl"
       else
         echo "music-full-sync: $parent not available, skipping" >&2
       fi
