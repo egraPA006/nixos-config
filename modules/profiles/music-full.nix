@@ -11,7 +11,10 @@ let
   srcDir    = "${configDir}/data/music-full";
 
   wineNonet = pkgs.writeShellScriptBin "wine-nonet" ''
-    exec ${pkgs.firejail}/bin/firejail --net=none ${pkgs.wineWow64Packages.stable}/bin/wine64 "$@"
+    exec ${pkgs.util-linux}/bin/unshare \
+      --user --map-user="$(id -u)" --map-group="$(id -g)" \
+      --net \
+      ${pkgs.wineWow64Packages.stable}/bin/wine64 "$@"
   '';
 in
 {
@@ -29,8 +32,6 @@ in
       carla
       wineNonet
     ];
-
-    programs.firejail.enable = true;
 
     system.activationScripts.music-full-sync.text = ''
       parent="$(dirname "${cfg.localDir}")"
