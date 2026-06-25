@@ -55,6 +55,16 @@
     };
     users.egrapa = {
       imports = [ ../../home ];
+      systemd.user.services.monitor-default = {
+        Unit.Description = "Apply default single-monitor profile";
+        Unit.After = [ "graphical-session.target" ];
+        Install.WantedBy = [ "graphical-session.target" ];
+        Service = {
+          Type = "oneshot";
+          ExecStart = "/run/current-system/sw/bin/monitor switch single";
+          RemainAfterExit = false;
+        };
+      };
       systemd.user.services.openrgb-init = {
         Unit.Description = "Set OpenRGB default colors";
         Unit.After = [ "graphical-session.target" ];
