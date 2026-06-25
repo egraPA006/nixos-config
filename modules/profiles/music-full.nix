@@ -160,6 +160,7 @@ in
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge-add -d 'Register a Win plugin directory'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a install    -d 'Run a Windows plugin installer'
         complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from install'
+        complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from bridge-add'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a prefix     -d 'Print Wine prefix path'
         complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a status     -d 'Show plugin counts'
       '';
