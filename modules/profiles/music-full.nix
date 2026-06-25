@@ -124,6 +124,9 @@ in
             mkdir -p "$WINE_PREFIX"
             ${pkgs.wineWow64Packages.stable}/bin/wineboot --init
             echo ""
+            echo "Installing Windows runtimes..."
+            ${pkgs.winetricks}/bin/winetricks -q mfc42
+            echo ""
             echo "Configuring yabridge output dir: $BRIDGED_DIR"
             mkdir -p "$BRIDGED_DIR"
             ${pkgs.yabridgectl}/bin/yabridgectl add "$WIN_PLUGINS"
