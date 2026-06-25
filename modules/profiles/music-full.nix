@@ -9,6 +9,10 @@ let
   cfg       = config.musicFull;
   configDir = "/home/egrapa/nixos-config";
   srcDir    = "${configDir}/data/music-full";
+
+  wineNonet = pkgs.writeShellScriptBin "wine-nonet" ''
+    exec ${pkgs.firejail}/bin/firejail --net=none ${pkgs.wineWow64Packages.stable}/bin/wine64 "$@"
+  '';
 in
 {
   imports = [ ./music-base.nix ];
@@ -23,6 +27,8 @@ in
       wineWow64Packages.stable
       winetricks
       carla
+      firejail
+      wineNonet
     ];
 
     system.activationScripts.music-full-sync.text = ''
@@ -43,6 +49,11 @@ in
           printf '\n[[directories]]\npath = "%s"\n' "${cfg.localDir}/plugins/win" >> "$yabridgectl_cfg"
         fi
         chown -R egrapa:users "/home/egrapa/.config/yabridgectl"
+
+        yabridge_cfg="/home/egrapa/.config/yabridge/config.toml"
+        mkdir -p "$(dirname "$yabridge_cfg")"
+        printf '[yabridge]\nwine-binary = "%s"\n' "${wineNonet}/bin/wine-nonet" > "$yabridge_cfg"
+        chown -R egrapa:users "/home/egrapa/.config/yabridge"
       else
         echo "music-full-sync: $parent not available, skipping" >&2
       fi
