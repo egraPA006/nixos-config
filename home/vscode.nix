@@ -21,8 +21,19 @@
     };
   };
 
+  programs.codex = {
+    enable = true;
+
+    settings = {
+      model = "gpt-5";
+      approval_policy = "on-request";
+      sandbox_mode = "workspace-write";
+    };
+  };
+
   home.packages = with pkgs; [
     nil
     claude-code
+    codex
   ];
 }
