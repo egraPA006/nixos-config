@@ -6,7 +6,6 @@
     mutableExtensionsDir = true;
     profiles.default.extensions = with pkgs.vscode-extensions; [
       jnoortheen.nix-ide
-      anthropic.claude-code
     ];
 
     profiles.default.userSettings = {
