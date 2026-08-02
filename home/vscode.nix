@@ -25,15 +25,16 @@
     enable = true;
 
     settings = {
-      model = "gpt-5";
-      approval_policy = "on-request";
-      sandbox_mode = "workspace-write";
+      projects = {
+        "/home/egrapa/prog/nvim-config" = {
+          trust_level = "trusted";
+        };
+      };
     };
   };
 
   home.packages = with pkgs; [
     nil
-    claude-code
     codex
   ];
 }
