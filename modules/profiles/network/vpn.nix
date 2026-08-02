@@ -1,4 +1,5 @@
 { activeProfiles, pkgs, config, lib, ... }:
+
 let
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
   vaultEnabled = lib.elem "vault" activeProfiles;
@@ -51,7 +52,7 @@ in
     };
   };
 
-  pino.subcommands.vpn = {
+  pino.subcommands.network.commands.vpn = {
     description = "AmneziaWG VPN";
     commands = {
       on.description = "Start VPN and enable boot autostart";
@@ -59,14 +60,14 @@ in
       status.description = "Show VPN service status";
     };
     helpText = ''
-      pino vpn — AmneziaWG VPN
-        pino vpn on       Start VPN + enable autostart on boot
-        pino vpn off      Stop VPN + disable autostart
-        pino vpn status   Show service status
+      pino network vpn — AmneziaWG VPN
+        pino network vpn on       Start VPN + enable autostart on boot
+        pino network vpn off      Stop VPN + disable autostart
+        pino network vpn status   Show service status
 
         Config: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored secrets/awg0.conf fallback"}.
     '';
-    script = builtins.readFile ../pino/vpn.sh;
+    script = builtins.readFile ../../pino/vpn.sh;
     fishCompletions = ''
       complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a on     -d 'Start VPN + enable autostart'
       complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a off    -d 'Stop VPN + disable autostart'

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pino vpn — AmneziaWG VPN
+# pino network vpn — AmneziaWG VPN
 case "${1:-}" in
   on)
     sudo mkdir -p /var/lib/amneziawg
@@ -14,7 +14,7 @@ case "${1:-}" in
     sudo systemctl status amneziawg
     ;;
   *)
-    echo "Usage: pino vpn on|off|status" >&2
+    echo "Usage: pino network vpn on|off|status" >&2
     exit 1
     ;;
 esac

@@ -2,10 +2,10 @@
 {
   environment.systemPackages = [ pkgs.lm_sensors ];
 
-  pino.subcommands.top = {
+  pino.subcommands.os.commands.top = {
     description = "Live system monitor — temps, per-core CPU, GPU, RAM, top processes";
     helpText = ''
-      pino top — live system monitor (Ctrl+C to exit)
+      pino os top — live system monitor (Ctrl+C to exit)
         Per-core CPU bars, GPU, RAM/SWAP, top-CPU and top-memory process tables.
         Updates every 2 seconds. CPU% is measured over the interval.
         Note: CPU temp requires sensors-detect to have been run once.
@@ -90,7 +90,7 @@
         {
         printf '\033[H'   # cursor home — overwrite in place, no clear flash
         printf '\n'
-        printf '\033[1m\033[36m  pino top\033[0m  ·  %s  ·  %s  \033[2m(Ctrl+C to exit)\033[0m\n' \
+        printf '\033[1m\033[36m  pino os top\033[0m  ·  %s  ·  %s  \033[2m(Ctrl+C to exit)\033[0m\n' \
           "$(hostname)" "$(date '+%H:%M:%S')"
         printf '\033[2m  %s\033[0m\n\n' "$(hline $(( TW - 2 )))"
 

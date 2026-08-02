@@ -1,4 +1,5 @@
 # Guitar amp sim via NAM (Neural Amp Modeler).
+
 # Requires PipeWire (already in base).
 { config, pkgs, ... }:
 let
@@ -29,7 +30,7 @@ in
       fi
     '';
 
-    pino.subcommands."music-lite" = {
+    pino.subcommands.desktop.commands."music-lite" = {
       description = "Neural Amp Modeler — load a .nam model into PipeWire";
       commands = {
         list.description = "List available NAM models";
@@ -45,16 +46,16 @@ in
         };
       };
       helpText = ''
-        pino music-lite — run NAM guitar amp models in PipeWire
-          pino music-lite list                  List available .nam models
-          pino music-lite start <name>          Load a model as a PipeWire node
-          pino music-lite stop                  Stop the running node
-          pino music-lite status                Show whether a node is running
-          pino music-lite log                   Show last jalv output
-          pino music-lite set-latency <samples> Set PipeWire quantum (32/64/128/256)
-          pino music-lite set-volume <percent>  Set output level (100=default, 200=+6dB)
-          pino music-lite tuner                 Start chromatic tuner (lingot)
-          pino music-lite tuner stop            Stop the tuner
+        pino desktop music-lite — run NAM guitar amp models in PipeWire
+          pino desktop music-lite list                  List available .nam models
+          pino desktop music-lite start <name>          Load a model as a PipeWire node
+          pino desktop music-lite stop                  Stop the running node
+          pino desktop music-lite status                Show whether a node is running
+          pino desktop music-lite log                   Show last jalv output
+          pino desktop music-lite set-latency <samples> Set PipeWire quantum (32/64/128/256)
+          pino desktop music-lite set-volume <percent>  Set output level (100=default, 200=+6dB)
+          pino desktop music-lite tuner                 Start chromatic tuner (lingot)
+          pino desktop music-lite tuner stop            Stop the tuner
 
           Models: ${ampsDir}  (synced from ${srcDir} on rebuild)
           Once started, connect guitar in → NAM → output in qpwgraph.
@@ -80,12 +81,12 @@ in
 
           start)
             name="''${2:-}"
-            [ -z "$name" ] && { echo "Usage: pino music-lite start <model>"; echo "Run 'pino music-lite list'"; exit 1; }
+            [ -z "$name" ] && { echo "Usage: pino desktop music-lite start <model>"; echo "Run 'pino desktop music-lite list'"; exit 1; }
             model="$AMPS_DIR/''${name}.nam"
-            [ -f "$model" ] || { echo "Not found: $model"; echo "Run 'pino music-lite list'"; exit 1; }
+            [ -f "$model" ] || { echo "Not found: $model"; echo "Run 'pino desktop music-lite list'"; exit 1; }
 
             if [ -f "$PID_FILE" ] && kill -0 "''$(cat "$PID_FILE")" 2>/dev/null; then
-              echo "Already running (PID ''$(cat "$PID_FILE")). Run 'pino music-lite stop' first."
+              echo "Already running (PID ''$(cat "$PID_FILE")). Run 'pino desktop music-lite stop' first."
               exit 1
             fi
 
@@ -119,7 +120,7 @@ EOF
               echo "Connect in qpwgraph — look for 'Neural Amp Modeler' ports"
               grep -i "error\|warn\|unable" "$LOG_FILE" >&2 || true
             else
-              echo "NAM failed to start — check log: pino music-lite log"
+              echo "NAM failed to start — check log: pino desktop music-lite log"
               cat "$LOG_FILE" >&2
               kill "''$(cat "$HOLDER_PID_FILE")" 2>/dev/null || true
               rm -f "$PID_FILE" "$HOLDER_PID_FILE" "$CTRL_PIPE"
@@ -152,20 +153,20 @@ EOF
             if [ -f "$LOG_FILE" ]; then
               cat "$LOG_FILE"
             else
-              echo "No log yet — run 'pino music-lite start <model>' first"
+              echo "No log yet — run 'pino desktop music-lite start <model>' first"
             fi
             ;;
 
           set-latency)
             quantum="''${2:-}"
-            [ -z "$quantum" ] && { echo "Usage: pino music-lite set-latency <samples>"; echo "Common: 32 64 128 256"; exit 1; }
+            [ -z "$quantum" ] && { echo "Usage: pino desktop music-lite set-latency <samples>"; echo "Common: 32 64 128 256"; exit 1; }
             pw-metadata -n settings 0 clock.force-quantum "$quantum"
             echo "Quantum set to $quantum samples"
             ;;
 
           set-volume)
             volume="''${2:-}"
-            [ -z "$volume" ] && { echo "Usage: pino music-lite set-volume <percent>"; echo "100 = default (0 dB), 200 = +6 dB, 50 = -6 dB"; exit 1; }
+            [ -z "$volume" ] && { echo "Usage: pino desktop music-lite set-volume <percent>"; echo "100 = default (0 dB), 200 = +6 dB, 50 = -6 dB"; exit 1; }
             [ ! -p "$CTRL_PIPE" ] && { echo "NAM not running"; exit 1; }
             db=$(awk "BEGIN { printf \"%.2f\", 20 * log($volume / 100) / log(10) }")
             echo "output_level = $db" > "$CTRL_PIPE"
@@ -197,7 +198,7 @@ EOF
             ;;
 
           *)
-            echo "Usage: pino music-lite list|start <model>|stop|status|log|set-latency <samples>|set-volume <percent>|tuner [stop]"
+            echo "Usage: pino desktop music-lite list|start <model>|stop|status|log|set-latency <samples>|set-volume <percent>|tuner [stop]"
             exit 1
             ;;
         esac

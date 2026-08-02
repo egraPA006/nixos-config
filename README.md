@@ -56,32 +56,31 @@ pino <command> <subcommand> help help for a leaf command
 
 | Command | What it does |
 |---|---|
-| `pino info` | Neofetch-style system info |
+| `pino os info/top` | System information and live monitoring |
 | `pino os list` | List NixOS system generations |
 | `pino os rebuild/update` | Interactively rebuild or update the flake |
 | `pino os rollback [N]` | Select and activate a system generation |
 | `pino os gc` | Keep current + previous generation and collect the rest |
 | `pino profile list/status/enable/disable` | Manage NixOS profiles |
-| `pino package search/locate/install/remove` | Search files/packages and manage temporary user packages |
-| `pino monitor list/status/switch/save/rm` | Manage display profiles |
-| `pino snap <label>` | Snapshot root + home |
-| `pino snap ls/rb/rm` | List / roll back / delete snapshots |
-| `pino snap data <label>` | Snapshot `/data/fast` + `/data/slow` |
-| `pino snap data ls/rb-fast/rb-slow/rm` | Data snapshot operations |
-| `pino vpn on/off/status` | AmneziaWG VPN |
-| `pino hotspot start/stop` | WiFi access point (re-1) |
-| `pino vault files/populate` | List and provision root-only system secrets from the local vault |
-| `pino vault disks/backup/check/restore` | Manage any labelled offline vault disk and its snapshots |
-| `pino data list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
-| `pino music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
-| `pino music-lite set-latency <samples>` | Adjust PipeWire quantum at runtime |
-| `pino music-lite set-volume <percent>` | Output level (100=default, >100 boosts) |
+| `pino os package search/locate/install/remove` | Search files/packages and manage temporary user packages |
+| `pino desktop monitor list/status/switch/save/rm` | Manage display profiles |
+| `pino storage snap <label>` | Snapshot root + home |
+| `pino storage snap ls/rb/rm` | List / roll back / delete snapshots |
+| `pino storage snap data <label>` | Snapshot `/data/fast` + `/data/slow` |
+| `pino storage snap data ls/rb-fast/rb-slow/rm` | Data snapshot operations |
+| `pino network vpn on/off/status` | AmneziaWG VPN |
+| `pino network hotspot start/stop` | WiFi access point (re-1) |
+| `pino storage vault files/populate` | List and provision root-only system secrets from the local vault |
+| `pino storage vault disks/backup/check/restore` | Manage any labelled offline vault disk and its snapshots |
+| `pino storage data list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
+| `pino desktop music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
+| `pino desktop music-lite set-latency/set-volume` | Adjust PipeWire latency and output level |
 
-> System-secret source files live only under `/data/secrets/system/{shared,hosts/<hostname>}`. `pino vault populate` merges the shared and current-host trees into root-only `/var/lib/pino/secrets`; Nix modules declare only filenames, destinations, permissions, and restart units.
+> System-secret source files live only under `/data/secrets/system/{shared,hosts/<hostname>}`. `pino storage vault populate` merges the shared and current-host trees into root-only `/var/lib/pino/secrets`; Nix modules declare only filenames, destinations, permissions, and restart units.
 
 > Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its system-secret tree into the disk's root-only installation bootstrap.
 
-> Use `pino vault snapshots 1` to select a snapshot. `pino vault restore 1 <snapshot>` stages it under `/data/secrets/restores/`; adding `--apply` makes the live vault exactly match it after explicit confirmation.
+> Use `pino storage vault snapshots 1` to select a snapshot. `pino storage vault restore 1 <snapshot>` stages it under `/data/secrets/restores/`; adding `--apply` makes the live vault exactly match it after explicit confirmation.
 
 > Hosts map logical datasets to local paths with `pino.data.datasets`. Shared
 > datasets live under `pino-data-*/pino/datasets/shared/`; host-specific datasets
@@ -103,7 +102,7 @@ system material:
 ```
 
 Shared files are merged first and host files override them. Provision with
-`pino vault populate`; deployed copies live under root-only
+`pino storage vault populate`; deployed copies live under root-only
 `/var/lib/pino/secrets`, so normal rebuilds do not require the vault.
 
 A module declares a secret without reading it into the Nix store:
@@ -120,14 +119,14 @@ pino.vault.secrets.proxy-config = {
 For `re-1`, `system/hosts/re-1/ssh/github_ed25519` is installed as the
 user-owned `~/.ssh/github_ed25519`; Home Manager selects it for `github.com`.
 
-`pino vault backup [disk]` also updates the selected disk's `bootstrap/` tree.
+`pino storage vault backup [disk]` also updates the selected disk's `bootstrap/` tree.
 During installation, `scripts/install.sh` selects the only connected
 `pino-vault-*` disk, or the label supplied through `PINO_VAULT_LABEL` when
 several are connected. With no vault disk it installs normally and falls back
 to setting the user password manually. Without the vault profile, VPN and
 hotspot retain their local gitignored configuration-file fallbacks.
 
-> Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino monitor save <name>` to capture it.
+> Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino desktop monitor save <name>` to capture it.
 
 ### Roll back NixOS generation
 
@@ -198,7 +197,11 @@ modules/
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
-  profiles/                  # optional capabilities spanning NixOS and Home Manager
+  profiles/                  # NixOS profile registry and shared options
+    desktop/                 # graphical desktop, gaming, music, and desktop services
+    development/             # development tools currently integrated through NixOS
+    network/                 # VPN and hotspot capabilities
+    security/                # vault and identity capabilities
 scripts/                     # installation helpers (run once, not part of the built system)
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
@@ -215,6 +218,11 @@ Home Manager is embedded in the NixOS configuration, so there is no separate
 `home-manager switch`. User-facing configuration lives beside the capability
 that owns it—for example, the Codex and GNOME profiles configure their own Home
 Manager options. Only the basic user and shell setup is always enabled.
+
+The profile groups separate desktop-specific modules from capabilities that can
+later be reused by server hosts. A future standalone Home Manager entry point
+for Ubuntu should import portable user modules directly rather than importing
+the NixOS profile registry.
 
 ---
 

@@ -1,4 +1,5 @@
 { pkgs, ... }:
+
 {
   home-manager.users.egrapa.programs.vscode = {
     enable = true;

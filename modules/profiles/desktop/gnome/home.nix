@@ -1,4 +1,5 @@
 { hostname, lib, pkgs, ... }:
+
 {
   home.activation = lib.mkIf (hostname == "re-1") (
     let

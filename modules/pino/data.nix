@@ -45,7 +45,7 @@ in
       message = "pino.data.datasets.${name}.localPath must be a safe absolute data path";
     }) datasets;
 
-    pino.subcommands.data = {
+    pino.subcommands.storage.commands.data = {
       description = "Manage portable, non-secret datasets";
       commands = {
         list.description = "List configured datasets";
@@ -55,12 +55,12 @@ in
         merge = { description = "Interactively merge medium into local"; usage = "[disk] <dataset>"; };
       };
       helpText = ''
-        pino data — plain datasets on a pino-data-* medium
-          pino data list
-          pino data disks
-          pino data backup  [disk] <dataset>  Make the medium exactly match local
-          pino data restore [disk] <dataset>  Make local exactly match the medium
-          pino data merge   [disk] <dataset>  Interactively merge medium into local
+        pino storage data — plain datasets on a pino-data-* medium
+          pino storage data list
+          pino storage data disks
+          pino storage data backup  [disk] <dataset>  Make the medium exactly match local
+          pino storage data restore [disk] <dataset>  Make local exactly match the medium
+          pino storage data merge   [disk] <dataset>  Interactively merge medium into local
 
         A disk selector is a suffix (for example 1) or full pino-data-* label.
         It is optional when exactly one pino-data-* partition is connected.

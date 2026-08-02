@@ -1,4 +1,5 @@
 { config, pkgs, ... }:
+
 let
   cfg          = config.pino.profiles.torrent;
   tr           = "${config.services.transmission.package}/bin/transmission-remote";
@@ -38,7 +39,7 @@ in
 
     environment.systemPackages = [ config.services.transmission.package ];
 
-    pino.subcommands.torrent = {
+    pino.subcommands.desktop.commands.torrent = {
       description = "Transmission torrent client";
       commands = {
         list.description = "List torrents grouped by status";
@@ -49,13 +50,13 @@ in
         stop.description = "Stop the Transmission daemon";
       };
       helpText = ''
-        pino torrent — Transmission torrent client
-          pino torrent list           List all torrents (grouped by status)
-          pino torrent share          Show seeding/completed torrents (what you can share)
-          pino torrent add <url>      Add a torrent by URL or magnet link
-          pino torrent status         Show daemon status
-          pino torrent start          Start the Transmission daemon
-          pino torrent stop           Stop the Transmission daemon
+        pino desktop torrent — Transmission torrent client
+          pino desktop torrent list           List all torrents (grouped by status)
+          pino desktop torrent share          Show seeding/completed torrents (what you can share)
+          pino desktop torrent add <url>      Add a torrent by URL or magnet link
+          pino desktop torrent status         Show daemon status
+          pino desktop torrent start          Start the Transmission daemon
+          pino desktop torrent stop           Stop the Transmission daemon
 
           Downloads: ${downloadsDir}
           Web UI:    http://localhost:9091
@@ -65,7 +66,7 @@ in
 
         _tr_check() {
           if ! $TR -l >/dev/null 2>&1; then
-            echo "Transmission is not running. Use: pino torrent start"
+            echo "Transmission is not running. Use: pino desktop torrent start"
             exit 1
           fi
         }
@@ -123,7 +124,7 @@ in
 
           add)
             url="''${2:-}"
-            [ -z "$url" ] && { echo "Usage: pino torrent add <url|magnet>"; exit 1; }
+            [ -z "$url" ] && { echo "Usage: pino desktop torrent add <url|magnet>"; exit 1; }
             _tr_check
             $TR -a "$url"
             ;;
@@ -143,7 +144,7 @@ in
             ;;
 
           *)
-            echo "Usage: pino torrent list|share|add <url>|status|start|stop"
+            echo "Usage: pino desktop torrent list|share|add <url>|status|start|stop"
             exit 1
             ;;
         esac

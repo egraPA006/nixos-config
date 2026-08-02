@@ -1,4 +1,5 @@
 # Shared low-latency audio base: imported by music-lite and music-full.
+
 { ... }:
 {
   services.pipewire.extraConfig.pipewire."10-realtime" = {

@@ -1,4 +1,5 @@
 { ... }:
+
 {
   home-manager.users.egrapa.programs.codex = {
     enable = true;

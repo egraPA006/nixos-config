@@ -1,4 +1,5 @@
 { pkgs, ... }:
+
 {
   services.udev.extraRules = ''
     # Moza (Gudsen) ttyACM devices — uaccess so any logged-in user can reach them

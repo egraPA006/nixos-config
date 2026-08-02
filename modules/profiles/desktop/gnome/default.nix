@@ -1,9 +1,10 @@
 { pkgs, ... }:
+
 let
   python3WithGi = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   monitorTool   = pkgs.writeScriptBin "monitor" ''
     #!${python3WithGi}/bin/python3
-    ${builtins.readFile ../../../scripts/monitor.py}
+    ${builtins.readFile ../../../../scripts/monitor.py}
   '';
 in
 {
@@ -31,7 +32,7 @@ in
     tiling-assistant
   ]) ++ [ monitorTool ];
 
-  pino.subcommands.monitor = {
+  pino.subcommands.desktop.commands.monitor = {
     description = "Manage display profiles";
     commands = {
       list.description = "List saved display profiles";
@@ -41,15 +42,15 @@ in
       rm = { description = "Delete a saved display profile"; usage = "<name>"; };
     };
     helpText = ''
-      pino monitor — manage GNOME display profiles
-        pino monitor list               List saved profiles
-        pino monitor status             Show current display layout
-        pino monitor switch <name>      Apply a saved profile
-        pino monitor save   <name>      Save current GNOME layout as a profile
-        pino monitor rm     <name>      Delete a saved profile
+      pino desktop monitor — manage GNOME display profiles
+        pino desktop monitor list               List saved profiles
+        pino desktop monitor status             Show current display layout
+        pino desktop monitor switch <name>      Apply a saved profile
+        pino desktop monitor save   <name>      Save current GNOME layout as a profile
+        pino desktop monitor rm     <name>      Delete a saved profile
 
         Profiles stored in ~/.config/monitor-profiles/
-        Set a layout in GNOME Settings → Displays, then: pino monitor save <name>
+      Set a layout in GNOME Settings → Displays, then: pino desktop monitor save <name>
     '';
     script = ''monitor "$@"'';
     fishCompletions = ''

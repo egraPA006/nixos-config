@@ -1,4 +1,5 @@
 { ... }:
+
 {
   home-manager.users.egrapa.programs.git = {
     enable = true;

@@ -12,6 +12,18 @@
           usage = "[generation]";
         };
         gc.description = "Keep current and previous; collect the rest";
+        info = {
+          description = "Show system info with Pino art";
+          helpText = ''
+            pino os info — neofetch-style system info with Pino art
+              Art source: modules/pino/pino-art.sh  (paste any chafa printf here)
+          '';
+          script = ''
+            mapfile -t _art < <(
+            ${builtins.readFile ../pino/pino-art.sh}
+            )
+          '' + builtins.readFile ../pino/pino-info.sh;
+        };
       };
       helpText = ''
         pino os — manage the NixOS system
@@ -36,20 +48,9 @@
       '';
     };
 
-    info = {
-      description = "Show system info with Pino art";
-      helpText = ''
-        pino info — neofetch-style system info with Pino art
-          Art source: modules/pino/pino-art.sh  (paste any chafa printf here)
-      '';
-      script = ''
-        mapfile -t _art < <(
-        ${builtins.readFile ../pino/pino-art.sh}
-        )
-      '' + builtins.readFile ../pino/pino-info.sh;
-    };
+    storage.description = "Local and removable storage";
 
-    snap = {
+    storage.commands.snap = {
       description = "Manage btrfs snapshots";
       usage = "<label>";
       commands = {
@@ -68,12 +69,12 @@
         };
       };
       helpText = ''
-        pino snap — btrfs snapshot management (root + home)
-          pino snap <label>          Create snapshot of root + home
-          pino snap ls               List snapshots
-          pino snap rb <N>           Roll back root + home to snapshot N
-          pino snap rm <N>           Delete snapshot N
-          pino snap data <...>       Data disk snapshots  (pino snap data help)
+        pino storage snap — btrfs snapshot management (root + home)
+          pino storage snap <label>          Create snapshot of root + home
+          pino storage snap ls               List snapshots
+          pino storage snap rb <N>           Roll back root + home to snapshot N
+          pino storage snap rm <N>           Delete snapshot N
+          pino storage snap data <...>       Data disk snapshots
       '';
       script = builtins.readFile ../pino/snap.sh;
       fishCompletions = ''

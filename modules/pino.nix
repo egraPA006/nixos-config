@@ -117,7 +117,7 @@ let
             ;;
           ${childCases}
           "")
-            ${if names != [ ] then helpBody path node else delegatedInvocation}
+            ${if names != [ ] || effectiveScript == null then helpBody path node else delegatedInvocation}
             ;;
           *)
             ${if effectiveScript != null then delegatedInvocation else ''

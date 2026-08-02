@@ -1,25 +1,40 @@
 { activeProfiles, lib, ... }:
 
 let
-  profileModules = {
-    codex = ./codex.nix;
-    git = ./git.nix;
-    gnome = ./gnome;
-    vscode = ./vscode.nix;
-    vpn = ./vpn.nix;
-    hotspot = ./hotspot.nix;
-    "gaming-lite" = ./gaming-lite.nix;
-    "gaming-full" = ./gaming-full.nix;
-    "music-lite" = ./music-lite.nix;
-    "music-full" = ./music-full.nix;
-    "dev-cpp" = ./dev-cpp.nix;
-    torrent = ./torrent.nix;
-    vault = ./vault.nix;
+  profileGroups = {
+    desktop = {
+      gnome = ./desktop/gnome;
+      vscode = ./desktop/vscode.nix;
+      "gaming-lite" = ./desktop/gaming-lite.nix;
+      "gaming-full" = ./desktop/gaming-full.nix;
+      "music-lite" = ./desktop/music-lite.nix;
+      "music-full" = ./desktop/music-full.nix;
+      torrent = ./desktop/torrent.nix;
+    };
+    development = {
+      codex = ./development/codex.nix;
+      git = ./development/git.nix;
+      "dev-cpp" = ./development/dev-cpp.nix;
+    };
+    network = {
+      vpn = ./network/vpn.nix;
+      hotspot = ./network/hotspot.nix;
+    };
+    security.vault = ./security/vault.nix;
   };
+  profileModules = lib.mergeAttrsList (builtins.attrValues profileGroups);
+  desktopProfiles = builtins.attrNames profileGroups.desktop;
+  networkProfiles = builtins.attrNames profileGroups.network;
+  hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
   profileScript = builtins.replaceStrings
-    [ "@validProfiles@" ]
-    [ (lib.concatStringsSep " " validProfiles) ]
+    [ "@validProfiles@" "@profileGroups@" ]
+    [
+      (lib.concatStringsSep " " validProfiles)
+      (lib.concatStringsSep " " (lib.mapAttrsToList
+        (group: profiles: "'${group}:${lib.concatStringsSep "," (builtins.attrNames profiles)}'")
+        profileGroups))
+    ]
     (builtins.readFile ../pino/profile.sh);
 in
 {
@@ -30,6 +45,14 @@ in
     assertion = builtins.hasAttr name profileModules;
     message = "Unknown profile '${name}'. Valid: ${lib.concatStringsSep ", " validProfiles}";
   }) activeProfiles;
+
+  pino.subcommands.desktop = lib.mkIf (hasActiveProfile desktopProfiles) {
+    description = "Desktop applications and services";
+  };
+
+  pino.subcommands.network = lib.mkIf (hasActiveProfile networkProfiles) {
+    description = "Network services";
+  };
 
   pino.subcommands.profile = {
     description = "Manage optional NixOS profiles";

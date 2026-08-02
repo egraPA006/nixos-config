@@ -1,5 +1,6 @@
 { config, lib, pkgs, ... }:
 
+
 let
   vaultDevice = "/dev/disk/by-partlabel/secrets";
   vaultMapper = "secrets";
@@ -85,7 +86,7 @@ in
     };
   };
 
-  pino.subcommands.vault = {
+  pino.subcommands.storage.commands.vault = {
     description = "Manage the KeePassXC vault and its offline backups";
     commands = {
       status.description = "Show local vault status";
@@ -101,19 +102,19 @@ in
       restore = { description = "Stage or apply a vault snapshot"; usage = "[disk] [snapshot] [--apply]"; };
     };
     helpText = ''
-      pino vault — manage the local KeePassXC identity vault
-        pino vault status    Show whether the vault is open and mounted
-        pino vault open      Unlock and mount the vault
-        pino vault keepass   Open the vault database in KeePassXC
-        pino vault close     Unmount and lock the vault
-        pino vault disks     List connected pino-vault-* backup disks
-        pino vault backup [disk]   Back up to a disk (for example: 1)
-        pino vault check [disk]    Check a backup disk without changing it
-        pino vault snapshots [disk]  List snapshots for this host
-        pino vault restore [disk] [snapshot] [--apply]
+      pino storage vault — manage the local KeePassXC identity vault
+        pino storage vault status    Show whether the vault is open and mounted
+        pino storage vault open      Unlock and mount the vault
+        pino storage vault keepass   Open the vault database in KeePassXC
+        pino storage vault close     Unmount and lock the vault
+        pino storage vault disks     List connected pino-vault-* backup disks
+        pino storage vault backup [disk]   Back up to a disk (for example: 1)
+        pino storage vault check [disk]    Check a backup disk without changing it
+        pino storage vault snapshots [disk]  List snapshots for this host
+        pino storage vault restore [disk] [snapshot] [--apply]
                                     Stage or directly apply an exact snapshot
-        pino vault files     List declared and provisioned system-secret files
-        pino vault populate  Provision this host from the local encrypted vault
+        pino storage vault files     List declared and provisioned system-secret files
+        pino storage vault populate  Provision this host from the local encrypted vault
 
       Vault device: ${vaultDevice}
       Mount point:  ${vaultMountPoint}
@@ -258,7 +259,7 @@ in
         local metadata="$backup_mount/.pino"
         local repository="$backup_mount/backups/vault"
         if ! is_mounted; then
-          echo "The local vault is closed. Run: pino vault open" >&2
+          echo "The local vault is closed. Run: pino storage vault open" >&2
           return 1
         fi
         if sudo ${pkgs.coreutils}/bin/test -d "$MOUNT_POINT/system"; then
@@ -333,7 +334,7 @@ in
         local repository="$backup_mount/backups/vault"
         local restore_root restored_vault hostname confirmation snapshot_name
         if ! is_mounted; then
-          echo "The local vault is closed. Run: pino vault open" >&2
+          echo "The local vault is closed. Run: pino storage vault open" >&2
           return 1
         fi
         if [ ! -f "$metadata/restic-password" ] || [ ! -f "$repository/config" ]; then
@@ -416,7 +417,7 @@ in
       populate_secret_files() {
         local staging source_dir
         if ! is_mounted; then
-          echo "The local vault is closed. Run: pino vault open" >&2
+          echo "The local vault is closed. Run: pino storage vault open" >&2
           return 1
         fi
         source_dir="$MOUNT_POINT/system"
@@ -495,7 +496,7 @@ in
 
         keepass)
           if ! is_mounted; then
-            echo "Vault is closed. Run: pino vault open" >&2
+            echo "Vault is closed. Run: pino storage vault open" >&2
             exit 1
           fi
 
@@ -560,12 +561,12 @@ in
           ;;
 
         "")
-          echo "Usage: pino vault <status|open|keepass|close|files|populate|disks|backup|check|snapshots|restore>"
+          echo "Usage: pino storage vault <status|open|keepass|close|files|populate|disks|backup|check|snapshots|restore>"
           ;;
 
         *)
-          echo "pino vault: unknown command '$1'" >&2
-          echo "Run 'pino vault help' for usage." >&2
+          echo "pino storage vault: unknown command '$1'" >&2
+          echo "Run 'pino storage vault help' for usage." >&2
           exit 1
           ;;
       esac

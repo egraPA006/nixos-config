@@ -2,6 +2,7 @@ HOSTNAME_VAL=$(hostname)
 CONFIG_DIR="${NIXOS_CONFIG_DIR:-/home/egrapa/nixos-config}"
 PROFILES_FILE="${CONFIG_DIR}/hosts/${HOSTNAME_VAL}/active-profiles.nix"
 VALID_PROFILES=(@validProfiles@)
+PROFILE_GROUPS=(@profileGroups@)
 
 usage() {
   echo "Usage: pino profile <command> [profile]"
@@ -19,6 +20,34 @@ is_valid() {
     [ "$candidate" = "$profile" ] && return 0
   done
   return 1
+}
+
+profile_group() {
+  local profile="$1" entry group members member
+  local -a group_profiles
+  for entry in "${PROFILE_GROUPS[@]}"; do
+    group="${entry%%:*}"
+    members="${entry#*:}"
+    IFS=',' read -r -a group_profiles <<< "$members"
+    for member in "${group_profiles[@]}"; do
+      [ "$member" = "$profile" ] && { printf '%s\n' "$group"; return; }
+    done
+  done
+  printf 'unknown\n'
+}
+
+list_profiles() {
+  local entry group members profile
+  local -a group_profiles
+  for entry in "${PROFILE_GROUPS[@]}"; do
+    group="${entry%%:*}"
+    members="${entry#*:}"
+    printf '%s\n' "$group"
+    IFS=',' read -r -a group_profiles <<< "$members"
+    for profile in "${group_profiles[@]}"; do
+      printf '  %s\n' "$profile"
+    done
+  done
 }
 
 get_active() {
@@ -75,14 +104,17 @@ case "$command" in
     rebuild
     ;;
   list)
-    printf '%s\n' "${VALID_PROFILES[@]}"
+    list_profiles
     ;;
   status)
     mapfile -t active < <(get_active)
     if [ "${#active[@]}" -eq 0 ]; then
       echo "No active profiles on $HOSTNAME_VAL"
     else
-      printf '%s\n' "${active[@]}"
+      printf '%-14s %s\n' "GROUP" "PROFILE"
+      for profile in "${active[@]}"; do
+        printf '%-14s %s\n' "$(profile_group "$profile")" "$profile"
+      done
     fi
     ;;
   *)

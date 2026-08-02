@@ -1,5 +1,6 @@
 { activeProfiles, config, lib, pkgs, ... }:
 
+
 let
   cfg = config.pino.profiles.hotspot;
   ssid = "${config.networking.hostName}-hotspot";
@@ -33,23 +34,23 @@ let
 in
 {
   config = {
-    pino.subcommands.hotspot = {
+    pino.subcommands.network.commands.hotspot = {
       description = "WiFi access point";
       commands = {
         start.description = "Bring up the access point";
         stop.description = "Tear down the access point";
       };
       helpText = ''
-        pino hotspot — WiFi access point  (SSID: ${ssid})
-          pino hotspot start   Bring up AP, traffic routed via VPN
-          pino hotspot stop    Tear down AP
+        pino network hotspot — WiFi access point  (SSID: ${ssid})
+          pino network hotspot start   Bring up AP, traffic routed via VPN
+          pino network hotspot stop    Tear down AP
 
           Connection: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored hotspot.conf fallback"}.
       '';
       script = ''
         case "''${1:-}" in
           start|stop) hotspot "''${1:-}" ;;
-          *) echo "Usage: pino hotspot start|stop" >&2; exit 1 ;;
+          *) echo "Usage: pino network hotspot start|stop" >&2; exit 1 ;;
         esac
       '';
       fishCompletions = ''
