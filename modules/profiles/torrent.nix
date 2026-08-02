@@ -1,6 +1,6 @@
 { config, pkgs, ... }:
 let
-  cfg          = config.torrent;
+  cfg          = config.pino.profiles.torrent;
   tr           = "${config.services.transmission.package}/bin/transmission-remote";
   downloadsDir = "${cfg.localDir}/downloads";
   incompleteDir = "${cfg.localDir}/incomplete";

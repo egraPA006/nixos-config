@@ -1,5 +1,8 @@
 { ... }:
 {
+  services.power-profiles-daemon.enable = true;
+  powerManagement.enable = true;
+
   hardware.graphics = {
     enable = true;
     enable32Bit = true;

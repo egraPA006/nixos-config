@@ -1,7 +1,7 @@
 { activeProfiles, config, lib, pkgs, ... }:
 
 let
-  cfg = config.hotspot;
+  cfg = config.pino.profiles.hotspot;
   ssid = "${config.networking.hostName}-hotspot";
   vaultEnabled = lib.elem "vault" activeProfiles;
   fallbackConnection = pkgs.writeText "hotspot.nmconnection" ''
@@ -32,22 +32,7 @@ let
   '';
 in
 {
-  options.hotspot = {
-    enable = lib.mkEnableOption "hotspot AP via NetworkManager";
-
-    wifiInterface = lib.mkOption {
-      type = lib.types.str;
-      description = "WiFi interface to use as AP (e.g. wlp8s0)";
-    };
-
-    vpnInterface = lib.mkOption {
-      type = lib.types.str;
-      default = "awg0";
-      description = "VPN interface to NAT hotspot traffic through";
-    };
-  };
-
-  config = lib.mkIf cfg.enable {
+  config = {
     pino.subcommands.hotspot = {
       description = "WiFi access point";
       helpText = ''

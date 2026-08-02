@@ -1,8 +1,6 @@
-# modules/home/codex.nix
-{ config, pkgs, ... }:
-
+{ ... }:
 {
-  programs.codex = {
+  home-manager.users.egrapa.programs.codex = {
     enable = true;
 
     settings = {

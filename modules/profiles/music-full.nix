@@ -3,10 +3,10 @@
 # localDir/plugins/win and are bridged via yabridge into localDir/plugins/linux-bridged.
 # Linux plugins: place .so files in data/music-full/plugins/linux — they sync to
 # localDir/plugins/linux.
-# Wine prefix lives at musicFull.winePrefix (for installer-based plugins like Neural DSP).
+# Wine prefix is configured by pino.profiles.musicFull.winePrefix.
 { config, pkgs, ... }:
 let
-  cfg       = config.musicFull;
+  cfg       = config.pino.profiles.musicFull;
   configDir = "/home/egrapa/nixos-config";
   srcDir    = "${configDir}/data/music-full";
 

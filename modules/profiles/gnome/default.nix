@@ -3,10 +3,14 @@ let
   python3WithGi = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   monitorTool   = pkgs.writeScriptBin "monitor" ''
     #!${python3WithGi}/bin/python3
-    ${builtins.readFile ../../scripts/monitor.py}
+    ${builtins.readFile ../../../scripts/monitor.py}
   '';
 in
 {
+  imports = [ ./audio.nix ./apps.nix ];
+
+  home-manager.users.egrapa.imports = [ ./home.nix ];
+
   xdg.portal = {
     enable = true;
     config.common.default = "gnome";

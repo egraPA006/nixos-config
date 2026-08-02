@@ -127,7 +127,7 @@ Use `rollback` alias, or pick a previous generation at boot from the systemd-boo
 ## Profile system
 
 Profiles are optional modules (gaming, music, dev tools, etc.) toggled via a CLI tool.
-They are fully removed when disabled — no leftover packages.
+Disabling removes their declarative packages and services while preserving user data.
 
 ```bash
 pino profile list                   # show available profiles
@@ -145,13 +145,19 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 |---|---|
 | `gaming-lite` | Steam + gamemode (laptop) |
 | `gaming-full` | Steam + Lutris + Wine + Proton GE (PC) |
-| `virt-general` | QEMU/KVM + virt-manager |
-| `virt-osdev` | QEMU with cross-arch support (extends virt-general) |
 | `music-lite` | NAM guitar amp sim + low-latency PipeWire |
-| `music-full` | Reaper + yabridge + Wine VST support (extends music-lite) |
+| `music-full` | Reaper + yabridge + Wine VST support |
 | `dev-cpp` | GCC, Clang, CMake, Meson, Ninja, GDB + VSCode clangd/meson extensions |
+| `torrent` | On-demand Transmission daemon and storage |
+| `vault` | KeePassXC, root-only system secrets, and offline backups |
+| `gnome` | GNOME desktop, audio, desktop applications, and display tooling |
+| `vscode` | VS Code, Nix language support, and shared editor settings |
+| `codex` | Codex CLI and user configuration |
+| `git` | Git identity and defaults |
+| `vpn` | AmneziaWG client and Pino controls |
+| `hotspot` | NetworkManager access point routed through the VPN |
 
-Profiles can overlap freely — e.g. `virt-general` + `gaming-full` at the same time is fine.
+Profiles can overlap freely when their packages and services are compatible.
 
 Dev environments are handled per-project via `nix develop` / `devShell` in each project's `flake.nix`.
 
@@ -163,7 +169,7 @@ Dev environments are handled per-project via `nix develop` / `devShell` in each 
 flake.nix                    # inputs: nixpkgs, home-manager, disko
 hosts/
   re-1/
-    default.nix              # host config (boot, user, imports)
+    default.nix              # host-specific imports and settings
     hardware.nix             # generated hardware config (placeholder → replace)
     disko.nix                # declarative disk layout
     active-profiles.nix      # managed by pino profile CLI
@@ -171,29 +177,31 @@ hosts/
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
   pino/
-    pino-art.sh              # ← paste new chafa art here, then pino rebuild
-    pino-info.sh             # info layout (auto-adapts to art dimensions)
-  base/                      # always-on: GNOME, PipeWire, networking, apps
+    system.nix               # rebuild/update/snapshot commands
+    profile.sh               # profile state CLI
+    pino-art.sh              # system-info art
+    pino-info.sh             # system-info layout
+  base/                      # minimal shared system, user, and shell foundation
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
-  profiles/                  # one file per profile + loader (default.nix)
+  profiles/                  # optional capabilities spanning NixOS and Home Manager
 scripts/                     # installation helpers (run once, not part of the built system)
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
   install.sh                 # run nixos-install
   vault-disk-init.sh         # create exFAT + 8 GiB LUKS vault disk
   monitor.py                 # built into monitor binary
-home/                        # home-manager: bash (blesh), vscode, git
 ```
 
 ---
 
-## Home-manager
+## Home Manager
 
-User config (shell, editor, git) is managed by home-manager as a NixOS module — no separate `home-manager switch` needed. It rebuilds together with the system.
-
-Config lives in `home/`. To add dotfiles, create a new `home/foo.nix` and import it from `home/default.nix`.
+Home Manager is embedded in the NixOS configuration, so there is no separate
+`home-manager switch`. User-facing configuration lives beside the capability
+that owns it—for example, the Codex and GNOME profiles configure their own Home
+Manager options. Only the basic user and shell setup is always enabled.
 
 ---
 

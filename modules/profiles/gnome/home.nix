@@ -112,8 +112,8 @@
     };
 
     "org/gnome/desktop/background" = {
-      picture-uri = "file:///home/egrapa/nixos-config/home/wallpaper-${hostname}.jpg";
-      picture-uri-dark = "file:///home/egrapa/nixos-config/home/wallpaper-${hostname}.jpg";
+      picture-uri = "file:///home/egrapa/nixos-config/hosts/${hostname}/wallpaper.jpg";
+      picture-uri-dark = "file:///home/egrapa/nixos-config/hosts/${hostname}/wallpaper.jpg";
       picture-options = "zoom";
     };
 

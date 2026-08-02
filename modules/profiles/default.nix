@@ -1,228 +1,56 @@
 { activeProfiles, lib, ... }:
 
 let
-  validProfiles = [
-    "gaming-lite" "gaming-full"
-    "virt-general" "virt-osdev"
-    "music-lite" "music-full"
-    "dev-cpp"
-    "vault"
-    "torrent"
-  ];
-
-  profileScript = ''
-    HOSTNAME_VAL=$(hostname)
-    CONFIG_DIR="''${NIXOS_CONFIG_DIR:-/home/egrapa/nixos-config}"
-    PROFILES_FILE="''${CONFIG_DIR}/hosts/''${HOSTNAME_VAL}/active-profiles.nix"
-
-    VALID_PROFILES=(${lib.concatStringsSep " " validProfiles})
-
-    usage() {
-      echo "Usage: pino profile <command> [profile]"
-      echo ""
-      echo "Commands:"
-      echo "  enable <profile>   Enable a profile and rebuild"
-      echo "  disable <profile>  Disable a profile and rebuild"
-      echo "  list               List all available profiles"
-      echo "  status             Show currently active profiles"
-    }
-
-    is_valid() {
-      local profile="$1" p
-      for p in "''${VALID_PROFILES[@]}"; do
-        [[ "$p" == "$profile" ]] && return 0
-      done
-      return 1
-    }
-
-    get_active() {
-      grep -oP '"\K[^"]+(?=")' "$PROFILES_FILE" 2>/dev/null | grep -v '^\s*$' || true
-    }
-
-    write_profiles() {
-      {
-        printf '# Managed by pino profile. Do not edit manually.\n'
-        if [[ $# -eq 0 ]]; then
-          printf '[]\n'
-        else
-          printf '['
-          local p
-          for p in "$@"; do
-            printf ' "%s"' "$p"
-          done
-          printf ' ]\n'
-        fi
-      } > "$PROFILES_FILE"
-    }
-
-    rebuild() {
-      echo "Rebuilding NixOS (this requires sudo)..."
-      sudo nixos-rebuild switch --flake "''${CONFIG_DIR}#''${HOSTNAME_VAL}"
-    }
-
-    cmd="''${1:-}"
-    case "$cmd" in
-      enable)
-        profile="''${2:-}"
-        [[ -z "$profile" ]] && { usage; exit 1; }
-        is_valid "$profile" || { echo "Unknown profile: $profile"; echo "Valid: ''${VALID_PROFILES[*]}"; exit 1; }
-
-        mapfile -t active < <(get_active)
-        for p in "''${active[@]}"; do
-          [[ "$p" == "$profile" ]] && { echo "Profile '$profile' is already enabled"; exit 0; }
-        done
-
-        active+=("$profile")
-        write_profiles "''${active[@]}"
-        echo "Enabled: $profile"
-        rebuild
-        ;;
-
-      disable)
-        profile="''${2:-}"
-        [[ -z "$profile" ]] && { usage; exit 1; }
-
-        mapfile -t active < <(get_active)
-        new_active=()
-        found=false
-        for p in "''${active[@]}"; do
-          if [[ "$p" == "$profile" ]]; then
-            found=true
-          else
-            new_active+=("$p")
-          fi
-        done
-
-        [[ "$found" == false ]] && { echo "Profile '$profile' is not enabled"; exit 0; }
-
-        cleanup_dir=""
-        case "$profile" in
-          music-lite)
-            cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.musicLite.localDir" 2>/dev/null || true)
-            ;;
-          music-full)
-            cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.musicFull.localDir" 2>/dev/null || true)
-            ;;
-          torrent)
-            cleanup_dir=$(nix eval --raw "path:''${CONFIG_DIR}#nixosConfigurations.''${HOSTNAME_VAL}.config.torrent.localDir" 2>/dev/null || true)
-            ;;
-        esac
-
-        if [[ ''${#new_active[@]} -eq 0 ]]; then
-          write_profiles
-        else
-          write_profiles "''${new_active[@]}"
-        fi
-        echo "Disabled: $profile"
-
-        if [[ -n "$cleanup_dir" && -d "$cleanup_dir" ]]; then
-          echo "Removing profile data: $cleanup_dir"
-          rm -rf "$cleanup_dir"
-        fi
-
-        rebuild
-        ;;
-
-      list)
-        echo "Available profiles:"
-        for p in "''${VALID_PROFILES[@]}"; do
-          echo "  $p"
-        done
-        ;;
-
-      status)
-        mapfile -t active < <(get_active)
-        echo "Active profiles on ''${HOSTNAME_VAL}:"
-        if [[ ''${#active[@]} -eq 0 ]]; then
-          echo "  (none)"
-        else
-          for p in "''${active[@]}"; do
-            echo "  $p"
-          done
-        fi
-        ;;
-
-      *)
-        usage
-        [[ -z "$cmd" ]] && exit 0 || exit 1
-        ;;
-    esac
-  '';
+  profileModules = {
+    codex = ./codex.nix;
+    git = ./git.nix;
+    gnome = ./gnome;
+    vscode = ./vscode.nix;
+    vpn = ./vpn.nix;
+    hotspot = ./hotspot.nix;
+    "gaming-lite" = ./gaming-lite.nix;
+    "gaming-full" = ./gaming-full.nix;
+    "music-lite" = ./music-lite.nix;
+    "music-full" = ./music-full.nix;
+    "dev-cpp" = ./dev-cpp.nix;
+    torrent = ./torrent.nix;
+    vault = ./vault.nix;
+  };
+  validProfiles = builtins.attrNames profileModules;
+  profileScript = builtins.replaceStrings
+    [ "@validProfiles@" ]
+    [ (lib.concatStringsSep " " validProfiles) ]
+    (builtins.readFile ../pino/profile.sh);
 in
 {
-  imports = map (p: ./. + "/${p}.nix") activeProfiles;
+  imports = [ ./options.nix ]
+    ++ map (name: profileModules.${name}) (lib.filter (name: builtins.hasAttr name profileModules) activeProfiles);
 
-  options = {
-    musicLite.localDir = lib.mkOption {
-      type        = lib.types.str;
-      default     = "/home/egrapa/music-lite";
-      description = "Host-local path for music-lite data. Override per-host when using a faster disk.";
-    };
-    musicFull.localDir = lib.mkOption {
-      type        = lib.types.str;
-      default     = "/home/egrapa/music-full";
-      description = "Host-local path for music-full data (plugins, bridged .so). Override per-host.";
-    };
-    musicFull.winePrefix = lib.mkOption {
-      type        = lib.types.str;
-      default     = "/home/egrapa/music-full/wine-prefix";
-      description = "Wine prefix path for Windows plugin installation. Override per-host.";
-    };
-    torrent.localDir = lib.mkOption {
-      type        = lib.types.str;
-      default     = "/home/egrapa/torrent";
-      description = "Host-local path for Transmission downloads. Override per-host when using a faster disk.";
-    };
-    pino.vault.provisionedDir = lib.mkOption {
-      type = lib.types.str;
-      default = "/var/lib/pino/secrets";
-      description = "Root-only files last populated from the optional vault profile.";
-    };
-    pino.vault.secrets = lib.mkOption {
-      default = { };
-      description = "Secret-file declarations used only while the vault profile is enabled.";
-      type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-        options = {
-          source = lib.mkOption { type = lib.types.str; default = name; };
-          target = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
-          owner = lib.mkOption { type = lib.types.str; default = "root"; };
-          group = lib.mkOption { type = lib.types.str; default = "root"; };
-          mode = lib.mkOption { type = lib.types.str; default = "0600"; };
-          directoryMode = lib.mkOption { type = lib.types.str; default = "0700"; };
-          restartUnits = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            default = [ ];
-          };
-        };
-      }));
-    };
-  };
-
-  config = {
-  assertions = map (p: {
-    assertion = lib.elem p validProfiles;
-    message = "Unknown profile '${p}' in active-profiles.nix. Valid: ${lib.concatStringsSep ", " validProfiles}";
+  assertions = map (name: {
+    assertion = builtins.hasAttr name profileModules;
+    message = "Unknown profile '${name}'. Valid: ${lib.concatStringsSep ", " validProfiles}";
   }) activeProfiles;
 
   pino.subcommands.profile = {
-    description = "Manage NixOS profiles  (gaming, dev-cpp, ...)";
+    description = "Manage optional NixOS profiles";
     helpText = ''
-      pino profile — manage NixOS profiles
-        pino profile list               List available profiles
-        pino profile status             Show active profiles on this machine
-        pino profile enable  <name>     Enable a profile and rebuild
-        pino profile disable <name>     Disable a profile and rebuild
+      pino profile — manage optional profiles
+        pino profile list
+        pino profile status
+        pino profile enable  <name>
+        pino profile disable <name>
 
-        Active profiles: hosts/<hostname>/active-profiles.nix
+      Active profiles: hosts/<hostname>/active-profiles.nix
+      Disabling a profile preserves its data.
     '';
     script = profileScript;
     fishCompletions = ''
-      complete -c pino -f -n '__fish_seen_subcommand_from profile' -a list    -d 'List available profiles'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile' -a status  -d 'Show active profiles'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and __fish_seen_subcommand_from enable disable' -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from list status enable disable' -a enable  -d 'Enable a profile and rebuild'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from list status enable disable' -a disable -d 'Disable a profile and rebuild'
+      set -l profile_cmds list status enable disable
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a list -d 'List profiles'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a status -d 'Show active profiles'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a enable -d 'Enable a profile'
+      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a disable -d 'Disable a profile'
+      complete -c pino -f -n '__fish_seen_subcommand_from enable disable' -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
     '';
   };
-  }; # config
 }

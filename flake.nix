@@ -13,7 +13,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, home-manager, disko }:
+  outputs = { nixpkgs, home-manager, disko, ... }:
   let
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
 
@@ -31,6 +31,15 @@
         });
       };
     };
+
+    mkHost = name: extraModules: nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      specialArgs.activeProfiles = import (./hosts + "/${name}/active-profiles.nix");
+      modules = [
+        disko.nixosModules.disko
+        home-manager.nixosModules.home-manager
+      ] ++ extraModules ++ [ (./hosts + "/${name}") ];
+    };
   in {
     devShells.x86_64-linux.cpp = pkgs.mkShell {
       packages = with pkgs; [
@@ -46,29 +55,10 @@
     };
 
     nixosConfigurations = {
-      re-1 = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          activeProfiles = import ./hosts/re-1/active-profiles.nix;
-        };
-        modules = [
+      re-1 = mkHost "re-1" [
           { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
-          disko.nixosModules.disko
-          home-manager.nixosModules.home-manager
-          ./hosts/re-1
-        ];
-      };
-      la1n = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          activeProfiles = import ./hosts/la1n/active-profiles.nix;
-        };
-        modules = [
-          disko.nixosModules.disko
-          home-manager.nixosModules.home-manager
-          ./hosts/la1n
-        ];
-      };
+      ];
+      la1n = mkHost "la1n" [ ];
     };
   };
 }

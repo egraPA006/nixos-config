@@ -4,6 +4,8 @@ let
   vaultEnabled = lib.elem "vault" activeProfiles;
 in
 {
+  programs.amnezia-vpn.enable = true;
+
   pino.vault.secrets.awg0-config = lib.mkIf vaultEnabled {
     source = "awg0.conf";
     target = "/etc/amneziawg/awg0.conf";

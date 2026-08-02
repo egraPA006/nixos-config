@@ -1,2 +1,2 @@
 # Managed by pino profile. Do not edit manually.
-[ "gaming-full" "vault" ]
+[ "codex" "git" "gnome" "vscode" "vpn" "hotspot" "gaming-full" "vault" ]

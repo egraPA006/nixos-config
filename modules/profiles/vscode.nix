@@ -1,6 +1,6 @@
 { pkgs, ... }:
 {
-  programs.vscode = {
+  home-manager.users.egrapa.programs.vscode = {
     enable = true;
     package = pkgs.vscode;
     mutableExtensionsDir = true;
@@ -21,20 +21,7 @@
     };
   };
 
-  programs.codex = {
-    enable = true;
-
-    settings = {
-      projects = {
-        "/home/egrapa/prog/nvim-config" = {
-          trust_level = "trusted";
-        };
-      };
-    };
-  };
-
-  home.packages = with pkgs; [
+  home-manager.users.egrapa.home.packages = with pkgs; [
     nil
-    codex
   ];
 }

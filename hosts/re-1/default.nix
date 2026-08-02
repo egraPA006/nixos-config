@@ -6,13 +6,17 @@
     ../../modules/base
     ../../modules/hardware/nvidia.nix
     ../../modules/profiles
-    ../../modules/hotspot.nix
   ];
 
-  musicLite.localDir   = "/data/fast/music-lite";
-  musicFull.localDir   = "/data/fast/music-full";
-  musicFull.winePrefix = "/data/fast/music-full/wine-prefix";
-  torrent.localDir     = "/data/fast/torrent";
+  pino.profiles = {
+    musicLite.localDir = "/data/fast/music-lite";
+    musicFull = {
+      localDir = "/data/fast/music-full";
+      winePrefix = "/data/fast/music-full/wine-prefix";
+    };
+    torrent.localDir = "/data/fast/torrent";
+    hotspot.wifiInterface = "wlp8s0";
+  };
 
   pino.vault.secrets.github-ssh = {
     source = "ssh/github_ed25519";
@@ -24,11 +28,6 @@
   };
 
   networking.hostName = "re-1";
-
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
-
-  zramSwap.enable = true;
 
   systemd.tmpfiles.rules = [
     "z /data/fast 0755 egrapa users -"
@@ -45,26 +44,17 @@
     AllowHybridSleep=no
   '';
 
-  users.users.egrapa = {
-    isNormalUser = true;
-    extraGroups = [
-      "wheel"
-      "networkmanager"
-      "audio"
-      "video"
-    ];
-    shell = pkgs.fish;
-  };
-
-  home-manager = {
-    useGlobalPkgs = true;
-    useUserPackages = true;
-    extraSpecialArgs = {
-      hostname = "re-1";
+  home-manager.users.egrapa = {
+    programs.ssh = {
+      enable = true;
+      enableDefaultConfig = false;
+      settings."github.com" = {
+        IdentityFile = "/home/egrapa/.ssh/github_ed25519";
+        IdentitiesOnly = true;
+      };
     };
-    users.egrapa = {
-      imports = [ ../../home ];
-      systemd.user.services.monitor-default = {
+
+    systemd.user.services.monitor-default = {
         Unit.Description = "Apply default single-monitor profile";
         Unit.After = [ "graphical-session.target" ];
         Install.WantedBy = [ "graphical-session.target" ];
@@ -73,8 +63,8 @@
           ExecStart = "/run/current-system/sw/bin/monitor switch single";
           RemainAfterExit = false;
         };
-      };
-      systemd.user.services.openrgb-init = {
+    };
+    systemd.user.services.openrgb-init = {
         Unit.Description = "Set OpenRGB default colors";
         Unit.After = [ "graphical-session.target" ];
         Install.WantedBy = [ "graphical-session.target" ];
@@ -83,7 +73,6 @@
           ExecStart = "${pkgs.openrgb}/bin/openrgb --color FF70AB";
           RemainAfterExit = false;
         };
-      };
     };
   };
 

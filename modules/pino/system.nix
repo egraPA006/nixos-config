@@ -1,10 +1,8 @@
-{ pkgs, ... }:
+{ ... }:
 let
   configDir = "/home/egrapa/nixos-config";
 in
 {
-  programs.fish.enable = true;
-
   pino.subcommands = {
     rebuild = {
       description = "Apply config changes";
@@ -90,15 +88,4 @@ in
       '';
     };
   };
-
-  environment.systemPackages = with pkgs; [
-    vim
-    git
-    curl
-    wget
-    htop
-    rsync
-    file
-    unzip
-  ];
 }

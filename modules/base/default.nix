@@ -2,16 +2,15 @@
 {
   imports = [
     ../pino.nix
+    ./system.nix
     ./nix-settings.nix
     ./locale.nix
-    ./desktop.nix
-    ./audio.nix
     ./networking.nix
-    ./apps.nix
-    ./shell.nix
+    ./packages.nix
+    ./user.nix
     ./snapper.nix
-    ./vpn.nix
-    ./pino-top.nix
-    ./pino-package.nix
+    ../pino/top.nix
+    ../pino/package.nix
+    ../pino/system.nix
   ];
 }

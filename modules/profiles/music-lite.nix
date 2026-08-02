@@ -2,7 +2,7 @@
 # Requires PipeWire (already in base).
 { config, pkgs, ... }:
 let
-  cfg        = config.musicLite;
+  cfg        = config.pino.profiles.musicLite;
   configDir  = "/home/egrapa/nixos-config";
   srcDir     = "${configDir}/data/music-lite";
   ampsDir    = "${cfg.localDir}/amps";
