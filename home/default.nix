@@ -2,6 +2,7 @@
 {
   imports = [
     ./bash.nix
+    ./codex.nix
     ./vscode.nix
     ./git.nix
     ./gnome.nix
