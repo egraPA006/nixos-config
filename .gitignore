@@ -1,5 +1,6 @@
 result
 result-*
+# Secrets live only in the encrypted vault, never in this repository.
 secrets/*
 !secrets/*.example
 data/**

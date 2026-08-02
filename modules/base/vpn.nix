@@ -1,14 +1,20 @@
-{ pkgs, config, ... }:
+{ activeProfiles, pkgs, config, lib, ... }:
 let
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
+  vaultEnabled = lib.elem "vault" activeProfiles;
 in
 {
-  system.activationScripts.amneziawg-config = ''
-    mkdir -p /etc/amneziawg
-    src="/home/egrapa/nixos-config/secrets/awg0.conf"
-    if [ -f "$src" ]; then
-      cp "$src" /etc/amneziawg/awg0.conf
-      chmod 600 /etc/amneziawg/awg0.conf
+  pino.vault.secrets.awg0-config = lib.mkIf vaultEnabled {
+    source = "awg0.conf";
+    target = "/etc/amneziawg/awg0.conf";
+    restartUnits = [ "amneziawg.service" ];
+  };
+
+  system.activationScripts.amneziawg-config = lib.mkIf (!vaultEnabled) ''
+    ${pkgs.coreutils}/bin/mkdir -p /etc/amneziawg
+    source=/home/egrapa/nixos-config/secrets/awg0.conf
+    if [ -f "$source" ]; then
+      ${pkgs.coreutils}/bin/install -m 0600 "$source" /etc/amneziawg/awg0.conf
     fi
   '';
 
@@ -51,7 +57,7 @@ in
         pino vpn off      Stop VPN + disable autostart
         pino vpn status   Show service status
 
-        Config: secrets/awg0.conf (gitignored).
+        Config: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored secrets/awg0.conf fallback"}.
     '';
     script = builtins.readFile ../pino/vpn.sh;
     fishCompletions = ''

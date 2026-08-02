@@ -173,6 +173,29 @@ in
       default     = "/home/egrapa/torrent";
       description = "Host-local path for Transmission downloads. Override per-host when using a faster disk.";
     };
+    pino.vault.provisionedDir = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/pino/secrets";
+      description = "Root-only files last populated from the optional vault profile.";
+    };
+    pino.vault.secrets = lib.mkOption {
+      default = { };
+      description = "Secret-file declarations used only while the vault profile is enabled.";
+      type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
+        options = {
+          source = lib.mkOption { type = lib.types.str; default = name; };
+          target = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
+          owner = lib.mkOption { type = lib.types.str; default = "root"; };
+          group = lib.mkOption { type = lib.types.str; default = "root"; };
+          mode = lib.mkOption { type = lib.types.str; default = "0600"; };
+          directoryMode = lib.mkOption { type = lib.types.str; default = "0700"; };
+          restartUnits = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+          };
+        };
+      }));
+    };
   };
 
   config = {

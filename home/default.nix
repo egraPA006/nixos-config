@@ -5,6 +5,7 @@
     ./codex.nix
     ./vscode.nix
     ./git.nix
+    ./ssh.nix
     ./gnome.nix
   ];
 

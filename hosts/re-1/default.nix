@@ -14,6 +14,15 @@
   musicFull.winePrefix = "/data/fast/music-full/wine-prefix";
   torrent.localDir     = "/data/fast/torrent";
 
+  pino.vault.secrets.github-ssh = {
+    source = "ssh/github_ed25519";
+    target = "/home/egrapa/.ssh/github_ed25519";
+    owner = "egrapa";
+    group = "users";
+    mode = "0600";
+    directoryMode = "0700";
+  };
+
   networking.hostName = "re-1";
 
   boot.loader.systemd-boot.enable = true;

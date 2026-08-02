@@ -1,10 +1,10 @@
-{ config, lib, pkgs, ... }:
+{ activeProfiles, config, lib, pkgs, ... }:
 
 let
   cfg = config.hotspot;
   ssid = "${config.networking.hostName}-hotspot";
-
-  nmConnection = pkgs.writeText "hotspot.nmconnection" ''
+  vaultEnabled = lib.elem "vault" activeProfiles;
+  fallbackConnection = pkgs.writeText "hotspot.nmconnection" ''
     [connection]
     id=hotspot
     type=wifi
@@ -55,7 +55,7 @@ in
           pino hotspot start   Bring up AP, traffic routed via VPN
           pino hotspot stop    Tear down AP
 
-          PSK: secrets/hotspot.conf (gitignored).
+          Connection: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored hotspot.conf fallback"}.
       '';
       script = ''
         case "''${1:-}" in
@@ -87,16 +87,21 @@ in
       '')
     ];
 
-    # Reads secrets/hotspot.conf (password=<psk>) and installs the NM keyfile.
-    # Same pattern as the awg0.conf activation script in modules/base/vpn.nix.
-    system.activationScripts.hotspot-nmconnection = ''
-      mkdir -p /etc/NetworkManager/system-connections
-      src="/home/egrapa/nixos-config/secrets/hotspot.conf"
-      if [ -f "$src" ]; then
-        PSK=$(grep '^password=' "$src" | cut -d= -f2-)
-        ${pkgs.gnused}/bin/sed "s|__PSK__|$PSK|" ${nmConnection} \
+    pino.vault.secrets.hotspot-connection = lib.mkIf vaultEnabled {
+      source = "hotspot.nmconnection";
+      target = "/etc/NetworkManager/system-connections/hotspot.nmconnection";
+      mode = "0600";
+      restartUnits = [ "NetworkManager.service" ];
+    };
+
+    system.activationScripts.hotspot-nmconnection = lib.mkIf (!vaultEnabled) ''
+      source=/home/egrapa/nixos-config/secrets/hotspot.conf
+      if [ -f "$source" ]; then
+        ${pkgs.coreutils}/bin/mkdir -p /etc/NetworkManager/system-connections
+        password="$(${pkgs.gnused}/bin/sed -n 's/^password=//p' "$source" | ${pkgs.coreutils}/bin/head -n 1)"
+        ${pkgs.gnused}/bin/sed "s|__PSK__|$password|" ${fallbackConnection} \
           > /etc/NetworkManager/system-connections/hotspot.nmconnection
-        chmod 600 /etc/NetworkManager/system-connections/hotspot.nmconnection
+        ${pkgs.coreutils}/bin/chmod 0600 /etc/NetworkManager/system-connections/hotspot.nmconnection
       fi
     '';
   };

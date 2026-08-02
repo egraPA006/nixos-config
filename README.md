@@ -68,13 +68,53 @@ pino <command> help              detailed help for that command
 | `pino snap data ls/rb-fast/rb-slow/rm` | Data snapshot operations |
 | `pino vpn on/off/status` | AmneziaWG VPN |
 | `pino hotspot start/stop` | WiFi access point (re-1) |
+| `pino vault files/populate` | List and provision root-only system secrets from the local vault |
+| `pino vault disks/backup/check/restore` | Manage any labelled offline vault disk and its snapshots |
 | `pino music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
 | `pino music-lite set-latency <samples>` | Adjust PipeWire quantum at runtime |
 | `pino music-lite set-volume <percent>` | Output level (100=default, >100 boosts) |
 
-> VPN config: place `awg0.conf` at `secrets/awg0.conf` (gitignored) — activation script copies it to `/etc/amneziawg/awg0.conf`.
+> System-secret source files live only under `/data/secrets/system/{shared,hosts/<hostname>}`. `pino vault populate` merges the shared and current-host trees into root-only `/var/lib/pino/secrets`; Nix modules declare only filenames, destinations, permissions, and restart units.
 
-> Hotspot PSK: copy `secrets/hotspot.conf.example` → `secrets/hotspot.conf` (gitignored) and set your password.
+> Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its system-secret tree into the disk's root-only installation bootstrap.
+
+> Use `pino vault snapshots 1` to select a snapshot. `pino vault restore 1 <snapshot>` stages it under `/data/secrets/restores/`; adding `--apply` makes the live vault exactly match it after explicit confirmation.
+
+### Vault-backed system secrets
+
+When the optional `vault` profile is enabled, the internal vault separates the user-writable KeePass database from root-only
+system material:
+
+```text
+/data/secrets/keepass/                    egrapa-only
+/data/secrets/system/shared/              root-only, every host
+/data/secrets/system/hosts/<hostname>/     root-only, one host
+```
+
+Shared files are merged first and host files override them. Provision with
+`pino vault populate`; deployed copies live under root-only
+`/var/lib/pino/secrets`, so normal rebuilds do not require the vault.
+
+A module declares a secret without reading it into the Nix store:
+
+```nix
+pino.vault.secrets.proxy-config = {
+  source = "proxy.conf";
+  target = "/etc/example-proxy/config.conf";
+  mode = "0600";
+  restartUnits = [ "example-proxy.service" ];
+};
+```
+
+For `re-1`, `system/hosts/re-1/ssh/github_ed25519` is installed as the
+user-owned `~/.ssh/github_ed25519`; Home Manager selects it for `github.com`.
+
+`pino vault backup [disk]` also updates the selected disk's `bootstrap/` tree.
+During installation, `scripts/install.sh` selects the only connected
+`pino-vault-*` disk, or the label supplied through `PINO_VAULT_LABEL` when
+several are connected. With no vault disk it installs normally and falls back
+to setting the user password manually. Without the vault profile, VPN and
+hotspot retain their local gitignored configuration-file fallbacks.
 
 > Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino monitor save <name>` to capture it.
 
@@ -142,6 +182,7 @@ scripts/                     # installation helpers (run once, not part of the b
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
   install.sh                 # run nixos-install
+  vault-disk-init.sh         # create exFAT + 8 GiB LUKS vault disk
   monitor.py                 # built into monitor binary
 home/                        # home-manager: bash (blesh), vscode, git
 ```
