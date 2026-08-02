@@ -6,7 +6,7 @@ let
     "virt-general" "virt-osdev"
     "music-lite" "music-full"
     "dev-cpp"
-    "keepassxc"
+    "vault"
     "torrent"
   ];
 

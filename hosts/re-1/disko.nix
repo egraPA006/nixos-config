@@ -83,6 +83,7 @@
         partitions = {
           secrets = {
             size = "8G";
+            label = "secrets";
 
             content = {
               type = "luks";

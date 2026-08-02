@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 let
-  vaultDevice = "/dev/disk/by-partlabel/disk-fast-secrets";
+  vaultDevice = "/dev/disk/by-partlabel/secrets";
   vaultMapper = "secrets";
   vaultMountPoint = "/data/secrets";
   databaseDir = "${vaultMountPoint}/keepass";
@@ -89,6 +89,12 @@ in
         open)
           if [ ! -e "$DEVICE" ]; then
             echo "Vault device not found: $DEVICE" >&2
+            echo "This host needs an 8G (or larger) GPT partition with:" >&2
+            echo "  label = \"secrets\";" >&2
+            echo "  content.type = \"luks\";" >&2
+            echo "  content.name = \"secrets\";" >&2
+            echo "  content.initrdUnlock = false;" >&2
+            echo "and an ext4 filesystem mounted at $MOUNT_POINT with noauto." >&2
             exit 1
           fi
 
