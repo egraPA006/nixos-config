@@ -22,30 +22,48 @@ is_valid() {
   return 1
 }
 
-profile_group() {
-  local profile="$1" entry group members member
-  local -a group_profiles
-  for entry in "${PROFILE_GROUPS[@]}"; do
-    group="${entry%%:*}"
-    members="${entry#*:}"
-    IFS=',' read -r -a group_profiles <<< "$members"
-    for member in "${group_profiles[@]}"; do
-      [ "$member" = "$profile" ] && { printf '%s\n' "$group"; return; }
-    done
-  done
-  printf 'unknown\n'
-}
-
 list_profiles() {
-  local entry group members profile
-  local -a group_profiles
+  local entry group members profile active_profile marker
+  local -a group_profiles active_profiles
+  active_profiles=("$@")
   for entry in "${PROFILE_GROUPS[@]}"; do
     group="${entry%%:*}"
     members="${entry#*:}"
-    printf '%s\n' "$group"
+    printf '%s:\n' "$group"
     IFS=',' read -r -a group_profiles <<< "$members"
     for profile in "${group_profiles[@]}"; do
-      printf '  %s\n' "$profile"
+      marker=' '
+      for active_profile in "${active_profiles[@]}"; do
+        if [ "$profile" = "$active_profile" ]; then
+          marker='✓'
+          break
+        fi
+      done
+      printf '  [%s] %s\n' "$marker" "$profile"
+    done
+  done
+}
+
+list_active_profiles() {
+  local entry group members profile active_profile heading_printed
+  local -a group_profiles active_profiles
+  active_profiles=("$@")
+  for entry in "${PROFILE_GROUPS[@]}"; do
+    group="${entry%%:*}"
+    members="${entry#*:}"
+    heading_printed=false
+    IFS=',' read -r -a group_profiles <<< "$members"
+    for profile in "${group_profiles[@]}"; do
+      for active_profile in "${active_profiles[@]}"; do
+        if [ "$profile" = "$active_profile" ]; then
+          if [ "$heading_printed" = false ]; then
+            printf '%s:\n' "$group"
+            heading_printed=true
+          fi
+          printf '  %s\n' "$profile"
+          break
+        fi
+      done
     done
   done
 }
@@ -104,17 +122,15 @@ case "$command" in
     rebuild
     ;;
   list)
-    list_profiles
+    mapfile -t active < <(get_active)
+    list_profiles "${active[@]}"
     ;;
   status)
     mapfile -t active < <(get_active)
     if [ "${#active[@]}" -eq 0 ]; then
       echo "No active profiles on $HOSTNAME_VAL"
     else
-      printf '%-14s %s\n' "GROUP" "PROFILE"
-      for profile in "${active[@]}"; do
-        printf '%-14s %s\n' "$(profile_group "$profile")" "$profile"
-      done
+      list_active_profiles "${active[@]}"
     fi
     ;;
   *)

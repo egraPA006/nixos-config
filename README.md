@@ -64,10 +64,10 @@ pino <command> <subcommand> help help for a leaf command
 | `pino profile list/status/enable/disable` | Manage NixOS profiles |
 | `pino os package search/locate/install/remove` | Search files/packages and manage temporary user packages |
 | `pino desktop monitor list/status/switch/save/rm` | Manage display profiles |
-| `pino storage snap <label>` | Snapshot root + home |
-| `pino storage snap ls/rb/rm` | List / roll back / delete snapshots |
-| `pino storage snap data <label>` | Snapshot `/data/fast` + `/data/slow` |
-| `pino storage snap data ls/rb-fast/rb-slow/rm` | Data snapshot operations |
+| `pino storage snap <label>` | Snapshot this host's configured system volumes |
+| `pino storage snap ls/rb/rm` | List / roll back / delete system snapshots |
+| `pino storage snap data <label>` | Snapshot configured data volumes when present |
+| `pino storage snap data help` | Show host-specific data snapshot operations |
 | `pino network vpn on/off/status` | AmneziaWG VPN |
 | `pino network hotspot start/stop` | WiFi access point (re-1) |
 | `pino storage vault files/populate` | List and provision root-only system secrets from the local vault |
@@ -89,6 +89,11 @@ pino <command> <subcommand> help help for a leaf command
 > local exactly match the medium, and `merge` interactively incorporates medium
 > changes locally without changing the medium. Installation can restore selected
 > datasets using `PINO_RESTORE_DATA=all` or a comma-separated list.
+
+> Snapshot volumes are declared per host with `pino.snapshots.volumes`. `re-1`
+> groups `root` and `home` as system volumes and `fast` and `slow` as data
+> volumes; `la1n` currently declares only `root`. Pino generates only the
+> snapshot branches supported by that host.
 
 ### Vault-backed system secrets
 
@@ -155,6 +160,9 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 
 | Profile | Purpose |
 |---|---|
+| `desktop-apps` | Shared daily desktop applications such as Chromium and Telegram |
+| `desktop-audio` | PipeWire desktop audio, PulseAudio/JACK compatibility, and qpwgraph |
+| `desktop-bluetooth` | Bluetooth support and Blueman |
 | `gaming-lite` | Steam + gamemode (laptop) |
 | `gaming-full` | Steam + Lutris + Wine + Proton GE (PC) |
 | `music-lite` | NAM guitar amp sim + low-latency PipeWire |
@@ -162,12 +170,15 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `dev-cpp` | GCC, Clang, CMake, Meson, Ninja, GDB + VSCode clangd/meson extensions |
 | `torrent` | On-demand Transmission daemon and storage |
 | `vault` | KeePassXC, root-only system secrets, and offline backups |
-| `gnome` | GNOME desktop, audio, desktop applications, and display tooling |
+| `gnome` | GNOME session, extensions, portals, and display tooling |
 | `vscode` | VS Code, Nix language support, and shared editor settings |
 | `codex` | Codex CLI and user configuration |
 | `git` | Git identity and defaults |
 | `vpn` | AmneziaWG client and Pino controls |
 | `hotspot` | NetworkManager access point routed through the VPN |
+| `datasets` | Portable non-secret dataset backup and restore commands |
+| `snapshots` | Host-configured Snapper volumes and Pino snapshot commands |
+| `system-monitor` | Live temperatures, CPU, GPU, RAM, and process monitoring |
 
 Profiles can overlap freely when their packages and services are compatible.
 
@@ -179,6 +190,10 @@ Dev environments are handled per-project via `nix develop` / `devShell` in each 
 
 ```
 flake.nix                    # inputs: nixpkgs, home-manager, disko
+configurations/
+  desktop/                   # full NixOS desktop entry point used by re-1 and la1n
+  server/                    # future headless NixOS entry point
+  nix/                       # future standalone Home Manager entry point for Ubuntu
 hosts/
   re-1/
     default.nix              # host-specific imports and settings
@@ -189,11 +204,14 @@ hosts/
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
   pino/
-    system.nix               # rebuild/update/snapshot commands
+    system.nix               # NixOS generation and system-information commands
     profile.sh               # profile state CLI
     pino-art.sh              # system-info art
     pino-info.sh             # system-info layout
-  base/                      # minimal shared system, user, and shell foundation
+  core/                      # minimal shared NixOS, user, shell, and Pino foundation
+  boot/                      # selectable boot-loader policy
+  desktop/                   # desktop networking and user integration
+  server/                    # future server-specific foundation
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald

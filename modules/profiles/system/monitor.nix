@@ -1,0 +1,4 @@
+{ ... }:
+{
+  imports = [ ../../pino/top.nix ];
+}

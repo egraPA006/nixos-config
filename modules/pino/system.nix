@@ -47,46 +47,5 @@
         complete -c pino -f -n '__fish_seen_subcommand_from os; and not __fish_seen_subcommand_from $os_cmds' -a gc -d 'Keep current and previous'
       '';
     };
-
-    storage.description = "Local and removable storage";
-
-    storage.commands.snap = {
-      description = "Manage btrfs snapshots";
-      usage = "<label>";
-      commands = {
-        ls.description = "List root and home snapshots";
-        rb = { description = "Undo root and home changes"; usage = "<N>"; };
-        rm = { description = "Delete a root and home snapshot"; usage = "<N>"; };
-        data = {
-          description = "Manage /data snapshots";
-          usage = "<label>";
-          commands = {
-            ls.description = "List fast and slow data snapshots";
-            rb-fast = { description = "Undo /data/fast changes"; usage = "<N>"; };
-            rb-slow = { description = "Undo /data/slow changes"; usage = "<N>"; };
-            rm = { description = "Delete fast and slow snapshots"; usage = "<N>"; };
-          };
-        };
-      };
-      helpText = ''
-        pino storage snap — btrfs snapshot management (root + home)
-          pino storage snap <label>          Create snapshot of root + home
-          pino storage snap ls               List snapshots
-          pino storage snap rb <N>           Roll back root + home to snapshot N
-          pino storage snap rm <N>           Delete snapshot N
-          pino storage snap data <...>       Data disk snapshots
-      '';
-      script = builtins.readFile ../pino/snap.sh;
-      fishCompletions = ''
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a ls -d 'List snapshots'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a rb -d 'Roll back to snapshot N'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a rm -d 'Delete snapshot N'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and not __fish_seen_subcommand_from data' -a data -d '/data snapshots'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data' -a ls -d 'List data snapshots'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data' -a rb-fast -d 'Roll back /data/fast to N'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data' -a rb-slow -d 'Roll back /data/slow to N'
-        complete -c pino -f -n '__fish_seen_subcommand_from snap; and __fish_seen_subcommand_from data' -a rm -d 'Delete data snapshot N'
-      '';
-    };
   };
 }

@@ -8,8 +8,6 @@ let
   '';
 in
 {
-  imports = [ ./audio.nix ./apps.nix ];
-
   home-manager.users.egrapa.imports = [ ./home.nix ];
 
   xdg.portal = {

@@ -1,68 +1,111 @@
 #!/usr/bin/env bash
-# pino storage snap — btrfs snapshot management
-# Called with snap subargs already in $1..$n
-sub="${1:-}"
+# Host-configurable Snapper frontend used by the snapshots profile.
+
+SYSTEM_CONFIGS=(@systemConfigs@)
+DATA_CONFIGS=(@dataConfigs@)
+
+contains() {
+  local wanted="$1" candidate
+  shift
+  for candidate in "$@"; do
+    [ "$candidate" = "$wanted" ] && return 0
+  done
+  return 1
+}
+
+create_all() {
+  local label="$1" config
+  shift
+  for config in "$@"; do
+    sudo snapper -c "$config" create -d "$label"
+  done
+}
+
+list_all() {
+  local config
+  for config in "$@"; do
+    printf '=== %s ===\n' "$config"
+    sudo snapper -c "$config" list
+  done
+}
+
+delete_all() {
+  local number="$1" config
+  shift
+  for config in "$@"; do
+    sudo snapper -c "$config" delete "$number"
+  done
+}
+
+undo_all() {
+  local number="$1" config
+  shift
+  for config in "$@"; do
+    sudo snapper -c "$config" undochange "$number..0"
+  done
+}
+
+require_number() {
+  case "${1:-}" in
+    ""|*[!0-9]*) echo "Snapshot number must be numeric." >&2; return 1 ;;
+  esac
+}
+
+subcommand="${1:-}"
 shift || true
 
-case "$sub" in
+case "$subcommand" in
   ls)
-    echo "=== root ===" && sudo snapper -c root list
-    echo "=== home ===" && sudo snapper -c home list
+    list_all "${SYSTEM_CONFIGS[@]}"
     ;;
   rb)
-    N="${1:-}"; [ -z "$N" ] && { echo "Usage: pino storage snap rb <N>"; exit 1; }
-    sudo snapper -c root undochange "$N..0"
-    sudo snapper -c home undochange "$N..0"
+    require_number "${1:-}" || exit 1
+    undo_all "$1" "${SYSTEM_CONFIGS[@]}"
     ;;
   rm)
-    N="${1:-}"; [ -z "$N" ] && { echo "Usage: pino storage snap rm <N>"; exit 1; }
-    sudo snapper -c root delete "$N"
-    sudo snapper -c home delete "$N"
+    require_number "${1:-}" || exit 1
+    delete_all "$1" "${SYSTEM_CONFIGS[@]}"
     ;;
   data)
-    dsub="${1:-}"
+    if [ "${#DATA_CONFIGS[@]}" -eq 0 ]; then
+      echo "This host has no data snapshot configurations." >&2
+      exit 1
+    fi
+    data_command="${1:-}"
     shift || true
-    case "$dsub" in
+    case "$data_command" in
       ls)
-        echo "=== fast ===" && sudo snapper -c fast list
-        echo "=== slow ===" && sudo snapper -c slow list
-        ;;
-      rb-fast)
-        N="${1:-}"; [ -z "$N" ] && { echo "Usage: pino storage snap data rb-fast <N>"; exit 1; }
-        sudo snapper -c fast undochange "$N..0"
-        ;;
-      rb-slow)
-        N="${1:-}"; [ -z "$N" ] && { echo "Usage: pino storage snap data rb-slow <N>"; exit 1; }
-        sudo snapper -c slow undochange "$N..0"
+        list_all "${DATA_CONFIGS[@]}"
         ;;
       rm)
-        N="${1:-}"; [ -z "$N" ] && { echo "Usage: pino storage snap data rm <N>"; exit 1; }
-        sudo snapper -c fast delete "$N"
-        sudo snapper -c slow delete "$N"
+        require_number "${1:-}" || exit 1
+        delete_all "$1" "${DATA_CONFIGS[@]}"
         ;;
-      help|"")
-        echo "pino storage snap data — /data/fast + /data/slow snapshots"
-        echo "  pino storage snap data <label>         Create snapshot"
-        echo "  pino storage snap data ls              List snapshots"
-        echo "  pino storage snap data rb-fast <N>     Roll back /data/fast to snapshot N"
-        echo "  pino storage snap data rb-slow <N>     Roll back /data/slow to snapshot N"
-        echo "  pino storage snap data rm <N>          Delete snapshot N"
-        exit 0
+      rb-*)
+        config="${data_command#rb-}"
+        contains "$config" "${DATA_CONFIGS[@]}" || {
+          echo "Unknown data snapshot configuration: $config" >&2
+          exit 1
+        }
+        require_number "${1:-}" || exit 1
+        sudo snapper -c "$config" undochange "$1..0"
+        ;;
+      "")
+        echo "Run 'pino storage snap data help' for usage." >&2
+        exit 1
         ;;
       *)
-        sudo snapper -c fast create -d "$dsub"
-        sudo snapper -c slow create -d "$dsub"
-        echo "Created data snapshot: $dsub"
+        create_all "$data_command" "${DATA_CONFIGS[@]}"
+        echo "Created data snapshot: $data_command"
         ;;
     esac
     ;;
   "")
-    echo "Usage: pino storage snap <label|ls|rb N|rm N|data ...>"
-    echo "Run 'pino storage snap help' for details."
+    echo "Run 'pino storage snap help' for usage." >&2
+    exit 1
     ;;
   *)
-    sudo snapper -c root create -d "$sub"
-    sudo snapper -c home create -d "$sub"
-    echo "Created snapshot: $sub"
+    create_all "$subcommand" "${SYSTEM_CONFIGS[@]}"
+    echo "Created system snapshot: $subcommand"
     ;;
 esac

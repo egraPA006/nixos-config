@@ -3,12 +3,16 @@
   imports = [
     ./hardware.nix
     ./disko.nix
-    ../../modules/base
+    ../../configurations/desktop
     ../../modules/hardware/intel-laptop.nix
-    ../../modules/profiles
   ];
 
   networking.hostName = "la1n";
+
+  pino.snapshots.volumes.root = {
+    subvolume = "/";
+    group = "system";
+  };
 
   system.stateVersion = "25.05";
 }

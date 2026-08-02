@@ -1,12 +1,10 @@
 { config, pkgs, ... }:
 {
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
   zramSwap.enable = true;
 
   users.users.egrapa = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
+    extraGroups = [ "wheel" ];
     shell = pkgs.fish;
   };
 

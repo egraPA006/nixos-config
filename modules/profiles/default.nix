@@ -3,6 +3,9 @@
 let
   profileGroups = {
     desktop = {
+      "desktop-apps" = ./desktop/apps.nix;
+      "desktop-audio" = ./desktop/audio.nix;
+      "desktop-bluetooth" = ./desktop/bluetooth.nix;
       gnome = ./desktop/gnome;
       vscode = ./desktop/vscode.nix;
       "gaming-lite" = ./desktop/gaming-lite.nix;
@@ -21,10 +24,16 @@ let
       hotspot = ./network/hotspot.nix;
     };
     security.vault = ./security/vault.nix;
+    storage = {
+      datasets = ./storage/datasets.nix;
+      snapshots = ./storage/snapshots.nix;
+    };
+    system."system-monitor" = ./system/monitor.nix;
   };
   profileModules = lib.mergeAttrsList (builtins.attrValues profileGroups);
   desktopProfiles = builtins.attrNames profileGroups.desktop;
   networkProfiles = builtins.attrNames profileGroups.network;
+  storageProfiles = (builtins.attrNames profileGroups.storage) ++ [ "vault" ];
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
   profileScript = builtins.replaceStrings
@@ -52,6 +61,10 @@ in
 
   pino.subcommands.network = lib.mkIf (hasActiveProfile networkProfiles) {
     description = "Network services";
+  };
+
+  pino.subcommands.storage = lib.mkIf (hasActiveProfile storageProfiles) {
+    description = "Local and removable storage";
   };
 
   pino.subcommands.profile = {
