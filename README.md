@@ -50,16 +50,17 @@ Everything is under one CLI: **`pino`**.
 
 ```
 pino help                        show all commands
-pino <command> help              detailed help for that command
+pino <command> help              help for any command level
+pino <command> <subcommand> help help for a leaf command
 ```
 
 | Command | What it does |
 |---|---|
 | `pino info` | Neofetch-style system info |
-| `pino rebuild` | Apply config changes (`nixos-rebuild switch`) |
-| `pino rollback` | Roll back to previous NixOS generation |
-| `pino gc` | Garbage-collect old generations and clean boot entries |
-| `pino update` | Snapshot, update flake inputs, rebuild |
+| `pino os list` | List NixOS system generations |
+| `pino os rebuild/update` | Interactively rebuild or update the flake |
+| `pino os rollback [N]` | Select and activate a system generation |
+| `pino os gc` | Keep current + previous generation and collect the rest |
 | `pino profile list/status/enable/disable` | Manage NixOS profiles |
 | `pino package search/locate/install/remove` | Search files/packages and manage temporary user packages |
 | `pino monitor list/status/switch/save/rm` | Manage display profiles |
@@ -130,7 +131,9 @@ hotspot retain their local gitignored configuration-file fallbacks.
 
 ### Roll back NixOS generation
 
-Use `rollback` alias, or pick a previous generation at boot from the systemd-boot menu.
+Run `pino os rollback` to list and select a generation interactively, or pass
+its number directly with `pino os rollback <N>`. The systemd-boot menu remains
+available when the system cannot boot normally.
 
 ---
 

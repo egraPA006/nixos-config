@@ -53,6 +53,11 @@ in
 
   pino.subcommands.vpn = {
     description = "AmneziaWG VPN";
+    commands = {
+      on.description = "Start VPN and enable boot autostart";
+      off.description = "Stop VPN and disable boot autostart";
+      status.description = "Show VPN service status";
+    };
     helpText = ''
       pino vpn — AmneziaWG VPN
         pino vpn on       Start VPN + enable autostart on boot

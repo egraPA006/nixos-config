@@ -40,6 +40,14 @@ in
 
     pino.subcommands.torrent = {
       description = "Transmission torrent client";
+      commands = {
+        list.description = "List torrents grouped by status";
+        share.description = "Show completed and seeding torrents";
+        add = { description = "Add a torrent or magnet link"; usage = "<url|magnet>"; };
+        status.description = "Show daemon status";
+        start.description = "Start the Transmission daemon";
+        stop.description = "Stop the Transmission daemon";
+      };
       helpText = ''
         pino torrent — Transmission torrent client
           pino torrent list           List all torrents (grouped by status)

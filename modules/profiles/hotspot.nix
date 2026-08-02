@@ -35,6 +35,10 @@ in
   config = {
     pino.subcommands.hotspot = {
       description = "WiFi access point";
+      commands = {
+        start.description = "Bring up the access point";
+        stop.description = "Tear down the access point";
+      };
       helpText = ''
         pino hotspot — WiFi access point  (SSID: ${ssid})
           pino hotspot start   Bring up AP, traffic routed via VPN

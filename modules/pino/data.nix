@@ -47,6 +47,13 @@ in
 
     pino.subcommands.data = {
       description = "Manage portable, non-secret datasets";
+      commands = {
+        list.description = "List configured datasets";
+        disks.description = "List connected data media";
+        backup = { description = "Make medium exactly match local"; usage = "[disk] <dataset>"; };
+        restore = { description = "Make local exactly match medium"; usage = "[disk] <dataset>"; };
+        merge = { description = "Interactively merge medium into local"; usage = "[disk] <dataset>"; };
+      };
       helpText = ''
         pino data — plain datasets on a pino-data-* medium
           pino data list

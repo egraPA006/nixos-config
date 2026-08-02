@@ -33,6 +33,13 @@ in
 
   pino.subcommands.monitor = {
     description = "Manage display profiles";
+    commands = {
+      list.description = "List saved display profiles";
+      status.description = "Show the current display layout";
+      switch = { description = "Apply a saved display profile"; usage = "<name>"; };
+      save = { description = "Save the current display layout"; usage = "<name>"; };
+      rm = { description = "Delete a saved display profile"; usage = "<name>"; };
+    };
     helpText = ''
       pino monitor — manage GNOME display profiles
         pino monitor list               List saved profiles

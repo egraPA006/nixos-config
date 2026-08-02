@@ -63,6 +63,17 @@ in
 
     pino.subcommands."music-full" = {
       description = "Reaper + yabridge Windows VST bridge + plugin management";
+      commands = {
+        list.description = "List Linux and bridged Windows plugins";
+        setup.description = "Initialize Wine and yabridge";
+        bridge.description = "Synchronize yabridge plugins";
+        bridge-add = { description = "Register a Windows plugin directory"; usage = "<directory>"; };
+        install = { description = "Run a Windows plugin installer"; usage = "<exe>"; };
+        install-nonet = { description = "Run an installer without network"; usage = "<exe>"; };
+        prefix.description = "Print the Wine prefix path";
+        status.description = "Show plugin counts";
+        reaper = { description = "Launch Reaper"; usage = "[samples]"; };
+      };
       helpText = ''
         pino music-full — manage full music production setup
           pino music-full list              List Linux and bridged Windows plugins

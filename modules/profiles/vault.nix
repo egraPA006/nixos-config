@@ -87,6 +87,19 @@ in
 
   pino.subcommands.vault = {
     description = "Manage the KeePassXC vault and its offline backups";
+    commands = {
+      status.description = "Show local vault status";
+      open.description = "Unlock and mount the local vault";
+      keepass.description = "Open the KeePassXC database";
+      close.description = "Unmount and lock the local vault";
+      files.description = "List declared and provisioned secret files";
+      populate.description = "Provision this host from the local vault";
+      disks.description = "List connected vault backup disks";
+      backup = { description = "Back up the local vault"; usage = "[disk]"; };
+      check = { description = "Verify a vault backup"; usage = "[disk]"; };
+      snapshots = { description = "List vault backup snapshots"; usage = "[disk]"; };
+      restore = { description = "Stage or apply a vault snapshot"; usage = "[disk] [snapshot] [--apply]"; };
+    };
     helpText = ''
       pino vault — manage the local KeePassXC identity vault
         pino vault status    Show whether the vault is open and mounted

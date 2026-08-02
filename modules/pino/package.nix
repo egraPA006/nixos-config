@@ -10,6 +10,14 @@
 
   pino.subcommands.package = {
     description = "Manage temporary packages (no rebuild needed)";
+    commands = {
+      list.description = "List installed temporary packages";
+      search = { description = "Search top-level nixpkgs packages"; usage = "<query>"; };
+      locate = { description = "Find packages containing a file"; usage = "<pattern>"; };
+      index.description = "Rebuild the local nix-locate database";
+      install = { description = "Install a temporary package"; usage = "<name>"; };
+      remove = { description = "Remove a temporary package"; usage = "<name>"; };
+    };
     helpText = ''
       pino package — manage per-user temporary packages
 

@@ -31,6 +31,19 @@ in
 
     pino.subcommands."music-lite" = {
       description = "Neural Amp Modeler — load a .nam model into PipeWire";
+      commands = {
+        list.description = "List available NAM models";
+        start = { description = "Load a NAM model into PipeWire"; usage = "<model>"; };
+        stop.description = "Stop the running NAM node";
+        status.description = "Show whether NAM is running";
+        log.description = "Show the latest NAM output";
+        set-latency = { description = "Set the PipeWire quantum"; usage = "<samples>"; };
+        set-volume = { description = "Set NAM output volume"; usage = "<percent>"; };
+        tuner = {
+          description = "Start or stop the chromatic tuner";
+          usage = "[stop]";
+        };
+      };
       helpText = ''
         pino music-lite — run NAM guitar amp models in PipeWire
           pino music-lite list                  List available .nam models

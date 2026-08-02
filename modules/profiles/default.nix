@@ -33,6 +33,12 @@ in
 
   pino.subcommands.profile = {
     description = "Manage optional NixOS profiles";
+    commands = {
+      list.description = "List available profiles";
+      status.description = "Show active profiles";
+      enable = { description = "Enable a profile and rebuild"; usage = "<profile>"; };
+      disable = { description = "Disable a profile and rebuild"; usage = "<profile>"; };
+    };
     helpText = ''
       pino profile — manage optional profiles
         pino profile list
