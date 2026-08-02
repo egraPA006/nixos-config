@@ -18,7 +18,7 @@ sudo snapper -c root create -d pre-update
 sudo snapper -c home create -d pre-update
 
 echo "Updating flake inputs..."
-nix flake update "$CONFIG_DIR"
+nix flake update --flake "$CONFIG_DIR"
 
 echo "Rebuilding..."
 sudo nixos-rebuild switch --flake "$CONFIG_DIR#$(hostname)"
