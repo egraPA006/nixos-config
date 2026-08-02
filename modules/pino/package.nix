@@ -1,10 +1,12 @@
-{ ... }:
+{ pkgs, ... }:
 {
   # Packages installed here persist until explicitly removed with `pino package remove`.
   # The profile lives outside the NixOS config so no rebuild is needed.
   programs.fish.shellInit = ''
     set -gx PATH $HOME/.local/share/pino-pkgs/bin $PATH
   '';
+
+  environment.systemPackages = [ pkgs.nix-index ];
 
   pino.subcommands.package = {
     description = "Manage temporary packages (no rebuild needed)";
@@ -13,6 +15,8 @@
 
         pino package list              List installed packages
         pino package search <query>    Search nixpkgs (top-level only)
+        pino package locate <pattern>  Find packages containing a file
+        pino package index             Rebuild the local nix-locate database
         pino package install <name>    Install nixpkgs#<name>
         pino package remove  <name>    Remove package by name
 
@@ -42,6 +46,22 @@
                 | "[1m\(.value.pname)[0m (\(.value.version))\n  \(.value.description)\n"'
           ;;
 
+        locate)
+          pattern="''${1:-}"
+          [ -z "$pattern" ] && { echo "Usage: pino package locate <pattern>"; exit 1; }
+          index_cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nix-index"
+          if ! compgen -G "$index_cache/files*" >/dev/null; then
+            echo "No nix-locate database exists yet; building it now …" >&2
+            nix-index
+          fi
+          nix-locate "$@"
+          ;;
+
+        index)
+          echo "Rebuilding the nix-locate database …" >&2
+          nix-index
+          ;;
+
         install)
           pkg="''${1:-}"
           [ -z "$pkg" ] && { echo "Usage: pino package install <name>"; exit 1; }
@@ -61,6 +81,8 @@
           echo ""
           echo "  list              List installed packages"
           echo "  search <query>    Search nixpkgs"
+          echo "  locate <pattern>  Find packages containing a file"
+          echo "  index             Rebuild the nix-locate database"
           echo "  install <name>    Install nixpkgs#<name>"
           echo "  remove  <name>    Remove package by name"
           echo ""
@@ -75,9 +97,11 @@
       esac
     '';
     fishCompletions = ''
-      set -l pkg_cmds list search install remove
+      set -l pkg_cmds list search locate index install remove
       complete -c pino -f -n '__fish_seen_subcommand_from package; and not __fish_seen_subcommand_from $pkg_cmds' -a list    -d 'List installed packages'
       complete -c pino -f -n '__fish_seen_subcommand_from package; and not __fish_seen_subcommand_from $pkg_cmds' -a search  -d 'Search nixpkgs'
+      complete -c pino -f -n '__fish_seen_subcommand_from package; and not __fish_seen_subcommand_from $pkg_cmds' -a locate  -d 'Find packages containing a file'
+      complete -c pino -f -n '__fish_seen_subcommand_from package; and not __fish_seen_subcommand_from $pkg_cmds' -a index   -d 'Rebuild nix-locate database'
       complete -c pino -f -n '__fish_seen_subcommand_from package; and not __fish_seen_subcommand_from $pkg_cmds' -a install -d 'Install a package'
       complete -c pino -f -n '__fish_seen_subcommand_from package; and not __fish_seen_subcommand_from $pkg_cmds' -a remove  -d 'Remove a package'
     '';

@@ -4,7 +4,7 @@ trap 'status=$?; echo "Failed at line $LINENO (exit $status): $BASH_COMMAND" >&2
 
 DEVICE="${1:-}"
 VAULT_LABEL="${2:-pino-vault-1}"
-DATA_LABEL="egrapa_hdd"
+DATA_LABEL="${3:-pino-data-${VAULT_LABEL#pino-vault-}}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this script as root." >&2
@@ -12,7 +12,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ -z "$DEVICE" ] || [ "$(lsblk -dnro TYPE "$DEVICE" 2>/dev/null || true)" != disk ]; then
-  echo "Usage: sudo $0 <whole-disk-device> [pino-vault-label]" >&2
+  echo "Usage: sudo $0 <whole-disk-device> [pino-vault-label] [pino-data-label]" >&2
   exit 1
 fi
 
@@ -20,6 +20,14 @@ case "$VAULT_LABEL" in
   pino-vault-*) ;;
   *)
     echo "Vault label must start with pino-vault-" >&2
+    exit 1
+    ;;
+esac
+
+case "$DATA_LABEL" in
+  pino-data-*) ;;
+  *)
+    echo "Data label must start with pino-data-" >&2
     exit 1
     ;;
 esac

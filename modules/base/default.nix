@@ -12,5 +12,6 @@
     ../pino/top.nix
     ../pino/package.nix
     ../pino/system.nix
+    ../pino/data.nix
   ];
 }

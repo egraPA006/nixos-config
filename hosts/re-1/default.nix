@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 {
   imports = [
     ./hardware.nix
@@ -16,6 +16,18 @@
     };
     torrent.localDir = "/data/fast/torrent";
     hotspot.wifiInterface = "wlp8s0";
+  };
+
+  # Host paths for datasets that can be carried between machines on egrapa_hdd.
+  pino.data.datasets = {
+    music-full = {
+      localPath = config.pino.profiles.musicFull.localDir;
+      scope = "shared";
+    };
+    photos = {
+      localPath = "/data/slow/photos";
+      scope = "shared";
+    };
   };
 
   pino.vault.secrets.github-ssh = {
@@ -55,24 +67,24 @@
     };
 
     systemd.user.services.monitor-default = {
-        Unit.Description = "Apply default single-monitor profile";
-        Unit.After = [ "graphical-session.target" ];
-        Install.WantedBy = [ "graphical-session.target" ];
-        Service = {
-          Type = "oneshot";
-          ExecStart = "/run/current-system/sw/bin/monitor switch single";
-          RemainAfterExit = false;
-        };
+      Unit.Description = "Apply default single-monitor profile";
+      Unit.After = [ "graphical-session.target" ];
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        Type = "oneshot";
+        ExecStart = "/run/current-system/sw/bin/monitor switch single";
+        RemainAfterExit = false;
+      };
     };
     systemd.user.services.openrgb-init = {
-        Unit.Description = "Set OpenRGB default colors";
-        Unit.After = [ "graphical-session.target" ];
-        Install.WantedBy = [ "graphical-session.target" ];
-        Service = {
-          Type = "oneshot";
-          ExecStart = "${pkgs.openrgb}/bin/openrgb --color FF70AB";
-          RemainAfterExit = false;
-        };
+      Unit.Description = "Set OpenRGB default colors";
+      Unit.After = [ "graphical-session.target" ];
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.openrgb}/bin/openrgb --color FF70AB";
+        RemainAfterExit = false;
+      };
     };
   };
 

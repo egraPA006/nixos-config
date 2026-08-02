@@ -61,6 +61,7 @@ pino <command> help              detailed help for that command
 | `pino gc` | Garbage-collect old generations and clean boot entries |
 | `pino update` | Snapshot, update flake inputs, rebuild |
 | `pino profile list/status/enable/disable` | Manage NixOS profiles |
+| `pino package search/locate/install/remove` | Search files/packages and manage temporary user packages |
 | `pino monitor list/status/switch/save/rm` | Manage display profiles |
 | `pino snap <label>` | Snapshot root + home |
 | `pino snap ls/rb/rm` | List / roll back / delete snapshots |
@@ -70,6 +71,7 @@ pino <command> help              detailed help for that command
 | `pino hotspot start/stop` | WiFi access point (re-1) |
 | `pino vault files/populate` | List and provision root-only system secrets from the local vault |
 | `pino vault disks/backup/check/restore` | Manage any labelled offline vault disk and its snapshots |
+| `pino data list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
 | `pino music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
 | `pino music-lite set-latency <samples>` | Adjust PipeWire quantum at runtime |
 | `pino music-lite set-volume <percent>` | Output level (100=default, >100 boosts) |
@@ -79,6 +81,14 @@ pino <command> help              detailed help for that command
 > Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its system-secret tree into the disk's root-only installation bootstrap.
 
 > Use `pino vault snapshots 1` to select a snapshot. `pino vault restore 1 <snapshot>` stages it under `/data/secrets/restores/`; adding `--apply` makes the live vault exactly match it after explicit confirmation.
+
+> Hosts map logical datasets to local paths with `pino.data.datasets`. Shared
+> datasets live under `pino-data-*/pino/datasets/shared/`; host-specific datasets
+> live under `datasets/hosts/<hostname>/`, all as ordinary exFAT files accessible
+> from Windows. `backup` makes the medium exactly match local, `restore` makes
+> local exactly match the medium, and `merge` interactively incorporates medium
+> changes locally without changing the medium. Installation can restore selected
+> datasets using `PINO_RESTORE_DATA=all` or a comma-separated list.
 
 ### Vault-backed system secrets
 

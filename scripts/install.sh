@@ -14,14 +14,102 @@ BOOTSTRAP_MAPPER="pino-install-vault"
 BOOTSTRAP_MOUNTED=false
 BOOTSTRAP_OPENED=false
 SECRETS_PROVISIONED=false
+DATA_MOUNT="${PINO_DATA_MOUNT:-/run/pino-install-data}"
+DATA_SELECTOR="${PINO_DATA_LABEL:-${PINO_DATA_DISK:-}}"
+DATA_MOUNTED=false
+DATA_RESTORED=false
 
 cleanup_bootstrap() {
+  if [ "$DATA_MOUNTED" = true ]; then
+    sudo umount "$DATA_MOUNT" || true
+  fi
   if [ "$BOOTSTRAP_MOUNTED" = true ]; then
     sudo umount "$BOOTSTRAP_MOUNT" || true
   fi
   if [ "$BOOTSTRAP_OPENED" = true ]; then
     sudo cryptsetup close "$BOOTSTRAP_MAPPER" || true
   fi
+}
+
+mount_data_backup() {
+  local selector="$DATA_SELECTOR"
+  local data_label existing_mount
+  local -a devices
+
+  if [ -n "$selector" ]; then
+    [[ "$selector" == pino-data-* ]] && data_label="$selector" || data_label="pino-data-$selector"
+    mapfile -t devices < <(lsblk -rpn -o NAME,LABEL,FSTYPE | awk -v label="$data_label" '$2 == label && $3 == "exfat" { print $1 }')
+  else
+    mapfile -t devices < <(lsblk -rpn -o NAME,LABEL,FSTYPE | awk '$2 ~ /^pino-data-/ && $3 == "exfat" { print $1 }')
+  fi
+  if [ "${#devices[@]}" -ne 1 ]; then
+    echo "No unique ${data_label:-pino-data-*} partition found; skipping data restore." >&2
+    return 1
+  fi
+
+  existing_mount="$(findmnt -rn -S "${devices[0]}" -o TARGET | head -n 1)"
+  if [ -n "$existing_mount" ]; then
+    DATA_MOUNT="$existing_mount"
+  else
+    sudo mkdir -p "$DATA_MOUNT"
+    sudo mount -o ro,nodev,nosuid,noexec "${devices[0]}" "$DATA_MOUNT"
+    DATA_MOUNTED=true
+    trap cleanup_bootstrap EXIT
+  fi
+}
+
+restore_data_backup() {
+  local requested="${PINO_RESTORE_DATA:-}"
+  local datasets_json name local_path scope medium_path answer
+  local -a available=() selected=()
+  declare -A local_paths=() medium_paths=()
+
+  datasets_json="$(nix --extra-experimental-features 'nix-command flakes' eval --json \
+    "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.data.datasets")"
+  while IFS=$'\t' read -r name local_path scope; do
+    [ -n "$name" ] || continue
+    if [ "$scope" = shared ]; then
+      medium_path="$DATA_MOUNT/pino/datasets/shared/$name"
+    else
+      medium_path="$DATA_MOUNT/pino/datasets/hosts/$HOST/$name"
+    fi
+    if [ -d "$medium_path" ]; then
+      available+=("$name")
+      local_paths["$name"]="$local_path"
+      medium_paths["$name"]="$medium_path"
+    fi
+  done < <(printf '%s\n' "$datasets_json" | jq -r 'to_entries[] | [.key, .value.localPath, .value.scope] | @tsv')
+
+  if [ "${#available[@]}" -eq 0 ]; then
+    echo "No configured datasets for $HOST exist on the selected data medium; continuing." >&2
+    return
+  fi
+  echo "Datasets available for $HOST:"
+  for name in "${available[@]}"; do
+    printf '  %-18s %s -> %s\n' "$name" "${medium_paths[$name]}" "${local_paths[$name]}"
+  done
+
+  if [ -z "$requested" ] && [ -t 0 ]; then
+    read -r -p "Restore which datasets? [all/none/comma-separated names] (all): " answer
+    requested="${answer:-all}"
+  fi
+  case "$requested" in
+    ""|0|no|none) return ;;
+    all) selected=("${available[@]}") ;;
+    *) IFS=',' read -r -a selected <<< "$requested" ;;
+  esac
+
+  for name in "${selected[@]}"; do
+    if [ -z "${medium_paths[$name]:-}" ]; then
+      echo "Dataset '$name' is not configured or absent on the medium; skipping." >&2
+      continue
+    fi
+    echo "Restoring $name exactly to ${local_paths[$name]}..."
+    sudo mkdir -p "/mnt${local_paths[$name]}"
+    sudo rsync -rt --delete --modify-window=1 \
+      "${medium_paths[$name]}/" "/mnt${local_paths[$name]}/"
+    DATA_RESTORED=true
+  done
 }
 
 mount_bootstrap() {
@@ -93,6 +181,10 @@ if mount_bootstrap; then
   fi
 fi
 
+if mount_data_backup; then
+  restore_data_backup
+fi
+
 echo "Installing NixOS for $HOST..."
 sudo nixos-install --flake "/mnt/home/egrapa/nixos-config#$HOST"
 
@@ -106,4 +198,7 @@ if [ "$SECRETS_PROVISIONED" = true ]; then
   echo "Done. Vault-backed system secrets were provisioned from $BOOTSTRAP_LABEL."
 else
   echo "Done without vault secrets. Set the egrapa password with: passwd egrapa"
+fi
+if [ "$DATA_RESTORED" = true ]; then
+  echo "Non-secret profile data was restored from the selected pino-data medium."
 fi
