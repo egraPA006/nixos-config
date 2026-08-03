@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration for re-1 and la1n";
+  description = "Pino NixOS configurations";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -11,9 +11,13 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixos-mailserver = {
+      url = "gitlab:simple-nixos-mailserver/nixos-mailserver";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { nixpkgs, home-manager, disko, ... }:
+  outputs = { nixpkgs, home-manager, disko, nixos-mailserver, ... }:
   let
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
 
@@ -34,7 +38,10 @@
 
     mkHost = name: extraModules: nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
-      specialArgs.activeProfiles = import (./hosts + "/${name}/active-profiles.nix");
+      specialArgs = {
+        activeProfiles = import (./hosts + "/${name}/active-profiles.nix");
+        inherit nixos-mailserver;
+      };
       modules = [
         disko.nixosModules.disko
         home-manager.nixosModules.home-manager

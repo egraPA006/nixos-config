@@ -23,6 +23,13 @@ let
       vpn = ./network/vpn.nix;
       hotspot = ./network/hotspot.nix;
     };
+    server = {
+      "server-web" = ./server/web.nix;
+      "server-proxy" = ./server/proxy.nix;
+      "server-vpn" = ./server/vpn.nix;
+      "server-password-sync" = ./server/password-sync.nix;
+      "server-mail" = ./server/mail.nix;
+    };
     security.vault = ./security/vault;
     storage = {
       datasets = ./storage/datasets.nix;
@@ -34,6 +41,7 @@ let
   desktopProfiles = builtins.attrNames profileGroups.desktop;
   networkProfiles = builtins.attrNames profileGroups.network;
   storageProfiles = (builtins.attrNames profileGroups.storage) ++ [ "vault" ];
+  serverProfiles = builtins.attrNames profileGroups.server;
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
   profileScript = builtins.replaceStrings
@@ -51,6 +59,7 @@ in
   imports = [
     ./desktop/options.nix
     ./network/options.nix
+    ./server/options.nix
     ./security/vault/options.nix
   ] ++ map (name: profileModules.${name}) (lib.filter (name: builtins.hasAttr name profileModules) activeProfiles);
 
@@ -69,6 +78,10 @@ in
 
   pino.subcommands.storage = lib.mkIf (hasActiveProfile storageProfiles) {
     description = "Local and removable storage";
+  };
+
+  pino.subcommands.server = lib.mkIf (hasActiveProfile serverProfiles) {
+    description = "Server services and connections";
   };
 
   pino.subcommands.profile = {

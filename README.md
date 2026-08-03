@@ -1,6 +1,7 @@
 # nixos-config
 
-Personal NixOS flake for `re-1` (PC) and `la1n` (laptop).
+Personal NixOS flake for `re-1` (PC), `la1n` (laptop), and the staged `mosk`
+server.
 
 ---
 
@@ -77,6 +78,8 @@ pino <command> <subcommand> help help for a leaf command
 | `pino storage data list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
 | `pino desktop music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
 | `pino desktop music-lite set-latency/set-volume` | Adjust PipeWire latency and output level |
+| `pino server status/connections/disk/logs` | Inspect the server without a dashboard |
+| `pino server web/proxy/vpn/passwords/mail help` | Operate an enabled server capability |
 
 > System-secret source files live only under `/data/secrets/system/{shared,hosts/<hostname>}`. `pino storage vault populate` merges the shared and current-host trees into root-only `/var/lib/pino/secrets`; Nix modules declare only filenames, destinations, permissions, and restart units.
 
@@ -195,10 +198,69 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `datasets` | Portable non-secret dataset backup and restore commands |
 | `snapshots` | Host-configured Snapper volumes and Pino snapshot commands |
 | `system-monitor` | Live temperatures, CPU, GPU, RAM, and process monitoring |
+| `server-web` | Caddy, ACME, and a small static website |
+| `server-proxy` | VLESS Reality over TCP 443 with switchable Internet egress |
+| `server-vpn` | AmneziaWG private access with optional Internet egress |
+| `server-password-sync` | KeePass-only Syncthing over the private VPN |
+| `server-mail` | Postfix, Dovecot, Rspamd, DKIM, and ACME mail certificates |
 
 Profiles can overlap freely when their packages and services are compatible.
 
 Dev environments are handled per-project via `nix develop` / `devShell` in each project's `flake.nix`.
+
+### Mosk server scaffold
+
+The canonical Ergo Proxy city spelling is **Mosk**. Its staged host is
+`hosts/mosk`, with local user `vincent`. It is deliberately not a deployable
+flake output yet: add the real hardware and disk modules first, then add
+`mosk = mkHost "mosk" [ ];` to `nixosConfigurations`.
+
+A minimal service selection looks like:
+
+```nix
+# hosts/mosk/active-profiles.nix
+[
+  "server-web"
+  "server-proxy"
+  "server-vpn"
+  "server-password-sync"
+  "server-mail"
+]
+
+# hosts/mosk/default.nix
+pino.server = {
+  domain = "example.com";
+  acmeEmail = "admin@example.com";
+  proxy.users.vincent = { };
+  vpn.externalInterface = "ens3";
+  passwordSync.devices.re-1.id = "SYNCTHING-DEVICE-ID";
+  mail.accounts."vincent@example.com".aliases = [ "postmaster@example.com" ];
+};
+```
+
+Keep the referenced secret files outside Git, provisioned root-only under
+`/var/lib/pino/secrets/server`:
+
+```text
+sing-box/reality-private-key
+sing-box/reality-short-id
+sing-box/users/vincent.uuid
+awg0.conf
+mail/accounts/vincent@example.com.hash
+```
+
+The public DNS prerequisites are an `A`/`AAAA` record for the website and
+`mail` host, an `MX` record, SPF, DKIM, and DMARC. Ask the VPS provider for
+matching reverse DNS and verify that SMTP port 25 is permitted. Public ports
+are HTTP 80, proxy HTTPS 443/TCP, AmneziaWG 585/UDP, and the standard mail
+ports opened by the mail profile. Syncthing and its GUI are not public:
+synchronization is reachable only through the trusted VPN interface and the
+GUI binds to localhost.
+
+The default mail quota is 5 GiB per account, journals are capped at 256 MiB,
+and only five KeePass sync versions are retained. Those defaults are intended
+to fit a 10–20 GiB server, but mail usage still needs monitoring with
+`pino server disk`.
 
 ---
 
@@ -208,7 +270,7 @@ Dev environments are handled per-project via `nix develop` / `devShell` in each 
 flake.nix                    # inputs: nixpkgs, home-manager, disko
 configurations/
   desktop/                   # full NixOS desktop entry point used by re-1 and la1n
-  server/                    # future headless NixOS entry point
+  server/                    # headless NixOS entry point
   nix/                       # future standalone Home Manager entry point for Ubuntu
 hosts/
   re-1/
@@ -217,6 +279,7 @@ hosts/
     disko.nix                # declarative disk layout
     active-profiles.nix      # managed by pino profile CLI
   la1n/  (same layout)
+  mosk/                      # staged server identity; hardware/disko not yet selected
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
   pino/
@@ -228,7 +291,7 @@ modules/
     options.nix              # pino.user and pino.configDir machine identity
   boot/                      # selectable boot-loader policy
   desktop/                   # desktop networking and user integration
-  server/                    # future server-specific foundation
+  server/                    # SSH, bounded logs, and Pino server operations
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
@@ -237,6 +300,7 @@ modules/
     development/             # development tools currently integrated through NixOS
     network/                 # VPN and hotspot capabilities
     security/                # vault and identity capabilities
+    server/                  # web, proxy, VPN, KeePass sync, and mail capabilities
 scripts/                     # installation helpers (run once, not part of the built system)
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks

@@ -71,6 +71,10 @@
     directoryMode = "0700";
   };
 
+  # Set this to the value printed by `pino server passwords id` on Mosk.
+  # The client then connects directly through AmneziaWG to 10.77.0.1:22000.
+  pino.vault.sync.serverId = null;
+
   networking.hostName = "re-1";
 
   systemd.tmpfiles.rules = [

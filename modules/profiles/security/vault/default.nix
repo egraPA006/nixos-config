@@ -7,6 +7,8 @@ let
   vaultMountPoint = "/data/secrets";
   databaseDir = "${vaultMountPoint}/keepass";
   databaseFile = "${databaseDir}/identity.kdbx";
+  sync = config.pino.vault.sync;
+  syncConfigured = sync.serverId != null;
   provisionedDir = config.pino.vault.provisionedDir;
   declaredSecrets = builtins.attrNames config.pino.vault.secrets;
   deploySecret = name: secret: lib.optionalString (secret.target != null) ''
@@ -53,6 +55,52 @@ in
 {
   imports = [ ./options.nix ];
 
+  services.syncthing = {
+    enable = true;
+    user = config.pino.user.name;
+    group = "users";
+    dataDir = "${config.pino.user.home}/.local/share/syncthing";
+    configDir = "${config.pino.user.home}/.config/syncthing";
+    guiAddress = "127.0.0.1:8384";
+    openDefaultPorts = false;
+    overrideDevices = true;
+    overrideFolders = true;
+    settings = {
+      devices = lib.optionalAttrs syncConfigured {
+        ${sync.serverName} = {
+          id = sync.serverId;
+          addresses = [ sync.serverAddress ];
+        };
+      };
+      folders = lib.optionalAttrs syncConfigured {
+        keepass = {
+          label = "KeePass identity database";
+          path = databaseDir;
+          devices = [ sync.serverName ];
+          versioning = {
+            type = "simple";
+            params.keep = "5";
+          };
+        };
+      };
+      options = {
+        listenAddresses = [ ];
+        localAnnounceEnabled = false;
+        globalAnnounceEnabled = false;
+        relaysEnabled = false;
+        natEnabled = false;
+        urAccepted = -1;
+      };
+    };
+  };
+
+  # Never let Syncthing operate on the directory hidden underneath the
+  # on-demand encrypted mount. `pino storage vault open` starts it explicitly.
+  systemd.services.syncthing = {
+    wantedBy = lib.mkForce [ ];
+    unitConfig.ConditionPathIsMountPoint = vaultMountPoint;
+  };
+
   system.activationScripts.pino-vault-secrets = {
     deps = [ "users" "groups" ];
     text = ''
@@ -63,7 +111,13 @@ in
 
   home-manager.users.${config.pino.user.name} = {
     programs = {
-      keepassxc.enable = true;
+      keepassxc = {
+        enable = true;
+        settings.Browser = {
+          Enabled = true;
+          UpdateBinaryPath = false;
+        };
+      };
 
       chromium = {
         enable = true;
@@ -73,6 +127,8 @@ in
         ];
       };
     };
+
+    xdg.configFile."keepassxc/keepassxc.ini".force = true;
 
     systemd.user.services.keepassxc-vault = {
       Unit = {
@@ -97,6 +153,15 @@ in
       close.description = "Unmount and lock the local vault";
       files.description = "List declared and provisioned secret files";
       populate.description = "Provision this host from the local vault";
+      sync = {
+        description = "Inspect KeePass synchronization with Mosk";
+        commands = {
+          status.description = "Show client status and configured peer";
+          id.description = "Print this machine's Syncthing device ID";
+          files.description = "List the local KeePass synchronization folder";
+          restart.description = "Restart synchronization after opening the vault";
+        };
+      };
       disks.description = "List connected vault backup disks";
       backup = { description = "Back up the local vault"; usage = "[disk]"; };
       check = { description = "Verify a vault backup"; usage = "[disk]"; };
@@ -117,6 +182,10 @@ in
                                     Stage or directly apply an exact snapshot
         pino storage vault files     List declared and provisioned system-secret files
         pino storage vault populate  Provision this host from the local encrypted vault
+        pino storage vault sync status   Show KeePass synchronization status
+        pino storage vault sync id       Print this machine's Syncthing device ID
+        pino storage vault sync files    List synchronized KeePass files
+        pino storage vault sync restart  Restart the synchronization client
 
       Vault device: ${vaultDevice}
       Mount point:  ${vaultMountPoint}
@@ -489,10 +558,14 @@ in
             fi
           fi
 
-          sudo ${pkgs.coreutils}/bin/chown root:root "$MOUNT_POINT"
-          sudo ${pkgs.coreutils}/bin/chmod 0711 "$MOUNT_POINT"
+          sudo ${pkgs.coreutils}/bin/chown root:users "$MOUNT_POINT"
+          sudo ${pkgs.coreutils}/bin/chmod 0750 "$MOUNT_POINT"
           sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o ${lib.escapeShellArg config.pino.user.name} -g users "$DATABASE_DIR"
           sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o root -g root "$MOUNT_POINT/system"
+          sudo ${pkgs.findutils}/bin/find "$MOUNT_POINT" -mindepth 1 -maxdepth 1 -type d ! -name keepass \
+            -exec ${pkgs.coreutils}/bin/chown root:root {} + \
+            -exec ${pkgs.coreutils}/bin/chmod 0700 {} +
+          sudo ${pkgs.systemd}/bin/systemctl restart syncthing.service
           echo "Vault opened at $MOUNT_POINT"
           ;;
 
@@ -518,6 +591,8 @@ in
             exit 1
           fi
 
+          sudo ${pkgs.systemd}/bin/systemctl stop syncthing.service
+
           if is_mounted; then
             sudo ${pkgs.util-linux}/bin/umount "$MOUNT_POINT"
           fi
@@ -527,6 +602,37 @@ in
           fi
 
           echo "Vault closed"
+          ;;
+
+        sync)
+          case "''${2:-}" in
+            status)
+              systemctl status syncthing.service --no-pager
+              echo
+              ${if syncConfigured then "echo 'Mosk peer: configured (${sync.serverAddress})'" else "echo 'Mosk peer: not configured; set pino.vault.sync.serverId'"}
+              ;;
+            id)
+              sudo -u ${lib.escapeShellArg config.pino.user.name} \
+                ${pkgs.syncthing}/bin/syncthing cli \
+                --home=${lib.escapeShellArg "${config.pino.user.home}/.config/syncthing"} \
+                show system | ${pkgs.jq}/bin/jq -r .myID
+              ;;
+            files)
+              if ! is_mounted; then
+                echo "Vault is closed. Run: pino storage vault open" >&2
+                exit 1
+              fi
+              ${pkgs.coreutils}/bin/ls -lah "$DATABASE_DIR"
+              ;;
+            restart)
+              if ! is_mounted; then
+                echo "Vault is closed. Run: pino storage vault open" >&2
+                exit 1
+              fi
+              sudo ${pkgs.systemd}/bin/systemctl restart syncthing.service
+              ;;
+            *) echo "Run 'pino storage vault sync help' for usage." >&2; exit 1 ;;
+          esac
           ;;
 
         disks)
@@ -563,7 +669,7 @@ in
           ;;
 
         "")
-          echo "Usage: pino storage vault <status|open|keepass|close|files|populate|disks|backup|check|snapshots|restore>"
+          echo "Usage: pino storage vault <status|open|keepass|close|sync|files|populate|disks|backup|check|snapshots|restore>"
           ;;
 
         *)
