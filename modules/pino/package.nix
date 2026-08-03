@@ -58,7 +58,8 @@
           pattern="''${1:-}"
           [ -z "$pattern" ] && { echo "Usage: pino os package locate <pattern>"; exit 1; }
           index_cache="''${XDG_CACHE_HOME:-$HOME/.cache}/nix-index"
-          if ! compgen -G "$index_cache/files*" >/dev/null; then
+          if ! find "$index_cache" -maxdepth 1 -type f -name 'files*' -print -quit 2>/dev/null \
+            | grep -q .; then
             echo "No nix-locate database exists yet; building it now …" >&2
             nix-index
           fi
@@ -73,7 +74,7 @@
         install)
           pkg="''${1:-}"
           [ -z "$pkg" ] && { echo "Usage: pino os package install <name>"; exit 1; }
-          nix profile install "nixpkgs#$pkg" --profile "$PROFILE"
+          nix profile add "nixpkgs#$pkg" --profile "$PROFILE"
           echo "Installed $pkg — available in new shells and after PATH reload."
           ;;
 

@@ -81,9 +81,10 @@ with_data_disk() {
   local mount_point operation_status mounted=false existing_mount uid gid
   shift 3
   select_data_device "$requested"
-  existing_mount="$(findmnt -rn -S "$DATA_DEVICE" -o TARGET | head -n 1)"
+  existing_mount="$(findmnt -rn -S "$DATA_DEVICE" -o TARGET | head -n 1 || true)"
   if [ -n "$existing_mount" ]; then
     mount_point="$existing_mount"
+    echo "Using $DATA_DEVICE mounted at $mount_point."
     if [ "$mode" = rw ] && ! findmnt -rn -S "$DATA_DEVICE" -o OPTIONS | grep -qw rw; then
       echo "$DATA_DEVICE is mounted read-only at $mount_point." >&2
       return 1
@@ -92,6 +93,7 @@ with_data_disk() {
     mount_point="/run/pino-data-$(basename "$DATA_DEVICE")"
     uid="$(id -u)"
     gid="$(id -g)"
+    echo "Mounting $DATA_DEVICE at $mount_point ($mode)..."
     sudo mkdir -p "$mount_point"
     if [ "$mode" = ro ]; then
       sudo mount -o "ro,nodev,nosuid,noexec,uid=$uid,gid=$gid,umask=0022" "$DATA_DEVICE" "$mount_point"
@@ -101,7 +103,10 @@ with_data_disk() {
     mounted=true
   fi
   cleanup_data_disk() {
-    if [ "$mounted" = true ]; then sudo umount "$mount_point" || true; fi
+    if [ "$mounted" = true ]; then
+      echo "Unmounting $mount_point..."
+      sudo umount "$mount_point" || true
+    fi
   }
   trap cleanup_data_disk EXIT INT TERM
   if "$operation" "$mount_point" "$@"; then operation_status=0; else operation_status=$?; fi
@@ -149,6 +154,14 @@ exact_copy() {
 
 run_dataset_operation() {
   local mount_point="$1" operation="$2" dataset="$3" index local_path medium_path
+  if [ "$operation" = backup ] && [ "$dataset" = all ]; then
+    for index in "${!DATASET_NAMES[@]}"; do
+      local_path="${DATASET_PATHS[$index]}"
+      medium_path="$(dataset_medium_path "$mount_point" "$index")"
+      exact_copy backup "$local_path" "$medium_path" "${DATASET_NAMES[$index]}"
+    done
+    return
+  fi
   index="$(dataset_index "$dataset")"
   local_path="${DATASET_PATHS[$index]}"
   medium_path="$(dataset_medium_path "$mount_point" "$index")"
@@ -167,7 +180,7 @@ run_dataset_operation() {
 }
 
 parse_dataset_operation() {
-  local operation="$1" first="${2:-}" second="${3:-}" selector dataset mode
+  local operation="$1" first="${2:-}" second="${3:-}" selector dataset mode target=dataset
   if [ -n "$second" ]; then
     selector="$first"
     dataset="$second"
@@ -176,10 +189,17 @@ parse_dataset_operation() {
     dataset="$first"
   fi
   if [ -z "$dataset" ]; then
-    echo "Usage: pino storage data $operation [disk] <dataset>" >&2
+    [ "$operation" = backup ] && target='dataset|all'
+    echo "Usage: pino storage data $operation [disk] <$target>" >&2
     return 1
   fi
-  dataset_index "$dataset" >/dev/null
+  if [ "$dataset" = all ] && [ "$operation" != backup ]; then
+    echo "The 'all' target is supported only by backup." >&2
+    return 1
+  fi
+  if [ "$dataset" != all ]; then
+    dataset_index "$dataset" >/dev/null
+  fi
   if [ "$operation" = backup ]; then mode=rw; else mode=ro; fi
   with_data_disk "$mode" run_dataset_operation "$selector" "$operation" "$dataset"
 }

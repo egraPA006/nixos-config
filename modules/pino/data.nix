@@ -50,7 +50,7 @@ in
       commands = {
         list.description = "List configured datasets";
         disks.description = "List connected data media";
-        backup = { description = "Make medium exactly match local"; usage = "[disk] <dataset>"; };
+        backup = { description = "Make medium exactly match local"; usage = "[disk] <dataset|all>"; };
         restore = { description = "Make local exactly match medium"; usage = "[disk] <dataset>"; };
         merge = { description = "Interactively merge medium into local"; usage = "[disk] <dataset>"; };
       };
@@ -58,7 +58,8 @@ in
         pino storage data — plain datasets on a pino-data-* medium
           pino storage data list
           pino storage data disks
-          pino storage data backup  [disk] <dataset>  Make the medium exactly match local
+          pino storage data backup  [disk] <dataset|all>
+                                                Make medium copies exactly match local
           pino storage data restore [disk] <dataset>  Make local exactly match the medium
           pino storage data merge   [disk] <dataset>  Interactively merge medium into local
 
@@ -67,6 +68,8 @@ in
 
         backup and restore delete files on the destination that do not exist at the
         source. Both show an rsync preview and require typing the dataset name.
+        The backup target 'all' processes every configured dataset with the same
+        preview and confirmation rules, mounting the medium only once.
         merge never changes the medium and never deletes local-only files.
       '';
       script = script;
@@ -74,9 +77,14 @@ in
         complete -c pino -f \
           -n '__fish_pino_at_path storage data backup; or __fish_pino_at_path storage data restore; or __fish_pino_at_path storage data merge' \
           -a '${lib.concatStringsSep " " names}' -d 'Dataset'
+        complete -c pino -f -n '__fish_pino_at_path storage data backup' \
+          -a all -d 'Every configured dataset'
       '';
     };
 
-    environment.systemPackages = [ pkgs.rsync ];
+    environment.systemPackages = [
+      pkgs.exfatprogs
+      pkgs.rsync
+    ];
   };
 }

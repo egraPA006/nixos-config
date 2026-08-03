@@ -56,6 +56,10 @@
       localPath = "/data/fast/file_archive";
       scope = "host";
     };
+    nixos-config = {
+      localPath = "/home/egrapa/nixos-config";
+      scope = "shared";
+    };
   };
 
   pino.vault.secrets.github-ssh = {

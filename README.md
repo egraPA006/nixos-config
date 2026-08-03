@@ -82,6 +82,16 @@ pino <command> <subcommand> help help for a leaf command
 
 > Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its system-secret tree into the disk's root-only installation bootstrap.
 
+Create a complete removable backup disk with matching data and vault IDs:
+
+```bash
+sudo scripts/backup-disk-init.sh /dev/sdX 16GiB 1
+```
+
+This erases the selected whole disk, creates `pino-data-1` as exFAT using all
+space except the final 16 GiB, and creates `pino-vault-1` there as LUKS2 with
+ext4. Change the size and numeric ID for other media.
+
 > Use `pino storage vault snapshots 1` to select a snapshot. `pino storage vault restore 1 <snapshot>` stages it under `/data/secrets/restores/`; adding `--apply` makes the live vault exactly match it after explicit confirmation.
 
 > Hosts map logical datasets to local paths with `pino.data.datasets`. Shared
@@ -91,6 +101,8 @@ pino <command> <subcommand> help help for a leaf command
 > local exactly match the medium, and `merge` interactively incorporates medium
 > changes locally without changing the medium. Installation can restore selected
 > datasets using `PINO_RESTORE_DATA=all` or a comma-separated list.
+> `pino storage data backup all` backs up every configured dataset while retaining
+> the normal preview and per-dataset confirmation.
 
 > Snapshot volumes are declared per host with `pino.snapshots.volumes`. `re-1`
 > groups `root` and `home` as system volumes and `fast` and `slow` as data
@@ -229,7 +241,7 @@ scripts/                     # installation helpers (run once, not part of the b
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
   install.sh                 # run nixos-install
-  vault-disk-init.sh         # create exFAT + 8 GiB LUKS vault disk
+  backup-disk-init.sh        # create matching pino-data/pino-vault partitions
   monitor.py                 # built into monitor binary
 ```
 
