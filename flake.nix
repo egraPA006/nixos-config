@@ -67,6 +67,7 @@
     nixosConfigurations = {
       re-1 = re1;
       la1n = mkHost "la1n" [ ];
+      mosk = mkHost "mosk" [ ];
     };
 
     checks.x86_64-linux.re-1 = re1.config.system.build.toplevel;

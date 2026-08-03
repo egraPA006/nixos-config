@@ -25,6 +25,12 @@ in
       ExecStart = "${awgQuick} up ${cfg.configFile}";
       ExecStop = "${awgQuick} down ${cfg.configFile}";
     };
+    unitConfig.ConditionPathExists = cfg.configFile;
+  };
+
+  pino.bootstrap.secrets."server/awg0.conf" = {
+    target = cfg.configFile;
+    restartUnits = [ "amneziawg-server.service" ];
   };
 
   boot.kernel.sysctl."net.ipv4.ip_forward" = 0;

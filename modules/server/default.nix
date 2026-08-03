@@ -1,13 +1,21 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 {
+  imports = [ ./bootstrap-receiver.nix ];
+
   services.openssh = {
     enable = true;
+    openFirewall = true;
     settings = {
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;
       PermitRootLogin = "no";
+      AuthorizedKeysFile = ".ssh/authorized_keys /etc/ssh/authorized_keys.d/%u";
     };
   };
+
+  systemd.tmpfiles.rules = [
+    "d /etc/ssh/authorized_keys.d 0755 root root -"
+  ];
 
   services.journald.extraConfig = ''
     SystemMaxUse=256M
@@ -16,6 +24,7 @@
   '';
 
   pino.subcommands.server = {
+    description = lib.mkDefault "Server services and connections";
     commands = {
       status.description = "Show failed and active server services";
       connections.description = "Show current listening and established connections";

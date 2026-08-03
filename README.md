@@ -210,10 +210,10 @@ Dev environments are handled per-project via `nix develop` / `devShell` in each 
 
 ### Mosk server scaffold
 
-The canonical Ergo Proxy city spelling is **Mosk**. Its staged host is
-`hosts/mosk`, with local user `vincent`. It is deliberately not a deployable
-flake output yet: add the real hardware and disk modules first, then add
-`mosk = mkHost "mosk" [ ];` to `nixosConfigurations`.
+The canonical Ergo Proxy city spelling is **Mosk**. Its host is `hosts/mosk`,
+with local user `vincent`. It is a valid flake output, but its committed disk
+path is an intentionally unusable placeholder. The staging script replaces it
+only after interactive whole-disk confirmation and generates `hardware.nix`.
 
 A minimal service selection looks like:
 
@@ -238,16 +238,68 @@ pino.server = {
 };
 ```
 
-Keep the referenced secret files outside Git, provisioned root-only under
-`/var/lib/pino/secrets/server`:
+Keep the referenced secret files outside Git. The local vault source exactly
+mirrors their server-relative paths:
 
 ```text
-sing-box/reality-private-key
-sing-box/reality-short-id
-sing-box/users/vincent.uuid
-awg0.conf
-mail/accounts/vincent@example.com.hash
+/data/secrets/system/hosts/mosk/
+└── server/
+    ├── awg0.conf
+    ├── sing-box/
+    │   ├── reality-private-key
+    │   ├── reality-short-id
+    │   └── users/vincent.uuid
+    └── mail/accounts/vincent@example.com.hash
 ```
+
+Each server profile contributes its required files to
+`pino.bootstrap.secrets`; there is no second shell-script manifest to maintain.
+Check the vault before installing:
+
+```bash
+pino storage vault open
+pino bootstrap server check mosk
+```
+
+#### Install and bootstrap Mosk
+
+Boot the NixOS ISO, clone this public repository, configure Mosk's public
+profile values, and run:
+
+```bash
+cd nixos-config
+sudo scripts/server-stage.sh mosk /dev/vda
+```
+
+The script shows all disks, requires the exact selected path as confirmation,
+asks for the administrator SSH public key, generates hardware configuration,
+partitions and installs the server, and prints its SSH fingerprint plus a
+one-time bootstrap code. The code expires after one hour. No secret or private
+key is entered on the server console.
+
+After reboot, compare the SSH fingerprint printed on the server console and
+provision it from the machine with the mounted vault:
+
+```bash
+pino bootstrap server apply mosk 203.0.113.10
+```
+
+The receiver accepts only regular files declared by the evaluated manifest and
+only destinations below `/var/lib/pino/secrets`. It rejects extra files,
+symlinks, missing files, wrong bootstrap codes, expired codes, and a mismatched
+hostname. It never performs a root rebuild from the user-owned checkout.
+Successful initial provisioning consumes the code and restarts only declared
+units. Later secret changes use the same constrained receiver without reopening
+initial bootstrap access:
+
+```bash
+pino bootstrap server check mosk
+pino bootstrap server sync mosk 203.0.113.10
+```
+
+Both remote operations scan the ED25519 host key and require typing the
+fingerprint visible through the trusted server console. Secret contents are
+transferred directly over SSH and are never printed or placed in the Nix store.
 
 The public DNS prerequisites are an `A`/`AAAA` record for the website and
 `mail` host, an `MX` record, SPF, DKIM, and DMARC. Ask the VPS provider for
@@ -261,6 +313,28 @@ The default mail quota is 5 GiB per account, journals are capped at 256 MiB,
 and only five KeePass sync versions are retained. Those defaults are intended
 to fit a 10–20 GiB server, but mail usage still needs monitoring with
 `pino server disk`.
+
+#### Pair re-1 with Mosk for KeePass
+
+The desktop client belongs to the existing `vault` profile rather than a
+separate profile: it can synchronize only the KeePass directory inside the
+mounted encrypted vault. Discovery, relays, NAT traversal, incoming listening,
+and the public GUI are disabled; re-1 connects directly to Mosk at
+`10.77.0.1:22000` over AmneziaWG.
+
+Pair both ends once:
+
+1. On re-1, open the vault and run `pino storage vault sync id`. Put that ID in
+   Mosk as `pino.server.passwordSync.devices.re-1.id`.
+2. On Mosk, run `pino server passwords id`. Put that ID on re-1 as
+   `pino.vault.sync.serverId`.
+3. Rebuild both machines, connect re-1 to the VPN, then run
+   `pino storage vault open`. Opening starts the client; closing the vault stops
+   it before unmounting.
+
+Override `pino.vault.sync.serverAddress` only if Mosk uses a different VPN
+address. Syncthing remains unconfigured until `serverId` is set, so no fake or
+placeholder device identity is necessary.
 
 ---
 
@@ -279,10 +353,11 @@ hosts/
     disko.nix                # declarative disk layout
     active-profiles.nix      # managed by pino profile CLI
   la1n/  (same layout)
-  mosk/                      # staged server identity; hardware/disko not yet selected
+  mosk/                      # server identity; staging replaces hardware/disk placeholders
 modules/
   pino.nix                   # pino CLI framework — defines pino.subcommands option
   pino/
+    bootstrap.nix            # local-vault to constrained remote-server provisioning
     system.nix               # NixOS generation and system-information commands
     profile.sh               # profile state CLI
     pino-art.sh              # system-info art
@@ -291,7 +366,7 @@ modules/
     options.nix              # pino.user and pino.configDir machine identity
   boot/                      # selectable boot-loader policy
   desktop/                   # desktop networking and user integration
-  server/                    # SSH, bounded logs, and Pino server operations
+  server/                    # SSH, bounded logs, constrained bootstrap receiver, Pino operations
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
@@ -305,6 +380,7 @@ scripts/                     # installation helpers (run once, not part of the b
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
   install.sh                 # run nixos-install
+  server-stage.sh            # confirm disk, install server, and issue one-time bootstrap code
   backup-disk-init.sh        # create matching pino-data/pino-vault partitions
   monitor.py                 # built into monitor binary
 ```

@@ -10,5 +10,6 @@
     ./user.nix
     ../pino/package.nix
     ../pino/system.nix
+    ../pino/bootstrap.nix
   ];
 }

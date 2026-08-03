@@ -1,7 +1,12 @@
 { config, ... }:
 
 {
-  imports = [ ../../configurations/server ];
+  imports = [
+    ./hardware.nix
+    ./disko.nix
+    ../../configurations/server
+    ../../modules/boot/systemd-boot.nix
+  ];
 
   networking.hostName = "mosk";
 
@@ -11,7 +16,8 @@
   };
   pino.configDir = "${config.pino.user.home}/nixos-config";
 
-  # Hardware, disk layout, public domain, and service profiles are selected
-  # when the physical or virtual server is provisioned.
+  # Public domain, service profiles, and client device IDs are selected before
+  # staging. scripts/server-stage.sh replaces the disk placeholder and
+  # generates hardware.nix on the installation machine.
   system.stateVersion = "25.05";
 }

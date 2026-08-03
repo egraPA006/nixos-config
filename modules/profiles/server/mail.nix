@@ -51,6 +51,11 @@ in
     x509.useACMEHost = fqdn;
   };
 
+  pino.bootstrap.secrets = lib.mapAttrs' (address: _: lib.nameValuePair
+    "server/mail/accounts/${address}.hash" {
+      restartUnits = [ "postfix.service" "dovecot2.service" ];
+    }) cfg.mail.accounts;
+
   pino.subcommands.server.commands.mail = {
     description = "Inspect the mail server";
     commands = {

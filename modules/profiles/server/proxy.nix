@@ -71,6 +71,22 @@ in
     inherit settings;
   };
 
+  pino.bootstrap.secrets = {
+    "server/sing-box/reality-private-key".restartUnits = [ "sing-box.service" ];
+    "server/sing-box/reality-short-id".restartUnits = [ "sing-box.service" ];
+  } // lib.mapAttrs' (name: user: lib.nameValuePair
+    "server/sing-box/users/${name}.uuid" {
+      target = user.uuidFile;
+      restartUnits = [ "sing-box.service" ];
+    }) cfg.proxy.users;
+
+  systemd.services.sing-box.unitConfig = {
+    ConditionPathExists = [
+      "${cfg.proxy.secretDir}/reality-private-key"
+      "${cfg.proxy.secretDir}/reality-short-id"
+    ] ++ map (user: user.uuidFile) (lib.attrValues cfg.proxy.users);
+  };
+
   networking.firewall.allowedTCPPorts = [ cfg.proxy.port ];
 
   pino.subcommands.server.commands.proxy = {
