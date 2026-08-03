@@ -15,7 +15,7 @@ in
 
   system.activationScripts.amneziawg-config = lib.mkIf (!vaultEnabled) ''
     ${pkgs.coreutils}/bin/mkdir -p /etc/amneziawg
-    source=/home/egrapa/nixos-config/secrets/awg0.conf
+    source=${lib.escapeShellArg "${config.pino.configDir}/secrets/awg0.conf"}
     if [ -f "$source" ]; then
       ${pkgs.coreutils}/bin/install -m 0600 "$source" /etc/amneziawg/awg0.conf
     fi
@@ -68,10 +68,5 @@ in
         Config: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored secrets/awg0.conf fallback"}.
     '';
     script = builtins.readFile ../../pino/vpn.sh;
-    fishCompletions = ''
-      complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a on     -d 'Start VPN + enable autostart'
-      complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a off    -d 'Stop VPN + disable autostart'
-      complete -c pino -f -n '__fish_seen_subcommand_from vpn' -a status -d 'Show service status'
-    '';
   };
 }

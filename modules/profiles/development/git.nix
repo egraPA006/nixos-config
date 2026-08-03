@@ -1,7 +1,7 @@
-{ ... }:
+{ config, ... }:
 
 {
-  home-manager.users.egrapa.programs.git = {
+  home-manager.users.${config.pino.user.name}.programs.git = {
     enable = true;
 
     settings = {

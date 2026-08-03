@@ -1,4 +1,4 @@
-{ activeProfiles, lib, ... }:
+{ activeProfiles, config, lib, ... }:
 
 let
   profileGroups = {
@@ -23,7 +23,7 @@ let
       vpn = ./network/vpn.nix;
       hotspot = ./network/hotspot.nix;
     };
-    security.vault = ./security/vault.nix;
+    security.vault = ./security/vault;
     storage = {
       datasets = ./storage/datasets.nix;
       snapshots = ./storage/snapshots.nix;
@@ -37,18 +37,22 @@ let
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
   profileScript = builtins.replaceStrings
-    [ "@validProfiles@" "@profileGroups@" ]
+    [ "@validProfiles@" "@profileGroups@" "@configDir@" ]
     [
       (lib.concatStringsSep " " validProfiles)
       (lib.concatStringsSep " " (lib.mapAttrsToList
         (group: profiles: "'${group}:${lib.concatStringsSep "," (builtins.attrNames profiles)}'")
         profileGroups))
+      config.pino.configDir
     ]
     (builtins.readFile ../pino/profile.sh);
 in
 {
-  imports = [ ./options.nix ]
-    ++ map (name: profileModules.${name}) (lib.filter (name: builtins.hasAttr name profileModules) activeProfiles);
+  imports = [
+    ./desktop/options.nix
+    ./network/options.nix
+    ./security/vault/options.nix
+  ] ++ map (name: profileModules.${name}) (lib.filter (name: builtins.hasAttr name profileModules) activeProfiles);
 
   assertions = map (name: {
     assertion = builtins.hasAttr name profileModules;
@@ -87,12 +91,8 @@ in
     '';
     script = profileScript;
     fishCompletions = ''
-      set -l profile_cmds list status enable disable
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a list -d 'List profiles'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a status -d 'Show active profiles'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a enable -d 'Enable a profile'
-      complete -c pino -f -n '__fish_seen_subcommand_from profile; and not __fish_seen_subcommand_from $profile_cmds' -a disable -d 'Disable a profile'
-      complete -c pino -f -n '__fish_seen_subcommand_from enable disable' -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
+      complete -c pino -f -n '__fish_pino_at_path profile enable; or __fish_pino_at_path profile disable' \
+        -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
     '';
   };
 }

@@ -1,7 +1,7 @@
-{ ... }:
+{ config, ... }:
 
 {
-  home-manager.users.egrapa.programs.codex = {
+  home-manager.users.${config.pino.user.name}.programs.codex = {
     enable = true;
 
     settings = {
@@ -17,11 +17,11 @@
       };
 
       projects = {
-        "/home/egrapa/prog/nvim-config" = {
+        "${config.pino.user.home}/prog/nvim-config" = {
           trust_level = "trusted";
         };
 
-        "/home/egrapa/nixos-config" = {
+        "${config.pino.configDir}" = {
           trust_level = "trusted";
         };
       };

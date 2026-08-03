@@ -53,10 +53,6 @@ in
           *) echo "Usage: pino network hotspot start|stop" >&2; exit 1 ;;
         esac
       '';
-      fishCompletions = ''
-        complete -c pino -f -n '__fish_seen_subcommand_from hotspot' -a start -d 'Bring up AP'
-        complete -c pino -f -n '__fish_seen_subcommand_from hotspot' -a stop  -d 'Tear down AP'
-      '';
     };
 
     networking.firewall.trustedInterfaces = [ cfg.wifiInterface ];
@@ -85,7 +81,7 @@ in
     };
 
     system.activationScripts.hotspot-nmconnection = lib.mkIf (!vaultEnabled) ''
-      source=/home/egrapa/nixos-config/secrets/hotspot.conf
+      source=${lib.escapeShellArg "${config.pino.configDir}/secrets/hotspot.conf"}
       if [ -f "$source" ]; then
         ${pkgs.coreutils}/bin/mkdir -p /etc/NetworkManager/system-connections
         password="$(${pkgs.gnused}/bin/sed -n 's/^password=//p' "$source" | ${pkgs.coreutils}/bin/head -n 1)"

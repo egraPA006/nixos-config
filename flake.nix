@@ -40,6 +40,9 @@
         home-manager.nixosModules.home-manager
       ] ++ extraModules ++ [ (./hosts + "/${name}") ];
     };
+    re1 = mkHost "re-1" [
+      { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
+    ];
   in {
     devShells.x86_64-linux.cpp = pkgs.mkShell {
       packages = with pkgs; [
@@ -55,10 +58,10 @@
     };
 
     nixosConfigurations = {
-      re-1 = mkHost "re-1" [
-          { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
-      ];
+      re-1 = re1;
       la1n = mkHost "la1n" [ ];
     };
+
+    checks.x86_64-linux.re-1 = re1.config.system.build.toplevel;
   };
 }

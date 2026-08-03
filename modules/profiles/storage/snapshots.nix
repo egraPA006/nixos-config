@@ -36,7 +36,7 @@ in
         };
         allowUsers = lib.mkOption {
           type = lib.types.listOf lib.types.str;
-          default = [ "egrapa" ];
+          default = [ config.pino.user.name ];
         };
       };
     });

@@ -1,4 +1,10 @@
-{ ... }:
+{ config, lib, ... }:
+let
+  osScript = builtins.replaceStrings
+    [ "@configDir@" ]
+    [ (lib.escapeShellArg config.pino.configDir) ]
+    (builtins.readFile ./os.sh);
+in
 {
   pino.subcommands = {
     os = {
@@ -37,15 +43,7 @@
         selected system profile generation directly and does not evaluate a
         legacy NIX_PATH configuration.
       '';
-      script = builtins.readFile ./os.sh;
-      fishCompletions = ''
-        set -l os_cmds list rebuild update rollback gc
-        complete -c pino -f -n '__fish_seen_subcommand_from os; and not __fish_seen_subcommand_from $os_cmds' -a list -d 'List generations'
-        complete -c pino -f -n '__fish_seen_subcommand_from os; and not __fish_seen_subcommand_from $os_cmds' -a rebuild -d 'Rebuild and switch'
-        complete -c pino -f -n '__fish_seen_subcommand_from os; and not __fish_seen_subcommand_from $os_cmds' -a update -d 'Update inputs and rebuild'
-        complete -c pino -f -n '__fish_seen_subcommand_from os; and not __fish_seen_subcommand_from $os_cmds' -a rollback -d 'Activate a generation'
-        complete -c pino -f -n '__fish_seen_subcommand_from os; and not __fish_seen_subcommand_from $os_cmds' -a gc -d 'Keep current and previous'
-      '';
+      script = osScript;
     };
   };
 }

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-trap 'status=$?; echo "Failed at line $LINENO (exit $status): $BASH_COMMAND" >&2; exit "$status"' ERR
+
+report_error() {
+  local status="$1" line="$2" command="$3"
+  echo "Failed at line $line (exit $status): $command" >&2
+  exit "$status"
+}
+trap 'report_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 
 DEVICE="${1:-}"
 VAULT_LABEL="${2:-pino-vault-1}"

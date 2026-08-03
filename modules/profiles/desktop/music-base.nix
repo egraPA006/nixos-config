@@ -1,6 +1,6 @@
 # Shared low-latency audio base: imported by music-lite and music-full.
 
-{ ... }:
+{ config, ... }:
 {
   services.pipewire.extraConfig.pipewire."10-realtime" = {
     "context.properties" = {
@@ -15,5 +15,5 @@
     { domain = "@audio"; item = "memlock"; type = "-"; value = "unlimited"; }
   ];
 
-  users.users.egrapa.extraGroups = [ "audio" ];
+  users.users.${config.pino.user.name}.extraGroups = [ "audio" ];
 }

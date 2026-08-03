@@ -2,6 +2,7 @@
 {
   imports = [
     ../pino.nix
+    ./options.nix
     ./system.nix
     ./nix-settings.nix
     ./locale.nix

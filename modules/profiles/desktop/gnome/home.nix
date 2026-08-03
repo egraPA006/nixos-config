@@ -1,4 +1,4 @@
-{ hostname, lib, pkgs, ... }:
+{ hostname, lib, pinoConfigDir, pkgs, ... }:
 
 {
   home.activation = lib.mkIf (hostname == "re-1") (
@@ -113,8 +113,8 @@
     };
 
     "org/gnome/desktop/background" = {
-      picture-uri = "file:///home/egrapa/nixos-config/hosts/${hostname}/wallpaper.jpg";
-      picture-uri-dark = "file:///home/egrapa/nixos-config/hosts/${hostname}/wallpaper.jpg";
+      picture-uri = "file://${pinoConfigDir}/hosts/${hostname}/wallpaper.jpg";
+      picture-uri-dark = "file://${pinoConfigDir}/hosts/${hostname}/wallpaper.jpg";
       picture-options = "zoom";
     };
 

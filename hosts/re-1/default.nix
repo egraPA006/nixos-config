@@ -7,6 +7,12 @@
     ../../modules/hardware/nvidia.nix
   ];
 
+  pino.user = {
+    name = "egrapa";
+    home = "/home/egrapa";
+  };
+  pino.configDir = "${config.pino.user.home}/nixos-config";
+
   pino.profiles = {
     musicLite.localDir = "/data/fast/music-lite";
     musicFull = {
@@ -34,12 +40,16 @@
       localPath = "/data/slow/photos";
       scope = "shared";
     };
+    file_archive = {
+      localPath = "/data/fast/file_archive";
+      scope = "host";
+    };
   };
 
   pino.vault.secrets.github-ssh = {
     source = "ssh/github_ed25519";
-    target = "/home/egrapa/.ssh/github_ed25519";
-    owner = "egrapa";
+    target = "${config.pino.user.home}/.ssh/github_ed25519";
+    owner = config.pino.user.name;
     group = "users";
     mode = "0600";
     directoryMode = "0700";
@@ -48,8 +58,8 @@
   networking.hostName = "re-1";
 
   systemd.tmpfiles.rules = [
-    "z /data/fast 0755 egrapa users -"
-    "z /data/slow 0755 egrapa users -"
+    "z /data/fast 0755 ${config.pino.user.name} users -"
+    "z /data/slow 0755 ${config.pino.user.name} users -"
   ];
 
   services.hardware.openrgb.enable = true;
@@ -62,12 +72,12 @@
     AllowHybridSleep=no
   '';
 
-  home-manager.users.egrapa = {
+  home-manager.users.${config.pino.user.name} = {
     programs.ssh = {
       enable = true;
       enableDefaultConfig = false;
       settings."github.com" = {
-        IdentityFile = "/home/egrapa/.ssh/github_ed25519";
+        IdentityFile = "${config.pino.user.home}/.ssh/github_ed25519";
         IdentitiesOnly = true;
       };
     };

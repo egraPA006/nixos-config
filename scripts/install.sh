@@ -8,6 +8,7 @@ fi
 
 HOST="$1"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+NIX_EVAL=(nix --extra-experimental-features 'nix-command flakes' eval --raw)
 BOOTSTRAP_MOUNT="${PINO_BOOTSTRAP_MOUNT:-/run/pino-bootstrap}"
 BOOTSTRAP_LABEL="${PINO_VAULT_LABEL:-}"
 BOOTSTRAP_MAPPER="pino-install-vault"
@@ -149,19 +150,25 @@ mount_bootstrap() {
   trap cleanup_bootstrap EXIT
 }
 
-if [ ! -d "hosts/$HOST" ]; then
+if [ ! -d "$REPO_DIR/hosts/$HOST" ]; then
   echo "Error: hosts/$HOST does not exist"
   exit 1
 fi
 
-echo "Copying repo to /mnt/home/egrapa/nixos-config..."
-sudo mkdir -p /mnt/home/egrapa/
-sudo mkdir -p /mnt/home/egrapa/nixos-config
+PINO_USER="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.user.name")"
+PINO_HOME="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.user.home")"
+PINO_CONFIG_DIR="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.configDir")"
+INSTALL_CONFIG_DIR="/mnt$PINO_CONFIG_DIR"
+
+echo "Copying repo to $INSTALL_CONFIG_DIR..."
+sudo mkdir -p "/mnt$PINO_HOME" "$INSTALL_CONFIG_DIR"
 tar \
-  --exclude='./secrets/*.conf' \
-  --exclude='./secrets/keys' \
+  --exclude='./.git' \
+  --exclude='./secrets' \
+  --exclude='./result' \
+  --exclude='./result-*' \
   -C "$REPO_DIR" -cf - . \
-  | sudo tar -C /mnt/home/egrapa/nixos-config -xf -
+  | sudo tar -C "$INSTALL_CONFIG_DIR" -xf -
 
 if mount_bootstrap; then
   if [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/shared" ] && [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST" ]; then
@@ -186,18 +193,19 @@ if mount_data_backup; then
 fi
 
 echo "Installing NixOS for $HOST..."
-sudo nixos-install --flake "/mnt/home/egrapa/nixos-config#$HOST"
+sudo nixos-install --flake "$INSTALL_CONFIG_DIR#$HOST"
 
 if [ -f /mnt/var/lib/pino/secrets/user-password-hash ]; then
-  echo "Applying the provisioned egrapa password hash..."
-  sudo sh -c '{ printf "egrapa:"; head -n 1 /mnt/var/lib/pino/secrets/user-password-hash; } | chpasswd --root /mnt --encrypted'
+  echo "Applying the provisioned $PINO_USER password hash..."
+  PASSWORD_HASH="$(sudo head -n 1 /mnt/var/lib/pino/secrets/user-password-hash)"
+  printf '%s:%s\n' "$PINO_USER" "$PASSWORD_HASH" | sudo chpasswd --root /mnt --encrypted
 fi
 
 echo ""
 if [ "$SECRETS_PROVISIONED" = true ]; then
   echo "Done. Vault-backed system secrets were provisioned from $BOOTSTRAP_LABEL."
 else
-  echo "Done without vault secrets. Set the egrapa password with: passwd egrapa"
+  echo "Done without vault secrets. Set the $PINO_USER password with: passwd $PINO_USER"
 fi
 if [ "$DATA_RESTORED" = true ]; then
   echo "Non-secret profile data was restored from the selected pino-data medium."

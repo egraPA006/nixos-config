@@ -51,6 +51,8 @@ let
   '';
 in
 {
+  imports = [ ./options.nix ];
+
   system.activationScripts.pino-vault-secrets = {
     deps = [ "users" "groups" ];
     text = ''
@@ -59,7 +61,7 @@ in
     '';
   };
 
-  home-manager.users.egrapa = {
+  home-manager.users.${config.pino.user.name} = {
     programs = {
       keepassxc.enable = true;
 
@@ -270,10 +272,10 @@ in
         else
           echo "No system-secret tree exists at $MOUNT_POINT/system; bootstrap sync skipped." >&2
         fi
-        sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o egrapa -g users "$metadata" "$repository"
+          sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o ${lib.escapeShellArg config.pino.user.name} -g users "$metadata" "$repository"
         if [ ! -f "$metadata/restic-password" ]; then
           ${pkgs.openssl}/bin/openssl rand -base64 48 | sudo ${pkgs.coreutils}/bin/tee "$metadata/restic-password" >/dev/null
-          sudo ${pkgs.coreutils}/bin/chown egrapa:users "$metadata/restic-password"
+          sudo ${pkgs.coreutils}/bin/chown ${lib.escapeShellArg config.pino.user.name}:users "$metadata/restic-password"
           sudo ${pkgs.coreutils}/bin/chmod 0600 "$metadata/restic-password"
         fi
         if [ ! -f "$repository/config" ]; then
@@ -489,7 +491,7 @@ in
 
           sudo ${pkgs.coreutils}/bin/chown root:root "$MOUNT_POINT"
           sudo ${pkgs.coreutils}/bin/chmod 0711 "$MOUNT_POINT"
-          sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o egrapa -g users "$DATABASE_DIR"
+          sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o ${lib.escapeShellArg config.pino.user.name} -g users "$DATABASE_DIR"
           sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o root -g root "$MOUNT_POINT/system"
           echo "Vault opened at $MOUNT_POINT"
           ;;
@@ -570,20 +572,6 @@ in
           exit 1
           ;;
       esac
-    '';
-    fishCompletions = ''
-      set -l vault_cmds status open keepass close files populate disks backup check snapshots restore
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a status  -d 'Show vault status'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a open    -d 'Unlock and mount the vault'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a keepass -d 'Open KeePassXC'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a close   -d 'Unmount and lock the vault'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a disks   -d 'List backup disks'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a backup  -d 'Back up the vault'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a check   -d 'Check a vault backup'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a snapshots -d 'List vault snapshots'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a restore -d 'Stage or apply a selected snapshot'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a files -d 'List system-secret files'
-      complete -c pino -f -n '__fish_seen_subcommand_from vault; and not __fish_seen_subcommand_from $vault_cmds' -a populate -d 'Provision system-secret files'
     '';
   };
 }

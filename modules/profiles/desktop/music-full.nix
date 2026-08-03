@@ -5,10 +5,11 @@
 # Linux plugins: place .so files in data/music-full/plugins/linux — they sync to
 # localDir/plugins/linux.
 # Wine prefix is configured by pino.profiles.musicFull.winePrefix.
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
   cfg       = config.pino.profiles.musicFull;
-  configDir = "/home/egrapa/nixos-config";
+  configDir = config.pino.configDir;
+  user = config.pino.user;
   srcDir    = "${configDir}/data/music-full";
 
   wineNonet = pkgs.writeShellScriptBin "wine-nonet" ''
@@ -44,19 +45,19 @@ in
         ${pkgs.rsync}/bin/rsync -a "${srcDir}/plugins/linux/" "${cfg.localDir}/plugins/linux/"
         ${pkgs.rsync}/bin/rsync -a "${srcDir}/plugins/win/"   "${cfg.localDir}/plugins/win/"
         ${pkgs.rsync}/bin/rsync -a "${srcDir}/nki/"           "${cfg.localDir}/nki/"
-        chown -R egrapa:users "${cfg.localDir}"
+        chown -R ${lib.escapeShellArg user.name}:users "${cfg.localDir}"
 
-        yabridgectl_cfg="/home/egrapa/.config/yabridgectl/config.toml"
+        yabridgectl_cfg="${user.home}/.config/yabridgectl/config.toml"
         mkdir -p "$(dirname "$yabridgectl_cfg")"
         if ! grep -qF "${cfg.localDir}/plugins/win" "$yabridgectl_cfg" 2>/dev/null; then
           printf '\n[[directories]]\npath = "%s"\n' "${cfg.localDir}/plugins/win" >> "$yabridgectl_cfg"
         fi
-        chown -R egrapa:users "/home/egrapa/.config/yabridgectl"
+        chown -R ${lib.escapeShellArg user.name}:users "${user.home}/.config/yabridgectl"
 
-        yabridge_cfg="/home/egrapa/.config/yabridge/config.toml"
+        yabridge_cfg="${user.home}/.config/yabridge/config.toml"
         mkdir -p "$(dirname "$yabridge_cfg")"
         printf '[yabridge]\nwine-binary = "%s"\n' "${wineNonet}/bin/wine-nonet" > "$yabridge_cfg"
-        chown -R egrapa:users "/home/egrapa/.config/yabridge"
+        chown -R ${lib.escapeShellArg user.name}:users "${user.home}/.config/yabridge"
       else
         echo "music-full-sync: $parent not available, skipping" >&2
       fi
@@ -213,22 +214,11 @@ in
         esac
       '';
       fishCompletions = ''
-        set -l mf_no_sub 'not __fish_seen_subcommand_from list setup bridge bridge-add install install-nonet prefix status reaper'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a list           -d 'List available plugins'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a setup          -d 'Init Wine prefix and yabridge'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge         -d 'Sync yabridge bridges'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a bridge-add     -d 'Register a Win plugin directory'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a install        -d 'Run a Windows plugin installer (with network)'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a install-nonet  -d 'Run a Windows plugin installer (network blocked)'
-        complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from install'
-        complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from install-nonet'
-        complete -c pino -F -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from bridge-add'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a prefix     -d 'Print Wine prefix path'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a status     -d 'Show plugin counts'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-full; and $mf_no_sub" -a reaper     -d 'Launch Reaper (optional: samples for low latency)'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from reaper' -a '64'  -d '64 samples (~1.3ms)'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from reaper' -a '128' -d '128 samples (~2.7ms)'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-full; and __fish_seen_subcommand_from reaper' -a '256' -d '256 samples (~5.3ms)'
+        complete -c pino -F -n '__fish_pino_at_path desktop music-full install'
+        complete -c pino -F -n '__fish_pino_at_path desktop music-full install-nonet'
+        complete -c pino -F -n '__fish_pino_at_path desktop music-full bridge-add'
+        complete -c pino -f -n '__fish_pino_at_path desktop music-full reaper' \
+          -a '64 128 256' -d 'PipeWire latency samples'
       '';
     };
   };

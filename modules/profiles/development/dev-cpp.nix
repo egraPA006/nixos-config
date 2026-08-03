@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
   environment.systemPackages = with pkgs; [
@@ -11,7 +11,7 @@
     cmake
   ];
 
-  home-manager.users.egrapa = {
+  home-manager.users.${config.pino.user.name} = {
     programs.vscode.profiles.default.extensions = with pkgs.vscode-extensions; [
       llvm-vs-code-extensions.vscode-clangd
       mesonbuild.mesonbuild

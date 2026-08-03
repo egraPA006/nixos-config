@@ -40,7 +40,9 @@ bash scripts/disko.sh <hostname>
 bash scripts/install.sh <hostname>
 ```
 
-Then reboot. Set password for egrapa with `passwd` on first login.
+Then reboot. If the selected vault contains
+`bootstrap/{shared,hosts/<hostname>}/user-password-hash`, the installer applies
+it automatically; otherwise set the password with `passwd` on first login.
 
 ---
 
@@ -93,7 +95,9 @@ pino <command> <subcommand> help help for a leaf command
 > Snapshot volumes are declared per host with `pino.snapshots.volumes`. `re-1`
 > groups `root` and `home` as system volumes and `fast` and `slow` as data
 > volumes; `la1n` currently declares only `root`. Pino generates only the
-> snapshot branches supported by that host.
+> snapshot branches supported by that host. For multi-volume groups, Pino
+> records the actual per-volume Snapper numbers as one logical snapshot set;
+> rollback and deletion therefore remain correct when counters differ.
 
 ### Vault-backed system secrets
 
@@ -209,13 +213,14 @@ modules/
     pino-art.sh              # system-info art
     pino-info.sh             # system-info layout
   core/                      # minimal shared NixOS, user, shell, and Pino foundation
+    options.nix              # pino.user and pino.configDir machine identity
   boot/                      # selectable boot-loader policy
   desktop/                   # desktop networking and user integration
   server/                    # future server-specific foundation
   hardware/
     nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
     intel-laptop.nix         # Ice Lake iGPU, thermald
-  profiles/                  # NixOS profile registry and shared options
+  profiles/                  # NixOS profile registry and domain option schemas
     desktop/                 # graphical desktop, gaming, music, and desktop services
     development/             # development tools currently integrated through NixOS
     network/                 # VPN and hotspot capabilities
@@ -236,6 +241,10 @@ Home Manager is embedded in the NixOS configuration, so there is no separate
 `home-manager switch`. User-facing configuration lives beside the capability
 that owns it—for example, the Codex and GNOME profiles configure their own Home
 Manager options. Only the basic user and shell setup is always enabled.
+
+Each real host declares `pino.user.name`, `pino.user.home`, and
+`pino.configDir`. Shared modules and the installer consume those values instead
+of embedding a username or checkout path.
 
 The profile groups separate desktop-specific modules from capabilities that can
 later be reused by server hosts. A future standalone Home Manager entry point

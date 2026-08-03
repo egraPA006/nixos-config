@@ -1,4 +1,4 @@
-{ ... }:
+{ config, ... }:
 {
   nixpkgs.config.allowUnfree = true;
 
@@ -6,7 +6,7 @@
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
       auto-optimise-store = true;
-      trusted-users = [ "root" "egrapa" ];
+      trusted-users = [ "root" config.pino.user.name ];
     };
     gc = {
       automatic = true;

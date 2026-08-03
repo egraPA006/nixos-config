@@ -1,4 +1,4 @@
-CONFIG_DIR="/home/egrapa/nixos-config"
+CONFIG_DIR=@configDir@
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 HOST_NAME="$(hostname)"
 

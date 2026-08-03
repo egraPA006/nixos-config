@@ -1,9 +1,12 @@
-{ ... }:
+{ config, ... }:
 
+let
+  user = config.pino.user;
+in
 {
-  home-manager.users.egrapa = {
-    home.username = "egrapa";
-    home.homeDirectory = "/home/egrapa";
+  home-manager.users.${user.name} = {
+    home.username = user.name;
+    home.homeDirectory = user.home;
     home.stateVersion = "25.05";
     programs.home-manager.enable = true;
 

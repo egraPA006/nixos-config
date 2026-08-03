@@ -71,13 +71,9 @@ in
       '';
       script = script;
       fishCompletions = ''
-        set -l data_cmds list disks backup restore merge
-        complete -c pino -f -n '__fish_seen_subcommand_from data; and not __fish_seen_subcommand_from $data_cmds' -a list -d 'List datasets'
-        complete -c pino -f -n '__fish_seen_subcommand_from data; and not __fish_seen_subcommand_from $data_cmds' -a disks -d 'List media'
-        complete -c pino -f -n '__fish_seen_subcommand_from data; and not __fish_seen_subcommand_from $data_cmds' -a backup -d 'Replace medium from local'
-        complete -c pino -f -n '__fish_seen_subcommand_from data; and not __fish_seen_subcommand_from $data_cmds' -a restore -d 'Replace local from medium'
-        complete -c pino -f -n '__fish_seen_subcommand_from data; and not __fish_seen_subcommand_from $data_cmds' -a merge -d 'Merge medium into local'
-        complete -c pino -f -n '__fish_seen_subcommand_from backup restore merge' -a '${lib.concatStringsSep " " names}' -d 'Dataset'
+        complete -c pino -f \
+          -n '__fish_pino_at_path storage data backup; or __fish_pino_at_path storage data restore; or __fish_pino_at_path storage data merge' \
+          -a '${lib.concatStringsSep " " names}' -d 'Dataset'
       '';
     };
 

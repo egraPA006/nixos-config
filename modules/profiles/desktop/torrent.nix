@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg          = config.pino.profiles.torrent;
@@ -13,7 +13,7 @@ in
       if [ -d "$parent" ]; then
         mkdir -p "${downloadsDir}"
         mkdir -p "${incompleteDir}"
-        chown -R egrapa:users "${cfg.localDir}"
+        chown -R ${lib.escapeShellArg config.pino.user.name}:users "${cfg.localDir}"
       else
         echo "torrent-dirs: $parent not available, skipping" >&2
       fi
@@ -22,7 +22,7 @@ in
     services.transmission = {
       enable        = true;
       package       = pkgs.transmission_4;
-      user          = "egrapa";
+      user          = config.pino.user.name;
       group         = "users";
       openFirewall  = true;
       settings = {
@@ -150,14 +150,7 @@ in
         esac
       '';
       fishCompletions = ''
-        set -l tr_no_sub 'not __fish_seen_subcommand_from list share add status start stop'
-        complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a list   -d 'List all torrents'
-        complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a share  -d 'Show seeding/shareable torrents'
-        complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a add    -d 'Add a torrent by URL or magnet'
-        complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a status -d 'Show daemon status'
-        complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a start  -d 'Start Transmission daemon'
-        complete -c pino -f -n "__fish_seen_subcommand_from torrent; and $tr_no_sub" -a stop   -d 'Stop Transmission daemon'
-        complete -c pino -F -n '__fish_seen_subcommand_from torrent; and __fish_seen_subcommand_from add'
+        complete -c pino -F -n '__fish_pino_at_path desktop torrent add'
       '';
     };
   };

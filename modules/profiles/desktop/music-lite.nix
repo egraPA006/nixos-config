@@ -4,7 +4,7 @@
 { config, pkgs, ... }:
 let
   cfg        = config.pino.profiles.musicLite;
-  configDir  = "/home/egrapa/nixos-config";
+  configDir  = config.pino.configDir;
   srcDir     = "${configDir}/data/music-lite";
   ampsDir    = "${cfg.localDir}/amps";
   pluginUri  = "http://github.com/mikeoliphant/neural-amp-modeler-lv2";
@@ -204,23 +204,14 @@ EOF
         esac
       '';
       fishCompletions = ''
-        set -l ml_no_sub 'not __fish_seen_subcommand_from list start stop status log set-latency set-volume tuner'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a list        -d 'List available models'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a start       -d 'Load a model into PipeWire'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a stop        -d 'Stop the running node'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a status      -d 'Show running status'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a log         -d 'Show last jalv output'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-latency -d 'Set PipeWire quantum'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a set-volume  -d 'Set output level (100=default)'
-        complete -c pino -f -n "__fish_seen_subcommand_from music-lite; and $ml_no_sub" -a tuner       -d 'Start chromatic tuner (lingot)'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from tuner' \
+        complete -c pino -f -n '__fish_pino_at_path desktop music-lite tuner' \
           -a stop -d 'Stop the tuner'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from start' \
+        complete -c pino -f -n '__fish_pino_at_path desktop music-lite start' \
           -a "(ls ${ampsDir}/*.nam 2>/dev/null | string replace -r '.*/' ''' | string replace '.nam' ''')" \
           -d 'NAM model'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from set-latency' \
+        complete -c pino -f -n '__fish_pino_at_path desktop music-lite set-latency' \
           -a '32 64 128 256' -d 'samples'
-        complete -c pino -f -n '__fish_seen_subcommand_from music-lite; and __fish_seen_subcommand_from set-volume' \
+        complete -c pino -f -n '__fish_pino_at_path desktop music-lite set-volume' \
           -a '50 75 100 125 150 200' -d '%'
       '';
     };

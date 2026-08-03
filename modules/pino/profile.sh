@@ -1,5 +1,5 @@
 HOSTNAME_VAL=$(hostname)
-CONFIG_DIR="${NIXOS_CONFIG_DIR:-/home/egrapa/nixos-config}"
+CONFIG_DIR="${NIXOS_CONFIG_DIR:-@configDir@}"
 PROFILES_FILE="${CONFIG_DIR}/hosts/${HOSTNAME_VAL}/active-profiles.nix"
 VALID_PROFILES=(@validProfiles@)
 PROFILE_GROUPS=(@profileGroups@)
@@ -90,6 +90,19 @@ rebuild() {
   sudo nixos-rebuild switch --flake "${CONFIG_DIR}#${HOSTNAME_VAL}"
 }
 
+apply_profiles() {
+  local backup
+  backup="$(mktemp "${PROFILES_FILE}.backup.XXXXXX")"
+  cp -p "$PROFILES_FILE" "$backup"
+  if write_profiles "$@" && rebuild; then
+    rm -f "$backup"
+    return 0
+  fi
+  mv -f "$backup" "$PROFILES_FILE"
+  echo "Profile change failed; restored $PROFILES_FILE." >&2
+  return 1
+}
+
 command="${1:-}"
 case "$command" in
   enable)
@@ -101,8 +114,7 @@ case "$command" in
       [ "$candidate" = "$profile" ] && { echo "Profile '$profile' is already enabled"; exit 0; }
     done
     active+=("$profile")
-    write_profiles "${active[@]}"
-    rebuild
+    apply_profiles "${active[@]}"
     ;;
   disable)
     profile="${2:-}"
@@ -118,8 +130,7 @@ case "$command" in
       fi
     done
     [ "$found" = true ] || { echo "Profile '$profile' is not enabled"; exit 0; }
-    write_profiles "${remaining[@]}"
-    rebuild
+    apply_profiles "${remaining[@]}"
     ;;
   list)
     mapfile -t active < <(get_active)

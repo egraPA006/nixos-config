@@ -1,9 +1,9 @@
-{ ... }:
+{ config, ... }:
 {
   imports = [
     ./networking.nix
     ../boot/systemd-boot.nix
   ];
 
-  users.users.egrapa.extraGroups = [ "networkmanager" "audio" "video" ];
+  users.users.${config.pino.user.name}.extraGroups = [ "networkmanager" "audio" "video" ];
 }
