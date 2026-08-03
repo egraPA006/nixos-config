@@ -24,10 +24,22 @@
   };
 
   pino.snapshots.volumes = {
-    root = { subvolume = "/"; group = "system"; };
-    home = { subvolume = "/home"; group = "system"; };
-    fast = { subvolume = "/data/fast"; group = "data"; };
-    slow = { subvolume = "/data/slow"; group = "data"; };
+    root = {
+      subvolume = "/";
+      group = "system";
+    };
+    home = {
+      subvolume = "/home";
+      group = "system";
+    };
+    fast = {
+      subvolume = "/data/fast";
+      group = "data";
+    };
+    slow = {
+      subvolume = "/data/slow";
+      group = "data";
+    };
   };
 
   # Host paths for datasets that can be carried between machines on egrapa_hdd.
@@ -37,7 +49,7 @@
       scope = "shared";
     };
     photos = {
-      localPath = "/data/slow/photos";
+      localPath = "/data/fast/photos";
       scope = "shared";
     };
     file_archive = {
