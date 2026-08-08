@@ -367,7 +367,8 @@ This is the complete first-deployment order. Mosk currently enables only
    ssh-keygen -t ed25519 -a 100 -f ~/.ssh/mosk_ed25519 -C "vincent@mosk"
    ssh-add ~/.ssh/mosk_ed25519
    cat ~/.ssh/mosk_ed25519.pub
-   pino os package install xdotool
+   pino os package install dotool
+   pino os package install wl-clipboard
    ```
 
    Back up the private key in the encrypted vault before relying on it as the
@@ -422,18 +423,18 @@ This is the complete first-deployment order. Mosk currently enables only
    ```
 
    Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. If the provider's
-   web console does not support normal clipboard paste, focus its input field
-   and run this on re-1; the three-second delay gives you time to focus it:
+   web console does not support normal clipboard paste, copy the public key,
+   run this on re-1, and focus the console during the five-second delay:
 
    ```bash
-   sleep 3; xdotool type --delay 5 "$(cat ~/.ssh/mosk_ed25519.pub)"
+   sleep 5; printf 'type %s\n' "$(wl-paste --no-newline)" | dotool
    ```
 
-   This requires the console window to be accessible through X11/XWayland. The
-   script shows all disks, requires the exact selected path as confirmation,
-   generates hardware configuration, partitions and installs the server, and
-   prints its SSH fingerprint plus a one-time bootstrap code. No private key or
-   vault secret is entered on the server console.
+   This uses the current Wayland clipboard. The script shows all disks, requires
+   the exact selected path as confirmation, generates hardware configuration,
+   partitions and installs the server, and prints its SSH fingerprint plus a
+   one-time bootstrap code. No private key or vault secret is entered on the
+   server console.
 
 7. Save the `SHA256:...` SSH fingerprint and bootstrap code, then reboot and
    detach the ISO. The code expires one hour after staging:
