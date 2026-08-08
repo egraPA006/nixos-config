@@ -32,6 +32,11 @@
           group = lib.mkOption { type = lib.types.str; default = "root"; };
           mode = lib.mkOption { type = lib.types.str; default = "0600"; };
           directoryMode = lib.mkOption { type = lib.types.str; default = "0700"; };
+          recursive = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Copy every regular file below source into the target directory";
+          };
           restartUnits = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];

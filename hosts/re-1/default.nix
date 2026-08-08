@@ -66,13 +66,14 @@
     };
   };
 
-  pino.vault.secrets.github-ssh = {
-    source = "ssh/github_ed25519";
-    target = "${config.pino.user.home}/.ssh/github_ed25519";
+  pino.vault.secrets.ssh = {
+    source = "ssh";
+    target = "${config.pino.user.home}/.ssh";
     owner = config.pino.user.name;
     group = "users";
     mode = "0600";
     directoryMode = "0700";
+    recursive = true;
   };
 
   # Set this to the value printed by `pino server passwords id` on Mosk.

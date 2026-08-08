@@ -11,37 +11,51 @@ let
   syncConfigured = sync.serverId != null;
   provisionedDir = config.pino.vault.provisionedDir;
   declaredSecrets = builtins.attrNames config.pino.vault.secrets;
-  deploySecret = name: secret: lib.optionalString (secret.target != null) ''
-    source="$PROVISIONED_DIR/${secret.source}"
-    if [ -f "$source" ]; then
-      sudo ${pkgs.coreutils}/bin/install -d \
-        -o ${lib.escapeShellArg secret.owner} \
-        -g ${lib.escapeShellArg secret.group} \
-        -m ${lib.escapeShellArg secret.directoryMode} \
-        ${lib.escapeShellArg (builtins.dirOf secret.target)}
-      sudo ${pkgs.coreutils}/bin/install -D \
-        -o ${lib.escapeShellArg secret.owner} \
-        -g ${lib.escapeShellArg secret.group} \
-        -m ${lib.escapeShellArg secret.mode} \
-        "$source" ${lib.escapeShellArg secret.target}
-    fi
-  '';
+  renderSecret = privileged: name: secret:
+    let
+      sudo = lib.optionalString privileged "sudo ";
+      targetDirectory = if secret.recursive then secret.target else builtins.dirOf secret.target;
+      ownership = "${secret.owner}:${secret.group}";
+    in
+    lib.optionalString (secret.target != null) (if secret.recursive then ''
+      source="${if privileged then "$PROVISIONED_DIR" else provisionedDir}/${secret.source}"
+      target=${lib.escapeShellArg secret.target}
+      if [ -d "$source" ]; then
+        ${sudo}${pkgs.coreutils}/bin/install -d \
+          -o ${lib.escapeShellArg secret.owner} \
+          -g ${lib.escapeShellArg secret.group} \
+          -m ${lib.escapeShellArg secret.directoryMode} \
+          "$target"
+        while IFS= read -r -d "" file; do
+          relative="''${file#"$source"/}"
+          ${sudo}${pkgs.coreutils}/bin/install -D \
+            -o ${lib.escapeShellArg secret.owner} \
+            -g ${lib.escapeShellArg secret.group} \
+            -m ${lib.escapeShellArg secret.mode} \
+            "$file" "$target/$relative"
+        done < <(${sudo}${pkgs.findutils}/bin/find "$source" -type f -print0)
+        ${sudo}${pkgs.findutils}/bin/find "$target" -type d \
+          -exec ${pkgs.coreutils}/bin/chown ${lib.escapeShellArg ownership} {} + \
+          -exec ${pkgs.coreutils}/bin/chmod ${lib.escapeShellArg secret.directoryMode} {} +
+      fi
+    '' else ''
+      source="${if privileged then "$PROVISIONED_DIR" else provisionedDir}/${secret.source}"
+      if [ -f "$source" ]; then
+        ${sudo}${pkgs.coreutils}/bin/install -d \
+          -o ${lib.escapeShellArg secret.owner} \
+          -g ${lib.escapeShellArg secret.group} \
+          -m ${lib.escapeShellArg secret.directoryMode} \
+          ${lib.escapeShellArg targetDirectory}
+        ${sudo}${pkgs.coreutils}/bin/install -D \
+          -o ${lib.escapeShellArg secret.owner} \
+          -g ${lib.escapeShellArg secret.group} \
+          -m ${lib.escapeShellArg secret.mode} \
+          "$source" ${lib.escapeShellArg secret.target}
+      fi
+    '');
+  deploySecret = renderSecret true;
   deploySecrets = lib.concatStringsSep "\n" (lib.mapAttrsToList deploySecret config.pino.vault.secrets);
-  activateSecret = name: secret: lib.optionalString (secret.target != null) ''
-    source=${lib.escapeShellArg "${provisionedDir}/${secret.source}"}
-    if [ -f "$source" ]; then
-      ${pkgs.coreutils}/bin/install -d \
-        -o ${lib.escapeShellArg secret.owner} \
-        -g ${lib.escapeShellArg secret.group} \
-        -m ${lib.escapeShellArg secret.directoryMode} \
-        ${lib.escapeShellArg (builtins.dirOf secret.target)}
-      ${pkgs.coreutils}/bin/install -D \
-        -o ${lib.escapeShellArg secret.owner} \
-        -g ${lib.escapeShellArg secret.group} \
-        -m ${lib.escapeShellArg secret.mode} \
-        "$source" ${lib.escapeShellArg secret.target}
-    fi
-  '';
+  activateSecret = renderSecret false;
   activateSecrets = lib.concatStringsSep "\n" (lib.mapAttrsToList activateSecret config.pino.vault.secrets);
   restartUnits = lib.unique (lib.concatMap (secret: secret.restartUnits) (lib.attrValues config.pino.vault.secrets));
   keepassxcVault = pkgs.writeShellScript "keepassxc-vault" ''

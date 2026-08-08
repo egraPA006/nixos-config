@@ -148,8 +148,13 @@ pino.vault.secrets.proxy-config = {
 };
 ```
 
-For `re-1`, `system/hosts/re-1/ssh/github_ed25519` is installed as the
-user-owned `~/.ssh/github_ed25519`; Home Manager selects it for `github.com`.
+Set `recursive = true` to copy every regular file below `source` into a target
+directory. Recursive secrets preserve their relative layout, ignore symlinks,
+and do not delete unrelated files already present in the target.
+
+For `re-1`, every regular file below `system/hosts/re-1/ssh/` is installed into
+the user-owned `~/.ssh/` tree; Home Manager selects `github_ed25519` for
+`github.com`.
 
 `pino storage vault backup [disk]` also updates the selected disk's `bootstrap/` tree.
 During installation, `scripts/install.sh` selects the only connected
