@@ -1,18 +1,28 @@
-{ activeProfiles, pkgs, config, lib, ... }:
+{
+  activeProfiles,
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
   vaultEnabled = lib.elem "vault" activeProfiles;
   connections = config.pino.profiles.vpn.connections;
   connectionNames = builtins.attrNames connections;
-  fallbackConfigs = lib.concatMapStringsSep "\n" (name:
-    let connection = connections.${name};
-    in ''
+  fallbackConfigs = lib.concatMapStringsSep "\n" (
+    name:
+    let
+      connection = connections.${name};
+    in
+    ''
       source=${lib.escapeShellArg "${config.pino.configDir}/secrets/${connection.source}"}
       if [ -f "$source" ]; then
         ${pkgs.coreutils}/bin/install -D -m 0600 "$source" ${lib.escapeShellArg "/etc/amneziawg/${name}.conf"}
       fi
-    '') connectionNames;
+    ''
+  ) connectionNames;
 in
 {
   programs.amnezia-vpn.enable = true;
@@ -22,12 +32,21 @@ in
     message = "AmneziaWG connection name '${name}' must be 1-15 safe interface characters";
   }) connectionNames;
 
-  pino.vault.secrets = lib.mkIf vaultEnabled (lib.mapAttrs' (name: connection:
-    lib.nameValuePair "vpn-${name}-config" {
-      source = connection.source;
-      target = "/etc/amneziawg/${name}.conf";
-      restartUnits = [ "amneziawg@${name}.service" ];
-    }) connections);
+  pino.vault.secrets = lib.mkIf vaultEnabled (
+    lib.mapAttrs' (
+      name: connection:
+      lib.nameValuePair "vpn-${name}-config" {
+        source = connection.source;
+        target = "/etc/amneziawg/${name}.conf";
+        directoryMode = "0755";
+        restartUnits = [ "amneziawg@${name}.service" ];
+      }
+    ) connections
+  );
+
+  systemd.tmpfiles.rules = [
+    "d /etc/amneziawg 0755 root root -"
+  ];
 
   system.activationScripts.amneziawg-config = lib.mkIf (!vaultEnabled) ''
     ${pkgs.coreutils}/bin/mkdir -p /etc/amneziawg
@@ -44,7 +63,7 @@ in
   systemd.services."amneziawg@" = {
     description = "AmneziaWG VPN connection %i";
     after = [ "network.target" ];
-    wantedBy = [];
+    wantedBy = [ ];
 
     serviceConfig = {
       Type = "oneshot";
@@ -65,6 +84,11 @@ in
         marker=/var/lib/amneziawg/autostart
         [ -f "$marker" ] || exit 0
         name="$(${pkgs.coreutils}/bin/cat "$marker")"
+        if [ -z "$name" ] && [ -f /etc/amneziawg/awg0.conf ]; then
+          name=awg0
+          ${pkgs.coreutils}/bin/printf '%s\n' "$name" > "$marker"
+          ${pkgs.coreutils}/bin/chmod 0600 "$marker"
+        fi
         [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,14}$ ]] || exit 1
         [ -f "/etc/amneziawg/$name.conf" ] || exit 1
         ${pkgs.systemd}/bin/systemctl start "amneziawg@$name.service"
@@ -76,9 +100,18 @@ in
     description = "AmneziaWG VPN";
     commands = {
       list.description = "List installed named VPN connections";
-      on = { description = "Select, start, and autostart a connection"; usage = "[name]"; };
-      off = { description = "Stop one or all connections and disable autostart"; usage = "[name|all]"; };
-      status = { description = "Show active VPN connections and peers"; usage = "[name]"; };
+      on = {
+        description = "Select, start, and autostart a connection";
+        usage = "[name]";
+      };
+      off = {
+        description = "Stop one or all connections and disable autostart";
+        usage = "[name|all]";
+      };
+      status = {
+        description = "Show active VPN connections and peers";
+        usage = "[name]";
+      };
     };
     helpText = ''
       pino network vpn — AmneziaWG VPN
@@ -87,7 +120,12 @@ in
         pino network vpn off [name]    Stop one connection (all when omitted)
         pino network vpn status [name] Show service and peer status
 
-        Configs: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored secrets/ fallback"}.
+        Configs: ${
+          if vaultEnabled then
+            "provisioned from the encrypted vault"
+          else
+            "local gitignored secrets/ fallback"
+        }.
         Pino selects one full-route connection at a time to avoid route conflicts.
     '';
     script = builtins.readFile ../../pino/vpn.sh;
