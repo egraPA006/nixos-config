@@ -324,26 +324,137 @@ pino bootstrap server check mosk
 
 #### Install and bootstrap Mosk
 
-Boot the NixOS ISO, clone this public repository, configure Mosk's public
-profile values, and run:
+This is the complete first-deployment order. Mosk currently enables only
+`server-vpn`, so a domain is not required.
 
-```bash
-cd nixos-config
-sudo scripts/server-stage.sh mosk /dev/vda
-```
+1. On re-1, validate the exact revision that the live ISO will clone:
 
-The script shows all disks, requires the exact selected path as confirmation,
-asks for the administrator SSH public key, generates hardware configuration,
-partitions and installs the server, and prints its SSH fingerprint plus a
-one-time bootstrap code. The code expires after one hour. No secret or private
-key is entered on the server console.
+   ```bash
+   cd ~/nixos-config
+   git status
+   git diff --check
+   nix flake check --no-build
+   ```
 
-After reboot, compare the SSH fingerprint printed on the server console and
-provision it from the machine with the mounted vault:
+   Review the diff, commit all intended tracked and new files, then `git push`.
+   Never add anything below `/data/secrets` or an exported client config.
 
-```bash
-pino bootstrap server apply mosk 203.0.113.10
-```
+2. Create a dedicated administrator key. Keep its passphrase; only its `.pub`
+   file is pasted into the installer:
+
+   ```bash
+   ssh-keygen -t ed25519 -a 100 -f ~/.ssh/mosk_ed25519 -C "vincent@mosk"
+   ssh-add ~/.ssh/mosk_ed25519
+   cat ~/.ssh/mosk_ed25519.pub
+   ```
+
+   Back up the private key in the encrypted vault before relying on it as the
+   only remote access method.
+
+3. Once the provider has assigned the public IP, prepare all initial VPN
+   artifacts on re-1. `init` is one-time; use `list` instead if state exists:
+
+   ```bash
+   pino os rebuild
+   pino storage vault open
+   pino bootstrap server vpn init mosk 203.0.113.10
+   pino bootstrap server vpn list mosk
+   pino bootstrap server vpn export mosk re-1 --install
+   pino storage vault populate
+   pino bootstrap server check mosk
+   ```
+
+   The final check must show `server/awg0.conf` as `OK`.
+
+4. On the NixOS live ISO, verify networking and identify the whole installation
+   disk. The selected disk will be erased:
+
+   ```bash
+   ip -br address
+   ip route
+   ping -c 3 cache.nixos.org
+   lsblk -d -o NAME,PATH,SIZE,MODEL,SERIAL
+   ```
+
+5. Clone the pushed configuration and confirm the VPN-only profile:
+
+   ```bash
+   nix-shell -p git
+   git clone https://github.com/egrapa/nixos-config
+   cd nixos-config
+   cat hosts/mosk/active-profiles.nix
+   ```
+
+6. Stage the server, replacing `/dev/vda` with the verified whole disk:
+
+   ```bash
+   sudo scripts/server-stage.sh mosk /dev/vda
+   ```
+
+   Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. The script shows
+   all disks, requires the exact selected path as confirmation, generates
+   hardware configuration, partitions and installs the server, and prints its
+   SSH fingerprint plus a one-time bootstrap code. No private key or vault
+   secret is entered on the server console.
+
+7. Save the `SHA256:...` SSH fingerprint and bootstrap code, then reboot and
+   detach the ISO. The code expires one hour after staging:
+
+   ```bash
+   reboot
+   ```
+
+   If needed, reproduce the fingerprint through the trusted provider console:
+
+   ```bash
+   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+   ```
+
+8. From re-1, provision the manifest-listed server file. Type the console
+   fingerprint and one-time code when prompted:
+
+   ```bash
+   ssh-add ~/.ssh/mosk_ed25519
+   pino bootstrap server apply mosk 203.0.113.10
+   ```
+
+9. Verify the installed server and private VPN:
+
+   ```bash
+   ssh -i ~/.ssh/mosk_ed25519 vincent@203.0.113.10
+   pino server status
+   pino server disk
+   pino server vpn status
+   ```
+
+   Then, back on re-1:
+
+   ```bash
+   pino network vpn list
+   pino network vpn on mosk
+   ping -c 3 10.77.0.1
+   pino network vpn status mosk
+   ```
+
+10. Export the Android peer, transfer it locally, import it into AmneziaWG, and
+    remove the temporary exported copy afterward:
+
+    ```bash
+    pino bootstrap server vpn export mosk phone ~/Downloads/mosk-phone.conf
+    ```
+
+11. The staging checkout now contains generated, non-secret Mosk hardware and
+    disk files. Copy them back to re-1, review, commit, and push them so future
+    rebuilds reproduce the installed machine:
+
+    ```bash
+    cd ~/nixos-config
+    scp -i ~/.ssh/mosk_ed25519 \
+      vincent@203.0.113.10:~/nixos-config/hosts/mosk/hardware.nix \
+      vincent@203.0.113.10:~/nixos-config/hosts/mosk/disko.nix \
+      hosts/mosk/
+    git diff -- hosts/mosk
+    ```
 
 The receiver accepts only regular files declared by the evaluated manifest and
 only destinations below `/var/lib/pino/secrets`. It rejects extra files,
