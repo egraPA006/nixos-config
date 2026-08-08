@@ -3,6 +3,15 @@
 let
   configDir = config.pino.configDir;
   vaultRoot = config.pino.bootstrap.vaultRoot;
+  vpnBootstrap = builtins.replaceStrings
+    [ "@awg@" "@nix@" "@findmnt@" "@find@" ]
+    [
+      "${pkgs.amneziawg-tools}/bin/awg"
+      "${pkgs.nix}/bin/nix"
+      "${pkgs.util-linux}/bin/findmnt"
+      "${pkgs.findutils}/bin/find"
+    ]
+    (builtins.readFile ./vpn-bootstrap.sh);
 in
 {
   pino.subcommands.bootstrap = {
@@ -13,6 +22,22 @@ in
         check = { description = "Check a host's required files in the local vault"; usage = "<host>"; };
         apply = { description = "Perform the one-time initial server bootstrap"; usage = "<host> <address>"; };
         sync = { description = "Synchronize changed server secrets later"; usage = "<host> <address>"; };
+        vpn = {
+          description = "Generate and manage AmneziaWG server peers";
+          commands = {
+            init = { description = "Create server state and initial peers"; usage = "<host> <endpoint> [peer ...]"; };
+            list = { description = "List a server's VPN peers"; usage = "<host>"; };
+            export = { description = "Export or install one client configuration"; usage = "<host> <peer> [path|--install]"; };
+            set-endpoint = { description = "Change the endpoint in every client configuration"; usage = "<host> <endpoint>"; };
+            peer = {
+              description = "Add or remove individual VPN peers";
+              commands = {
+                add = { description = "Add a peer without rotating existing keys"; usage = "<host> <peer>"; };
+                remove = { description = "Remove a peer and regenerate server configuration"; usage = "<host> <peer>"; };
+              };
+            };
+          };
+        };
       };
       helpText = ''
         The source is ${vaultRoot}/<host>/ and mirrors the remote
@@ -24,6 +49,16 @@ in
         host="''${2:-}"
         address="''${3:-}"
         [ -n "$host" ] || { echo "A host name is required." >&2; exit 1; }
+        case "$operation" in
+          init|list|export|set-endpoint|add|remove)
+            export PINO_CONFIG_DIR=${lib.escapeShellArg configDir}
+            export PINO_VAULT_ROOT=${lib.escapeShellArg vaultRoot}
+            export PINO_OPERATION="$operation"
+            shift
+            ${vpnBootstrap}
+            exit
+            ;;
+        esac
         flake=${lib.escapeShellArg configDir}
         source_root=${lib.escapeShellArg vaultRoot}/"$host"
         attr="path:$flake#nixosConfigurations.$host.config.pino.bootstrap.secrets"

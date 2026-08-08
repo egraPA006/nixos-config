@@ -3,22 +3,35 @@
 let
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
   vaultEnabled = lib.elem "vault" activeProfiles;
+  connections = config.pino.profiles.vpn.connections;
+  connectionNames = builtins.attrNames connections;
+  fallbackConfigs = lib.concatMapStringsSep "\n" (name:
+    let connection = connections.${name};
+    in ''
+      source=${lib.escapeShellArg "${config.pino.configDir}/secrets/${connection.source}"}
+      if [ -f "$source" ]; then
+        ${pkgs.coreutils}/bin/install -D -m 0600 "$source" ${lib.escapeShellArg "/etc/amneziawg/${name}.conf"}
+      fi
+    '') connectionNames;
 in
 {
   programs.amnezia-vpn.enable = true;
 
-  pino.vault.secrets.awg0-config = lib.mkIf vaultEnabled {
-    source = "awg0.conf";
-    target = "/etc/amneziawg/awg0.conf";
-    restartUnits = [ "amneziawg.service" ];
-  };
+  assertions = map (name: {
+    assertion = builtins.match "[A-Za-z0-9][A-Za-z0-9_-]{0,14}" name != null;
+    message = "AmneziaWG connection name '${name}' must be 1-15 safe interface characters";
+  }) connectionNames;
+
+  pino.vault.secrets = lib.mkIf vaultEnabled (lib.mapAttrs' (name: connection:
+    lib.nameValuePair "vpn-${name}-config" {
+      source = connection.source;
+      target = "/etc/amneziawg/${name}.conf";
+      restartUnits = [ "amneziawg@${name}.service" ];
+    }) connections);
 
   system.activationScripts.amneziawg-config = lib.mkIf (!vaultEnabled) ''
     ${pkgs.coreutils}/bin/mkdir -p /etc/amneziawg
-    source=${lib.escapeShellArg "${config.pino.configDir}/secrets/awg0.conf"}
-    if [ -f "$source" ]; then
-      ${pkgs.coreutils}/bin/install -m 0600 "$source" /etc/amneziawg/awg0.conf
-    fi
+    ${fallbackConfigs}
   '';
 
   boot.extraModulePackages = [ config.boot.kernelPackages.amneziawg ];
@@ -28,44 +41,54 @@ in
     amneziawg-tools
   ];
 
-  systemd.services.amneziawg = {
-    description = "AmneziaWG VPN";
+  systemd.services."amneziawg@" = {
+    description = "AmneziaWG VPN connection %i";
     after = [ "network.target" ];
     wantedBy = [];
 
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${awgQuick} up /etc/amneziawg/awg0.conf";
-      ExecStop = "${awgQuick} down /etc/amneziawg/awg0.conf";
+      ExecStart = "${awgQuick} up /etc/amneziawg/%i.conf";
+      ExecStop = "${awgQuick} down /etc/amneziawg/%i.conf";
     };
   };
 
   systemd.services.amneziawg-autostart = {
     description = "AmneziaWG VPN autostart";
-    after = [ "network.target" "amneziawg.service" ];
+    after = [ "network.target" ];
     wantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.bash}/bin/bash -c 'if [ -f /var/lib/amneziawg/autostart ]; then systemctl start amneziawg; fi'";
+      ExecStart = pkgs.writeShellScript "amneziawg-autostart" ''
+        marker=/var/lib/amneziawg/autostart
+        [ -f "$marker" ] || exit 0
+        name="$(${pkgs.coreutils}/bin/cat "$marker")"
+        [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,14}$ ]] || exit 1
+        [ -f "/etc/amneziawg/$name.conf" ] || exit 1
+        ${pkgs.systemd}/bin/systemctl start "amneziawg@$name.service"
+      '';
     };
   };
 
   pino.subcommands.network.commands.vpn = {
     description = "AmneziaWG VPN";
     commands = {
-      on.description = "Start VPN and enable boot autostart";
-      off.description = "Stop VPN and disable boot autostart";
-      status.description = "Show VPN service status";
+      list.description = "List installed named VPN connections";
+      on = { description = "Select, start, and autostart a connection"; usage = "[name]"; };
+      off = { description = "Stop one or all connections and disable autostart"; usage = "[name|all]"; };
+      status = { description = "Show active VPN connections and peers"; usage = "[name]"; };
     };
     helpText = ''
       pino network vpn — AmneziaWG VPN
-        pino network vpn on       Start VPN + enable autostart on boot
-        pino network vpn off      Stop VPN + disable autostart
-        pino network vpn status   Show service status
+        pino network vpn list          List saved connections
+        pino network vpn on [name]     Select one connection and enable autostart
+        pino network vpn off [name]    Stop one connection (all when omitted)
+        pino network vpn status [name] Show service and peer status
 
-        Config: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored secrets/awg0.conf fallback"}.
+        Configs: ${if vaultEnabled then "provisioned from the encrypted vault" else "local gitignored secrets/ fallback"}.
+        Pino selects one full-route connection at a time to avoid route conflicts.
     '';
     script = builtins.readFile ../../pino/vpn.sh;
   };

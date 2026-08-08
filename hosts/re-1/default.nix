@@ -14,6 +14,10 @@
   pino.configDir = "${config.pino.user.home}/nixos-config";
 
   pino.profiles = {
+    vpn.connections = {
+      awg0.source = "awg0.conf";
+      mosk = { };
+    };
     musicLite.localDir = "/data/fast/music-lite";
     musicFull = {
       localDir = "/data/fast/music-full";
