@@ -84,6 +84,12 @@ pino <command> <subcommand> help help for a leaf command
 
 > System-secret source files live only under `/data/secrets/system/{shared,hosts/<hostname>}`. `pino storage vault populate` merges the shared and current-host trees into root-only `/var/lib/pino/secrets`; Nix modules declare only filenames, destinations, permissions, and restart units.
 
+> When the `vault` profile is enabled, `pino os rebuild` and `pino os update`
+> ask whether to populate before evaluating the new system. Answering yes
+> requires the local vault to be open and refreshes the provisioned cache;
+> answering no rebuilds using its existing root-only copies. Rebuilds never
+> unlock the vault automatically.
+
 > Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its system-secret tree into the disk's root-only installation bootstrap.
 
 Create a complete removable backup disk with matching data and vault IDs:

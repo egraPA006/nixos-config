@@ -1,8 +1,11 @@
-{ config, lib, ... }:
+{ activeProfiles, config, lib, ... }:
 let
   osScript = builtins.replaceStrings
-    [ "@configDir@" ]
-    [ (lib.escapeShellArg config.pino.configDir) ]
+    [ "@configDir@" "@vaultEnabled@" ]
+    [
+      (lib.escapeShellArg config.pino.configDir)
+      (if lib.elem "vault" activeProfiles then "true" else "false")
+    ]
     (builtins.readFile ./os.sh);
 in
 {

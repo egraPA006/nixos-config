@@ -1,6 +1,8 @@
+#!/usr/bin/env bash
 CONFIG_DIR=@configDir@
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 HOST_NAME="$(hostname)"
+VAULT_ENABLED=@vaultEnabled@
 
 confirm() {
   local prompt="$1" answer
@@ -19,10 +21,26 @@ current_generation() {
   list_generations | awk '$NF == "(current)" { print $1; exit }'
 }
 
+maybe_populate_vault() {
+  local answer
+  [ "$VAULT_ENABLED" = true ] || return 0
+  read -r -p "Populate system secrets from the mounted vault before rebuilding? [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES)
+      if ! pino storage vault populate; then
+        echo "Vault population failed; rebuild cancelled." >&2
+        return 1
+      fi
+      ;;
+    *) echo "Using the existing provisioned secret copies." ;;
+  esac
+}
+
 rebuild_os() {
   echo "Host:   $HOST_NAME"
   echo "Flake:  $CONFIG_DIR#$HOST_NAME"
   confirm "Rebuild and switch this system?" || return
+  maybe_populate_vault || return
   sudo nixos-rebuild switch --flake "$CONFIG_DIR#$HOST_NAME"
 }
 
@@ -30,6 +48,7 @@ update_os() {
   echo "This updates flake inputs and rebuilds $HOST_NAME."
   echo "Flake: $CONFIG_DIR"
   confirm "Continue with the update?" || return
+  maybe_populate_vault || return
   nix flake update --flake "$CONFIG_DIR"
   sudo nixos-rebuild switch --flake "$CONFIG_DIR#$HOST_NAME"
 }
