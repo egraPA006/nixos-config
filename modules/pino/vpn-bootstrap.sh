@@ -7,7 +7,6 @@ AWG="@awg@"
 NIX="@nix@"
 FINDMNT="@findmnt@"
 FIND="@find@"
-AWK="@awk@"
 
 host="${1:-}"
 [ -n "$host" ] || { echo "A server host name is required." >&2; exit 1; }
@@ -70,7 +69,7 @@ existing_config_path() {
 config_value() {
   local file="$1"
   local key="$2"
-  sudo "$AWK" -v key="$key" '
+  sudo "@awk@" -v key="$key" '
     index($0, key " = ") == 1 {
       sub(/^[^=]*=[[:space:]]*/, "")
       print
@@ -141,11 +140,11 @@ append_parameters() {
 
 peer_exists() {
   local name="$1"
-  sudo "$AWK" -v marker="# $name" '$0 == marker { found=1 } END { exit !found }' "$server_config"
+  sudo "@awk@" -v marker="# $name" '$0 == marker { found=1 } END { exit !found }' "$server_config"
 }
 
 peer_rows() {
-  sudo "$AWK" '
+  sudo "@awk@" '
     /^\[Peer\]$/ { name=""; address=""; next }
     /^# / { name=substr($0, 3); next }
     /^AllowedIPs = / {
@@ -215,7 +214,7 @@ add_peer() {
     echo 'PersistentKeepalive = 25'
   } >> "$client_tmp"
 
-  sudo cat "$server_config" > "$server_tmp"
+  sudo cat "$server_config" | tee "$server_tmp" >/dev/null
   {
     echo
     echo '[Peer]'
@@ -245,7 +244,7 @@ add_peer() {
 remove_peer_block() {
   local name="$1"
   local output="$2"
-  sudo "$AWK" -v marker="# $name" '
+  sudo cat "$server_config" | "@awk@" -v marker="# $name" '
     BEGIN { RS="\n\\[Peer\\]\n"; ORS="" }
     NR == 1 { printf "%s", $0; next }
     {
@@ -255,7 +254,7 @@ remove_peer_block() {
       if (!found) printf "\n[Peer]\n%s", $0
     }
     END { printf "\n" }
-  ' "$server_config" > "$output"
+  ' > "$output"
 }
 
 update_endpoint_file() {
@@ -264,10 +263,10 @@ update_endpoint_file() {
   local runtime_dir output
   runtime_dir="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/pino-awg-endpoint.XXXXXX")"
   output="$runtime_dir/config"
-  sudo "$AWK" -v value="$value" '
+  sudo cat "$file" | "@awk@" -v value="$value" '
     /^Endpoint = / { print "Endpoint = " value; next }
     { print }
-  ' "$file" > "$output"
+  ' > "$output"
   sudo install -o root -g root -m 0600 "$output" "$file"
   rm -rf "$runtime_dir"
 }
@@ -285,7 +284,7 @@ migrate_legacy() {
   trap 'rm -rf "$runtime_dir"' RETURN
   migrated_server="$runtime_dir/server.conf"
   printf '# PinoEndpoint = %s\n' "$endpoint" > "$migrated_server"
-  sudo cat "$legacy_root/generated/server.conf" >> "$migrated_server"
+  sudo cat "$legacy_root/generated/server.conf" | tee -a "$migrated_server" >/dev/null
 
   # Validate every destination before changing the canonical system tree.
   while IFS= read -r name; do
@@ -433,10 +432,10 @@ case "$PINO_OPERATION" in
     runtime_dir="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/pino-awg-endpoint.XXXXXX")"
     trap 'rm -rf "$runtime_dir"' EXIT INT TERM
     server_tmp="$runtime_dir/server.conf"
-    sudo "$AWK" -v value="$new_endpoint" '
+    sudo cat "$server_config" | "@awk@" -v value="$new_endpoint" '
       /^# PinoEndpoint = / { print "# PinoEndpoint = " value; next }
       { print }
-    ' "$server_config" > "$server_tmp"
+    ' > "$server_tmp"
     sudo install -o root -g root -m 0600 "$server_tmp" "$server_config"
     while IFS= read -r source_file; do
       [ -n "$source_file" ] || continue
