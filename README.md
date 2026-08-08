@@ -367,6 +367,7 @@ This is the complete first-deployment order. Mosk currently enables only
    ssh-keygen -t ed25519 -a 100 -f ~/.ssh/mosk_ed25519 -C "vincent@mosk"
    ssh-add ~/.ssh/mosk_ed25519
    cat ~/.ssh/mosk_ed25519.pub
+   pino os package install xdotool
    ```
 
    Back up the private key in the encrypted vault before relying on it as the
@@ -408,17 +409,29 @@ This is the complete first-deployment order. Mosk currently enables only
    cat hosts/mosk/active-profiles.nix
    ```
 
-6. Stage the server, replacing `/dev/vda` with the verified whole disk:
+6. Stage the server, replacing `/dev/vda` with the verified whole disk. The
+   optional third argument selects partitioning. `direct` uses the hard-coded
+   Mosk layout without downloading Disko and is recommended for small live
+   environments; `disko` realizes the declarative layout but needs more
+   temporary space. When omitted, the script asks and defaults to `direct`:
 
    ```bash
-   sudo scripts/server-stage.sh mosk /dev/vda
+   sudo scripts/server-stage.sh mosk /dev/vda direct
    ```
 
-   Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. The script shows
-   all disks, requires the exact selected path as confirmation, generates
-   hardware configuration, partitions and installs the server, and prints its
-   SSH fingerprint plus a one-time bootstrap code. No private key or vault
-   secret is entered on the server console.
+   Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. If the provider's
+   web console does not support normal clipboard paste, focus its input field
+   and run this on re-1; the three-second delay gives you time to focus it:
+
+   ```bash
+   sleep 3; xdotool type --delay 5 "$(cat ~/.ssh/mosk_ed25519.pub)"
+   ```
+
+   This requires the console window to be accessible through X11/XWayland. The
+   script shows all disks, requires the exact selected path as confirmation,
+   generates hardware configuration, partitions and installs the server, and
+   prints its SSH fingerprint plus a one-time bootstrap code. No private key or
+   vault secret is entered on the server console.
 
 7. Save the `SHA256:...` SSH fingerprint and bootstrap code, then reboot and
    detach the ISO. The code expires one hour after staging:
