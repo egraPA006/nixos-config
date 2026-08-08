@@ -264,6 +264,10 @@ case "$PINO_OPERATION" in
       destination="$PINO_VAULT_ROOT/$name/vpn/$host.conf"
       sudo install -D -o root -g root -m 0600 "$source_file" "$destination"
       echo "Installed the $host connection into the $name host vault tree."
+      printf '\nTo enable it on %s, add this to that host configuration:\n\n' "$name"
+      printf '  pino.profiles.vpn.connections.%s = { };\n\n' "$host"
+      printf 'Then run on %s:\n\n  pino os rebuild\n\n' "$name"
+      echo "Answer yes when Pino asks to populate system secrets from the vault."
     else
       [ ! -e "$destination" ] || { echo "Destination already exists: $destination" >&2; exit 1; }
       sudo install -D -o "$(id -un)" -g "$(id -gn)" -m 0600 "$source_file" "$destination"
