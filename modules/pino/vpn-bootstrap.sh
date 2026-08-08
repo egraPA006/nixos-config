@@ -190,7 +190,7 @@ case "$PINO_OPERATION" in
       echo "VPN state already exists for $host; refusing to rotate its keys." >&2
       exit 1
     }
-    port="$($NIX --extra-experimental-features 'nix-command flakes' eval --raw "$host_attr.pino.server.vpn.port")"
+    port="$($NIX --extra-experimental-features 'nix-command flakes' eval --json "$host_attr.pino.server.vpn.port")"
     subnet="$($NIX --extra-experimental-features 'nix-command flakes' eval --raw "$host_attr.pino.server.vpn.clientSubnet")"
     if [[ "$subnet" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\.0/24$ ]]; then
       prefix="${BASH_REMATCH[1]}"
