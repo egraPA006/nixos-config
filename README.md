@@ -412,8 +412,10 @@ This is the complete first-deployment order. Mosk currently enables only
 6. Stage the server, replacing `/dev/vda` with the verified whole disk. The
    optional third argument selects partitioning. `direct` uses the hard-coded
    Mosk layout without downloading Disko and is recommended for small live
-   environments; `disko` realizes the declarative layout but needs more
-   temporary space. When omitted, the script asks and defaults to `direct`:
+   environments. It partitions first, then places Nix evaluation data in the
+   target-backed `/mnt/nix/store` instead of the live ISO's small writable
+   store. `disko` realizes the declarative layout but needs more temporary
+   space. When omitted, the script asks and defaults to `direct`:
 
    ```bash
    sudo scripts/server-stage.sh mosk /dev/vda direct

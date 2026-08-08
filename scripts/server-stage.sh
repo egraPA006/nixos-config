@@ -68,10 +68,6 @@ mv "$DISKO_FILE.tmp" "$DISKO_FILE"
 echo "Generating hardware configuration..."
 nixos-generate-config --show-hardware-config --no-filesystems > "$HARDWARE_FILE"
 
-echo "Evaluating $HOST before touching the disk..."
-nix --extra-experimental-features 'nix-command flakes' \
-  eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
-
 partition_direct() {
   local command partition
   local -a missing=() existing_partitions=() partitions=()
@@ -130,16 +126,28 @@ partition_direct() {
 echo "Partitioning $DISK with $PARTITION_METHOD..."
 if [ "$PARTITION_METHOD" = direct ]; then
   partition_direct
+  echo "Evaluating $HOST in the target-backed Nix store..."
+  nix --store /mnt --extra-experimental-features 'nix-command flakes' \
+    eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
 else
+  echo "Evaluating $HOST before touching the disk..."
+  nix --extra-experimental-features 'nix-command flakes' \
+    eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
   nix --extra-experimental-features 'nix-command flakes' \
     run github:nix-community/disko -- --mode disko "$DISKO_FILE"
 fi
 
-"$REPO_DIR/scripts/install.sh" "$HOST"
+if [ "$PARTITION_METHOD" = direct ]; then
+  PINO_INSTALL_NIX_STORE=/mnt "$REPO_DIR/scripts/install.sh" "$HOST"
+  NIX_STORE_ARGS=(--store /mnt)
+else
+  "$REPO_DIR/scripts/install.sh" "$HOST"
+  NIX_STORE_ARGS=()
+fi
 
-PINO_USER="$(nix --extra-experimental-features 'nix-command flakes' eval --raw \
+PINO_USER="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.name")"
-PINO_HOME="$(nix --extra-experimental-features 'nix-command flakes' eval --raw \
+PINO_HOME="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.home")"
 user_uid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $3 }' /mnt/etc/passwd)"
 user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mnt/etc/passwd)"
