@@ -130,6 +130,7 @@ system material:
 /data/secrets/keepass/                    egrapa-only
 /data/secrets/system/shared/              root-only, every host
 /data/secrets/system/hosts/<hostname>/     root-only, one host
+/data/secrets/system/devices/<device>/     root-only, manually exported devices
 ```
 
 Shared files are merged first and host files override them. Provision with
@@ -259,16 +260,17 @@ mirrors their server-relative paths:
     └── mail/accounts/vincent@example.com.hash
 ```
 
-AmneziaWG has a separate authoritative state area that exists only on the
-encrypted vault machine. Mosk receives neither this state nor any client key:
+The deployable files are also the authoritative VPN state. NixOS clients live
+under `hosts`; phones and other unmanaged clients live under `devices`. Only a
+host's own tree is ever populated or uploaded:
 
 ```text
-/data/secrets/vpn/mosk/
-├── server.private
-├── server.public
-├── endpoint
-├── peers/{re-1,phone}/
-└── generated/{server,re-1,phone}.conf
+/data/secrets/system/
+├── hosts/
+│   ├── mosk/server/awg0.conf
+│   └── re-1/vpn/mosk.conf
+└── devices/
+    └── phone/vpn/mosk.conf
 ```
 
 After receiving the VPS public IP, initialize it locally. With no peer names,
@@ -281,9 +283,17 @@ pino bootstrap server vpn list mosk
 ```
 
 The generator creates independent keys and preshared keys, assigns Mosk
-`10.77.0.1` and peers from `.2`, generates common AmneziaWG masking parameters,
-and refreshes `/data/secrets/system/hosts/mosk/server/awg0.conf`. It refuses to
-overwrite initialized state.
+`10.77.0.1` and peers from `.2`, and generates common AmneziaWG masking
+parameters. It writes each peer directly to its canonical host/device path and
+refuses to overwrite initialized state. Existing vaults using the former
+`/data/secrets/vpn/<host>` generator layout migrate once with:
+
+```bash
+pino bootstrap server vpn migrate mosk
+```
+
+Migration verifies and installs every client before offering to remove the
+redundant legacy state.
 
 Peer lifecycle does not rotate unaffected clients:
 
@@ -294,19 +304,19 @@ pino bootstrap server vpn set-endpoint mosk vpn.example.com
 ```
 
 After a peer change, run `pino bootstrap server sync mosk <address>` to deploy
-the regenerated server peer list. Export never prints key material. An explicit
-path creates a user-owned `0600` file suitable for Android import; `--install`
-copies it root-only into the named NixOS host's vault tree:
+the updated server peer list. Export never prints key material. It copies an
+existing canonical configuration to a user-owned `0600` file suitable for
+Android import:
 
 ```bash
 pino bootstrap server vpn export mosk phone ~/Downloads/mosk-phone.conf
-pino bootstrap server vpn export mosk re-1 --install
 ```
 
-The latter writes `system/hosts/re-1/vpn/mosk.conf`. re-1 declares `mosk` as a
-named connection alongside the legacy `awg0` connection. More servers use the
-same model through `pino.profiles.vpn.connections.<name>` and can then be
-selected without replacing configurations:
+Adding the `re-1` peer writes `system/hosts/re-1/vpn/mosk.conf` immediately.
+re-1 declares `mosk` as a named connection alongside the legacy `awg0`
+connection. More servers use the same model through
+`pino.profiles.vpn.connections.<name>` and can then be selected without
+replacing configurations:
 
 ```bash
 pino network vpn list
@@ -363,9 +373,11 @@ This is the complete first-deployment order. Mosk currently enables only
    ```bash
    pino os rebuild
    pino storage vault open
-   pino bootstrap server vpn init mosk 203.0.113.10
+   # Existing vaults only: migrate the former /data/secrets/vpn/mosk state.
+   pino bootstrap server vpn migrate mosk
+   # New vaults instead: initialize the VPN once.
+   # pino bootstrap server vpn init mosk 203.0.113.10
    pino bootstrap server vpn list mosk
-   pino bootstrap server vpn export mosk re-1 --install
    pino storage vault populate
    pino bootstrap server check mosk
    ```

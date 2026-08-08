@@ -15,7 +15,7 @@
 
   pino.profiles = {
     vpn.connections = {
-      awg0.source = "awg0.conf";
+      awg0.source = "vpn/awg0.conf";
       mosk = { };
     };
     musicLite.localDir = "/data/fast/music-lite";

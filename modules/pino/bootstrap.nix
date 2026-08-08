@@ -4,12 +4,13 @@ let
   configDir = config.pino.configDir;
   vaultRoot = config.pino.bootstrap.vaultRoot;
   vpnBootstrap = builtins.replaceStrings
-    [ "@awg@" "@nix@" "@findmnt@" "@find@" ]
+    [ "@awg@" "@nix@" "@findmnt@" "@find@" "@awk@" ]
     [
       "${pkgs.amneziawg-tools}/bin/awg"
       "${pkgs.nix}/bin/nix"
       "${pkgs.util-linux}/bin/findmnt"
       "${pkgs.findutils}/bin/find"
+      "${pkgs.gawk}/bin/awk"
     ]
     (builtins.readFile ./vpn-bootstrap.sh);
 in
@@ -25,9 +26,10 @@ in
         vpn = {
           description = "Generate and manage AmneziaWG server peers";
           commands = {
-            init = { description = "Create server state and initial peers"; usage = "<host> <endpoint> [peer ...]"; };
+            init = { description = "Create server and canonical client configurations"; usage = "<host> <endpoint> [peer ...]"; };
+            migrate = { description = "Migrate legacy VPN generator state into the system tree"; usage = "<host>"; };
             list = { description = "List a server's VPN peers"; usage = "<host>"; };
-            export = { description = "Export or install one client configuration"; usage = "<host> <peer> [path|--install]"; };
+            export = { description = "Copy one canonical client configuration"; usage = "<host> <peer> [path]"; };
             set-endpoint = { description = "Change the endpoint in every client configuration"; usage = "<host> <endpoint>"; };
             peer = {
               description = "Add or remove individual VPN peers";
@@ -50,7 +52,7 @@ in
         address="''${3:-}"
         [ -n "$host" ] || { echo "A host name is required." >&2; exit 1; }
         case "$operation" in
-          init|list|export|set-endpoint|add|remove)
+          init|migrate|list|export|set-endpoint|add|remove)
             export PINO_CONFIG_DIR=${lib.escapeShellArg configDir}
             export PINO_VAULT_ROOT=${lib.escapeShellArg vaultRoot}
             export PINO_OPERATION="$operation"
