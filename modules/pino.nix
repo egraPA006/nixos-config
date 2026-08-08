@@ -170,12 +170,20 @@ let
     '';
   };
 
+  pinoText = ''
+    ${dispatcher}
+    pino_dispatch_root "$@"
+  '';
+
   pino = pkgs.writeShellApplication {
     name = "pino";
     runtimeInputs = with pkgs; [ coreutils gnugrep jq ];
-    text = ''
-      ${dispatcher}
-      pino_dispatch_root "$@"
+    text = pinoText;
+    # The generated dispatcher is large enough for ShellCheck to exceed the
+    # memory available on small installation machines. A syntax check catches
+    # broken generation without pulling ShellCheck into every system build.
+    checkPhase = ''
+      ${pkgs.bash}/bin/bash -n "$target"
     '';
   };
 in

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo $0 <host> <whole-disk-device> [direct|disko]" >&2
+  echo "Usage: sudo $0 <host> <whole-disk-device> [direct|disko|resume]" >&2
   echo "Example: sudo $0 mosk /dev/vda direct" >&2
 }
 
@@ -20,7 +20,6 @@ HARDWARE_FILE="$HOST_DIR/hardware.nix"
 [ -d "$HOST_DIR" ] || { echo "Unknown host: $HOST" >&2; exit 1; }
 [ -b "$DISK" ] || { echo "Not a block device: $DISK" >&2; exit 1; }
 [ "$(lsblk -ndo TYPE "$DISK")" = disk ] || { echo "Select a whole disk, not a partition: $DISK" >&2; exit 1; }
-findmnt --mountpoint /mnt >/dev/null 2>&1 && { echo "/mnt is already mounted; unmount it first." >&2; exit 1; }
 
 if [ -z "$PARTITION_METHOD" ]; then
   read -r -p "Partition with [direct/disko] (direct): " PARTITION_METHOD
@@ -34,15 +33,31 @@ case "$PARTITION_METHOD" in
     }
     ;;
   disko) ;;
-  *) echo "Partition method must be 'direct' or 'disko'." >&2; exit 1 ;;
+  resume)
+    for mountpoint in /mnt /mnt/nix /mnt/home /mnt/boot; do
+      findmnt --mountpoint "$mountpoint" >/dev/null 2>&1 || {
+        echo "Resume requires the existing target mount: $mountpoint" >&2
+        exit 1
+      }
+    done
+    ;;
+  *) echo "Partition method must be 'direct', 'disko', or 'resume'." >&2; exit 1 ;;
 esac
+
+if [ "$PARTITION_METHOD" != resume ]; then
+  findmnt --mountpoint /mnt >/dev/null 2>&1 && { echo "/mnt is already mounted; use 'resume' or unmount it first." >&2; exit 1; }
+fi
 
 echo "Available disks:"
 lsblk -d -o NAME,SIZE,MODEL,SERIAL
 echo
-echo "WARNING: staging $HOST will erase all data on $DISK."
-read -r -p "Type the exact device path '$DISK' to continue: " confirmation
-[ "$confirmation" = "$DISK" ] || { echo "Aborted."; exit 1; }
+if [ "$PARTITION_METHOD" = resume ]; then
+  echo "Resuming the existing installation mounted below /mnt; no partitioning will run."
+else
+  echo "WARNING: staging $HOST will erase all data on $DISK."
+  read -r -p "Type the exact device path '$DISK' to continue: " confirmation
+  [ "$confirmation" = "$DISK" ] || { echo "Aborted."; exit 1; }
+fi
 
 read -r -p "Paste the SSH public key for the remote administrator: " SSH_PUBLIC_KEY
 case "$SSH_PUBLIC_KEY" in
@@ -123,21 +138,24 @@ partition_direct() {
   mount -o umask=0077 "${partitions[0]}" /mnt/boot
 }
 
-echo "Partitioning $DISK with $PARTITION_METHOD..."
 if [ "$PARTITION_METHOD" = direct ]; then
+  echo "Partitioning $DISK with direct..."
   partition_direct
   echo "Evaluating $HOST in the target-backed Nix store..."
   nix --store /mnt --extra-experimental-features 'nix-command flakes' \
     eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
-else
+elif [ "$PARTITION_METHOD" = disko ]; then
+  echo "Partitioning $DISK with Disko..."
   echo "Evaluating $HOST before touching the disk..."
   nix --extra-experimental-features 'nix-command flakes' \
     eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
   nix --extra-experimental-features 'nix-command flakes' \
     run github:nix-community/disko -- --mode disko "$DISKO_FILE"
+else
+  echo "Reusing the target-backed Nix store at /mnt."
 fi
 
-if [ "$PARTITION_METHOD" = direct ]; then
+if [ "$PARTITION_METHOD" = direct ] || [ "$PARTITION_METHOD" = resume ]; then
   PINO_INSTALL_NIX_STORE=/mnt "$REPO_DIR/scripts/install.sh" "$HOST"
   NIX_STORE_ARGS=(--store /mnt)
 else
