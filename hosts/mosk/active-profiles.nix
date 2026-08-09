@@ -1,1 +1,4 @@
-[ "server-vpn" ]
+[
+  "server-vpn"
+  "server-password-sync"
+]
