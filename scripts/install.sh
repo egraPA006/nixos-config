@@ -173,6 +173,14 @@ tar \
   -C "$REPO_DIR" -cf - . \
   | sudo tar --no-same-owner -C "$INSTALL_CONFIG_DIR" -xf -
 
+# The working secrets directory may contain untracked private material, so it
+# is excluded above. Restore only files committed in the public repository
+# (currently placeholder examples) to keep the installed Git tree clean.
+if git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git -C "$REPO_DIR" archive --format=tar HEAD -- secrets \
+    | sudo tar --no-same-owner -C "$INSTALL_CONFIG_DIR" -xf -
+fi
+
 if mount_bootstrap; then
   if [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/shared" ] && [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST" ]; then
     echo "$BOOTSTRAP_LABEL has no installation secrets for $HOST; continuing without them." >&2

@@ -4,7 +4,7 @@
   # confirmed installation disk.
   disko.devices.disk.system = {
     type = "disk";
-    device = "/dev/disk/by-id/PINO_SERVER_DISK_NOT_SELECTED";
+    device = "/dev/vda";
     content = {
       type = "gpt";
       partitions = {
