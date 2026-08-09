@@ -6,5 +6,6 @@
     chromium
     libreoffice
     imagemagick
+    dotool
   ];
 }
