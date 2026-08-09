@@ -127,9 +127,12 @@ in
     programs = {
       keepassxc = {
         enable = true;
-        settings.Browser = {
-          Enabled = true;
-          UpdateBinaryPath = false;
+        settings = {
+          Browser = {
+            Enabled = true;
+            UpdateBinaryPath = false;
+          };
+          SSHAgent.Enabled = true;
         };
       };
 
