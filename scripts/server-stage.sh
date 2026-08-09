@@ -2,15 +2,16 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo $0 <host> <whole-disk-device>" >&2
-  echo "Example: sudo $0 mosk /dev/vda" >&2
+  echo "Usage: sudo $0 <host> <whole-disk-device> [direct|disko]" >&2
+  echo "Example: sudo $0 mosk /dev/vda direct" >&2
 }
 
 [ "$(id -u)" -eq 0 ] || { echo "Run this script as root." >&2; exit 1; }
-[ "$#" -eq 2 ] || { usage; exit 1; }
+[ "$#" -ge 2 ] && [ "$#" -le 3 ] || { usage; exit 1; }
 
 HOST="$1"
 DISK="$2"
+PARTITION_METHOD="${3:-}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOST_DIR="$REPO_DIR/hosts/$HOST"
 DISKO_FILE="$HOST_DIR/disko.nix"
@@ -20,6 +21,21 @@ HARDWARE_FILE="$HOST_DIR/hardware.nix"
 [ -b "$DISK" ] || { echo "Not a block device: $DISK" >&2; exit 1; }
 [ "$(lsblk -ndo TYPE "$DISK")" = disk ] || { echo "Select a whole disk, not a partition: $DISK" >&2; exit 1; }
 findmnt --mountpoint /mnt >/dev/null 2>&1 && { echo "/mnt is already mounted; unmount it first." >&2; exit 1; }
+
+if [ -z "$PARTITION_METHOD" ]; then
+  read -r -p "Partition with [direct/disko] (direct): " PARTITION_METHOD
+  PARTITION_METHOD="${PARTITION_METHOD:-direct}"
+fi
+case "$PARTITION_METHOD" in
+  direct)
+    [ "$HOST" = mosk ] || {
+      echo "The direct layout is currently defined only for mosk; use Disko for $HOST." >&2
+      exit 1
+    }
+    ;;
+  disko) ;;
+  *) echo "Partition method must be 'direct' or 'disko'." >&2; exit 1 ;;
+esac
 
 echo "Available disks:"
 lsblk -d -o NAME,SIZE,MODEL,SERIAL
@@ -52,19 +68,80 @@ mv "$DISKO_FILE.tmp" "$DISKO_FILE"
 echo "Generating hardware configuration..."
 nixos-generate-config --show-hardware-config --no-filesystems > "$HARDWARE_FILE"
 
-echo "Evaluating $HOST before touching the disk..."
-nix --extra-experimental-features 'nix-command flakes' \
-  eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
+partition_direct() {
+  local command partition
+  local -a missing=() existing_partitions=() partitions=()
+  for command in parted partprobe udevadm wipefs mkfs.btrfs btrfs mount umount; do
+    command -v "$command" >/dev/null 2>&1 || missing+=("$command")
+  done
+  if [ "${#missing[@]}" -ne 0 ]; then
+    echo "The direct method needs tools already present on the installer ISO:" >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    echo "Use a fuller NixOS ISO, temporarily add the missing tools, or select Disko." >&2
+    return 1
+  fi
 
-echo "Partitioning $DISK with Disko..."
-nix --extra-experimental-features 'nix-command flakes' \
-  run github:nix-community/disko -- --mode disko "$DISKO_FILE"
+  mapfile -t existing_partitions < <(lsblk -nrpo NAME,TYPE "$DISK" | awk '$2 == "part" { print $1 }')
+  for partition in "${existing_partitions[@]}"; do
+    if findmnt -rn -S "$partition" >/dev/null 2>&1; then
+      echo "Refusing to overwrite mounted partition: $partition" >&2
+      return 1
+    fi
+  done
 
-"$REPO_DIR/scripts/install.sh" "$HOST"
+  echo "Creating the hard-coded Mosk GPT/BIOS/Btrfs layout on $DISK..."
+  wipefs --all --force "$DISK"
+  parted --script --align optimal "$DISK" mklabel gpt
+  parted --script --align optimal "$DISK" mkpart disk-system-BIOS 1MiB 2MiB
+  parted --script "$DISK" set 1 bios_grub on
+  parted --script --align optimal "$DISK" mkpart disk-system-root btrfs 2MiB 100%
+  partprobe "$DISK"
+  udevadm settle
 
-PINO_USER="$(nix --extra-experimental-features 'nix-command flakes' eval --raw \
+  for _ in {1..10}; do
+    mapfile -t partitions < <(lsblk -nrpo NAME,TYPE "$DISK" | awk '$2 == "part" { print $1 }')
+    [ "${#partitions[@]}" -eq 2 ] && break
+    sleep 1
+  done
+  if [ "${#partitions[@]}" -ne 2 ]; then
+    echo "Expected two partitions on $DISK, found ${#partitions[@]}." >&2
+    return 1
+  fi
+
+  mkfs.btrfs -f -L nixos "${partitions[1]}"
+  mount "${partitions[1]}" /mnt
+  btrfs subvolume create /mnt/@
+  btrfs subvolume create /mnt/@nix
+  btrfs subvolume create /mnt/@home
+  umount /mnt
+
+  mount -o subvol=@,compress=zstd,noatime "${partitions[1]}" /mnt
+  install -d /mnt/boot /mnt/nix /mnt/home
+  mount -o subvol=@nix,compress=zstd,noatime "${partitions[1]}" /mnt/nix
+  mount -o subvol=@home,compress=zstd,noatime "${partitions[1]}" /mnt/home
+}
+
+if [ "$PARTITION_METHOD" = direct ]; then
+  partition_direct
+  echo "Evaluating $HOST in the target-backed Nix store..."
+  nix --store /mnt --extra-experimental-features 'nix-command flakes' \
+    eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
+  PINO_INSTALL_NIX_STORE=/mnt "$REPO_DIR/scripts/install.sh" "$HOST"
+  NIX_STORE_ARGS=(--store /mnt)
+else
+  echo "Evaluating $HOST before touching the disk..."
+  nix --extra-experimental-features 'nix-command flakes' \
+    eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
+  echo "Partitioning $DISK with Disko..."
+  nix --extra-experimental-features 'nix-command flakes' \
+    run github:nix-community/disko -- --mode disko "$DISKO_FILE"
+  "$REPO_DIR/scripts/install.sh" "$HOST"
+  NIX_STORE_ARGS=()
+fi
+
+PINO_USER="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.name")"
-PINO_HOME="$(nix --extra-experimental-features 'nix-command flakes' eval --raw \
+PINO_HOME="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.home")"
 user_uid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $3 }' /mnt/etc/passwd)"
 user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mnt/etc/passwd)"

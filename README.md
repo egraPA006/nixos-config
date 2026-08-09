@@ -410,11 +410,15 @@ This is the complete first-deployment order. Mosk currently enables only
    cat hosts/mosk/active-profiles.nix
    ```
 
-6. Stage the server with Disko, replacing `/dev/vda` with the verified whole
-   disk. Mosk uses a GPT BIOS boot partition and legacy GRUB:
+6. Stage the server, replacing `/dev/vda` with the verified whole disk. The
+   optional third argument selects `direct` or `disko`; when omitted, the
+   script asks and defaults to `direct`. Both create Mosk's GPT BIOS boot
+   partition and Btrfs subvolumes. Direct mode uses installer-ISO tools and the
+   target-backed Nix store, while Disko remains available when the live store
+   has enough space:
 
    ```bash
-   sudo scripts/server-stage.sh mosk /dev/vda
+   sudo scripts/server-stage.sh mosk /dev/vda direct
    ```
 
    Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. If the provider's
