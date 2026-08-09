@@ -121,14 +121,11 @@ if [ "$PARTITION_METHOD" = direct ]; then
   PINO_INSTALL_NIX_STORE=/mnt "$REPO_DIR/scripts/install.sh" "$HOST"
   NIX_STORE_ARGS=(--store /mnt)
 else
-  echo "Evaluating $HOST before touching the disk..."
-  nix --extra-experimental-features 'nix-command flakes' \
-    eval --raw "path:$REPO_DIR#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
   echo "Partitioning $DISK with Disko..."
   nix --extra-experimental-features 'nix-command flakes' \
     run github:nix-community/disko -- --mode disko "$DISKO_FILE"
   "$REPO_DIR/scripts/install.sh" "$HOST"
-  NIX_STORE_ARGS=()
+  NIX_STORE_ARGS=(--store /mnt)
 fi
 
 PINO_USER="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \

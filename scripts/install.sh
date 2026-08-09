@@ -11,6 +11,10 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NIX_STORE_ARGS=()
 if [ -n "${PINO_INSTALL_NIX_STORE:-}" ]; then
   NIX_STORE_ARGS=(--store "$PINO_INSTALL_NIX_STORE")
+elif findmnt --mountpoint /mnt >/dev/null 2>&1; then
+  # Partitioning gives evaluations a large target-backed store
+  # instead of the installer ISO's small writable tmpfs.
+  NIX_STORE_ARGS=(--store /mnt)
 fi
 NIX_EVAL=(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw)
 BOOTSTRAP_MOUNT="${PINO_BOOTSTRAP_MOUNT:-/run/pino-bootstrap}"

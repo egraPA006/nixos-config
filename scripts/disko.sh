@@ -7,7 +7,8 @@ if [ -z "${1:-}" ]; then
 fi
 
 HOST="$1"
-DISKO="hosts/$HOST/disko.nix"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+DISKO="$REPO_DIR/hosts/$HOST/disko.nix"
 
 if [ ! -f "$DISKO" ]; then
   echo "Error: $DISKO not found"
@@ -22,4 +23,7 @@ if [ "$confirm" != "YES" ]; then
   exit 1
 fi
 
-sudo nix --extra-experimental-features "nix-command flakes" run github:nix-community/disko -- --mode disko "$DISKO"
+# Disko performs the necessary evaluation itself. Do not evaluate the full host
+# first: the live ISO's writable Nix store is intentionally small.
+sudo nix --extra-experimental-features "nix-command flakes" \
+  run github:nix-community/disko -- --mode disko "$DISKO"
