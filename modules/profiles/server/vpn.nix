@@ -42,12 +42,18 @@ in
       off.description = "Stop the VPN interface";
       status.description = "Show VPN service and peers";
       peers.description = "Show peer handshakes and traffic";
+      logs.description = "Show recent VPN service logs";
       mode = {
         description = "Control client Internet forwarding";
         usage = "<private|egress|status>";
       };
     };
     helpText = ''
+      pino server vpn status       Show config metadata, service, and interface
+      pino server vpn peers        Show safe peer handshake and traffic details
+      pino server vpn logs         Show recent service logs
+      pino server vpn mode status  Show forwarding and NAT state
+
       private keeps server/VPN access but disables forwarded Internet traffic.
       egress enables IPv4 forwarding and NAT through the configured external
       interface. The default after boot is private.
@@ -57,10 +63,22 @@ in
         on) sudo systemctl start amneziawg-server ;;
         off) sudo systemctl stop amneziawg-server ;;
         status)
-          systemctl status amneziawg-server --no-pager
-          sudo ${awg} show ${cfg.interface}
+          sudo test -f ${cfg.configFile} || {
+            echo "VPN config is missing: ${cfg.configFile}" >&2
+            exit 1
+          }
+          sudo ${pkgs.coreutils}/bin/stat \
+            --format='Config: %n (%U:%G %a)' ${cfg.configFile}
+          echo "Interface: ${cfg.interface}"
+          echo "UDP port:  ${toString cfg.port}"
+          echo
+          result=0
+          systemctl status amneziawg-server --no-pager || result=1
+          sudo ${awg} show ${cfg.interface} || result=1
+          exit "$result"
           ;;
-        peers) sudo ${awg} show ${cfg.interface} dump ;;
+        peers) sudo ${awg} show ${cfg.interface} ;;
+        logs) journalctl -u amneziawg-server -n 100 --no-pager ;;
         mode)
           case "''${2:-}" in
             private)
