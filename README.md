@@ -410,18 +410,11 @@ This is the complete first-deployment order. Mosk currently enables only
    cat hosts/mosk/active-profiles.nix
    ```
 
-6. Stage the server, replacing `/dev/vda` with the verified whole disk. The
-   optional third argument selects partitioning. `direct` uses the hard-coded
-   Mosk layout without downloading Disko and is recommended for small live
-   environments. It partitions first, then places Nix evaluation data in the
-   target-backed `/mnt/nix/store` instead of the live ISO's small writable
-   store. `disko` realizes the declarative layout but needs more temporary
-   space. `resume` continues a failed direct installation already mounted at
-   `/mnt` without repartitioning. When omitted, the script asks and defaults to
-   `direct`:
+6. Stage the server with Disko, replacing `/dev/vda` with the verified whole
+   disk. Mosk uses a GPT BIOS boot partition and legacy GRUB:
 
    ```bash
-   sudo scripts/server-stage.sh mosk /dev/vda direct
+   sudo scripts/server-stage.sh mosk /dev/vda
    ```
 
    Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. If the provider's

@@ -5,7 +5,7 @@
     ./hardware.nix
     ./disko.nix
     ../../configurations/server
-    ../../modules/boot/systemd-boot.nix
+    ../../modules/boot/grub-bios.nix
   ];
 
   networking.hostName = "mosk";

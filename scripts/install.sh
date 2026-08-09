@@ -8,11 +8,7 @@ fi
 
 HOST="$1"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-NIX_STORE_ARGS=()
-if [ -n "${PINO_INSTALL_NIX_STORE:-}" ]; then
-  NIX_STORE_ARGS=(--store "$PINO_INSTALL_NIX_STORE")
-fi
-NIX_EVAL=(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw)
+NIX_EVAL=(nix --extra-experimental-features 'nix-command flakes' eval --raw)
 BOOTSTRAP_MOUNT="${PINO_BOOTSTRAP_MOUNT:-/run/pino-bootstrap}"
 BOOTSTRAP_LABEL="${PINO_VAULT_LABEL:-}"
 BOOTSTRAP_MAPPER="pino-install-vault"
@@ -69,7 +65,7 @@ restore_data_backup() {
   local -a available=() selected=()
   declare -A local_paths=() medium_paths=()
 
-  datasets_json="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --json \
+  datasets_json="$(nix --extra-experimental-features 'nix-command flakes' eval --json \
     "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.data.datasets")"
   while IFS=$'\t' read -r name local_path scope; do
     [ -n "$name" ] || continue
