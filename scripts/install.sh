@@ -183,17 +183,18 @@ if git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 if mount_bootstrap; then
-  if [ ! -d "$BOOTSTRAP_MOUNT/system/shared" ] && [ ! -d "$BOOTSTRAP_MOUNT/system/hosts/$HOST" ]; then
+  if ! sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/shared" \
+    && ! sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST"; then
     echo "$BOOTSTRAP_LABEL has no installation secrets for $HOST; continuing without them." >&2
-    echo "Expected system/shared or system/hosts/$HOST on the mounted vault." >&2
+    echo "Expected bootstrap/shared or bootstrap/hosts/$HOST." >&2
   else
     echo "Provisioning $HOST secrets from $BOOTSTRAP_LABEL..."
     sudo install -d -m 0700 -o root -g root /mnt/var/lib/pino/secrets
-    if [ -d "$BOOTSTRAP_MOUNT/system/shared" ]; then
-      sudo cp -a "$BOOTSTRAP_MOUNT/system/shared/." /mnt/var/lib/pino/secrets/
+    if sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/shared"; then
+      sudo cp -a "$BOOTSTRAP_MOUNT/bootstrap/shared/." /mnt/var/lib/pino/secrets/
     fi
-    if [ -d "$BOOTSTRAP_MOUNT/system/hosts/$HOST" ]; then
-      sudo cp -a "$BOOTSTRAP_MOUNT/system/hosts/$HOST/." /mnt/var/lib/pino/secrets/
+    if sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST"; then
+      sudo cp -a "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST/." /mnt/var/lib/pino/secrets/
     fi
     sudo find /mnt/var/lib/pino/secrets -type d -exec chmod 0700 {} +
     sudo find /mnt/var/lib/pino/secrets -type f -exec chmod 0600 {} +
