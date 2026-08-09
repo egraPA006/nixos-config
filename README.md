@@ -45,6 +45,77 @@ Then reboot. If the selected vault contains
 `bootstrap/{shared,hosts/<hostname>}/user-password-hash`, the installer applies
 it automatically; otherwise set the password with `passwd` on first login.
 
+### Bootstrap la1n from the removable vault
+
+la1n is an Intel laptop with one internal NVMe. Its Disko layout uses a 512 MiB
+EFI partition, an 8 GiB on-demand LUKS vault, and the remaining space for one
+ext4 system/home filesystem. The removable `pino-vault-*` disk is only the installation source;
+never select it as the Disko target.
+
+Before booting the installer, prepare la1n's VPN configuration and refresh the
+removable backup from re-1:
+
+```bash
+pino storage vault open
+pino bootstrap server vpn list mosk
+# Run this only if la1n is not listed yet:
+pino bootstrap server vpn peer add mosk la1n
+pino bootstrap server sync mosk vpn.egrapa.com
+pino storage vault backup 1
+```
+
+The VPN peer must be unique to la1n; never reuse re-1's client configuration.
+The existing `github_ed25519` and `mosk_ed25519` SSH keypairs may be shared by
+placing them below `system/shared/ssh/` in the vault. la1n provisions that
+directory into `~/.ssh`, selects `github_ed25519` for GitHub, and provides
+`ssh mosk` as an alias using `mosk_ed25519`. Separate per-device SSH keys are
+still preferable when independent revocation is important.
+
+On the live ISO, connect the removable backup disk, clone the repository, and
+run the normal install sequence. Confirm that the sole internal drive really is
+`/dev/nvme0n1`; if not, change only `hosts/la1n/disko.nix` before partitioning:
+
+```bash
+nix-shell -p git
+git clone https://github.com/egraPA006/nixos-config.git /tmp/nixos-config
+cd /tmp/nixos-config
+bash scripts/hardware.sh la1n
+lsblk -d -o NAME,PATH,SIZE,MODEL,SERIAL
+bash scripts/disko.sh la1n
+bash scripts/install.sh la1n
+```
+
+Disko asks for the new internal vault passphrase. The installer reads the
+root-only installation payload from the connected removable vault and applies
+the configured user password when its hash is present.
+
+After reboot, seed the empty internal vault from a specific removable snapshot.
+Snapshot listing is intentionally cross-host, so a snapshot created by re-1 can
+initialize la1n:
+
+```bash
+pino storage vault open
+pino storage vault snapshots 1
+pino storage vault restore 1 <snapshot-id> --apply
+pino storage vault populate
+pino network vpn on mosk
+pino storage vault sync id
+```
+
+Add the final ID printed above to Mosk's public host configuration:
+
+```nix
+pino.server.passwordSync.devices.la1n.id = "LA1N-SYNCTHING-DEVICE-ID";
+```
+
+Commit and push that public change, then run `pino os pull` and
+`pino os rebuild` on Mosk. Finish on la1n with:
+
+```bash
+pino storage vault sync restart
+pino storage vault sync status
+```
+
 ---
 
 ## Day-to-day

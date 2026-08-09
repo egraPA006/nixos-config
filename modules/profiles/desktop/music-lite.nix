@@ -4,8 +4,6 @@
 { config, pkgs, ... }:
 let
   cfg        = config.pino.profiles.musicLite;
-  configDir  = config.pino.configDir;
-  srcDir     = "${configDir}/data/music-lite";
   ampsDir    = "${cfg.localDir}/amps";
   pluginUri  = "http://github.com/mikeoliphant/neural-amp-modeler-lv2";
   modelParam = "${pluginUri}#model";
@@ -20,15 +18,10 @@ in
       lingot
     ];
 
-    system.activationScripts.music-lite-sync.text = ''
-      parent="$(dirname "${cfg.localDir}")"
-      if [ -d "$parent" ]; then
-        mkdir -p "${ampsDir}"
-        ${pkgs.rsync}/bin/rsync -a --delete "${srcDir}/" "${cfg.localDir}/"
-      else
-        echo "music-lite-sync: $parent not available, skipping" >&2
-      fi
-    '';
+    systemd.tmpfiles.rules = [
+      "d ${cfg.localDir} 0755 ${config.pino.user.name} users -"
+      "d ${ampsDir} 0755 ${config.pino.user.name} users -"
+    ];
 
     pino.subcommands.desktop.commands."music-lite" = {
       description = "Neural Amp Modeler — load a .nam model into PipeWire";
@@ -57,7 +50,7 @@ in
           pino desktop music-lite tuner                 Start chromatic tuner (lingot)
           pino desktop music-lite tuner stop            Stop the tuner
 
-          Models: ${ampsDir}  (synced from ${srcDir} on rebuild)
+          Models: ${ampsDir}
           Once started, connect guitar in → NAM → output in qpwgraph.
           Get models: https://tonehunt.org
       '';

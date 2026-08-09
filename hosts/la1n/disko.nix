@@ -1,4 +1,5 @@
-# Single 512GB NVMe — adjust device name if different (check with lsblk)
+# Single internal NVMe: EFI, an on-demand encrypted vault, and ext4 system data.
+# Verify the device name with lsblk before running scripts/disko.sh.
 { ... }:
 {
   disko.devices.disk.system = {
@@ -17,29 +18,30 @@
             mountOptions = [ "umask=0077" ];
           };
         };
+        secrets = {
+          size = "8G";
+          label = "secrets";
+          content = {
+            type = "luks";
+            name = "secrets";
+            initrdUnlock = false;
+            settings.allowDiscards = true;
+            content = {
+              type = "filesystem";
+              format = "ext4";
+              mountpoint = "/data/secrets";
+              mountOptions = [ "noauto" "noatime" "nodev" "nosuid" "noexec" ];
+            };
+          };
+        };
         root = {
           size = "100%";
           content = {
-            type = "btrfs";
-            extraArgs = [ "-L" "nixos" "-f" ];
-            subvolumes = {
-              "@" = {
-                mountpoint = "/";
-                mountOptions = [ "compress=zstd" "noatime" ];
-              };
-              "@home" = {
-                mountpoint = "/home";
-                mountOptions = [ "compress=zstd" "noatime" ];
-              };
-              "@nix" = {
-                mountpoint = "/nix";
-                mountOptions = [ "compress=zstd" "noatime" ];
-              };
-              "@snapshots" = {
-                mountpoint = "/.snapshots";
-                mountOptions = [ "compress=zstd" "noatime" ];
-              };
-            };
+            type = "filesystem";
+            format = "ext4";
+            extraArgs = [ "-L" "nixos" "-F" ];
+            mountpoint = "/";
+            mountOptions = [ "noatime" ];
           };
         };
       };

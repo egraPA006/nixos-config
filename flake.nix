@@ -66,7 +66,9 @@
 
     nixosConfigurations = {
       re-1 = re1;
-      la1n = mkHost "la1n" [ ];
+      la1n = mkHost "la1n" [
+        { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
+      ];
       mosk = mkHost "mosk" [ ];
     };
 

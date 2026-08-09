@@ -420,7 +420,7 @@ in
         local apply_mode="''${3:-}"
         local metadata="$backup_mount/.pino"
         local repository="$backup_mount/backups/vault"
-        local restore_root restored_vault hostname confirmation snapshot_name
+        local restore_root restored_vault confirmation snapshot_name
         if ! is_mounted; then
           echo "The local vault is closed. Run: pino storage vault open" >&2
           return 1
@@ -429,7 +429,6 @@ in
           echo "$BACKUP_LABEL has no initialized vault backup." >&2
           return 1
         fi
-        hostname="$(${pkgs.inetutils}/bin/hostname)"
         snapshot_name="$(${pkgs.coreutils}/bin/printf '%s' "$snapshot" | ${pkgs.coreutils}/bin/tr -cd 'A-Za-z0-9._-')"
         if [ -z "$snapshot_name" ]; then
           echo "Invalid snapshot ID: $snapshot" >&2
@@ -442,13 +441,20 @@ in
             return 1
             ;;
         esac
-        restore_root="$MOUNT_POINT/restores/$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)-$snapshot_name"
-        sudo ${pkgs.coreutils}/bin/mkdir -p "$restore_root"
-        sudo ${pkgs.restic}/bin/restic \
+        if [ "$apply_mode" = --apply ]; then
+          restore_root="$(sudo ${pkgs.coreutils}/bin/mktemp -d /var/tmp/pino-vault-restore.XXXXXX)"
+        else
+          restore_root="$MOUNT_POINT/restores/$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)-$snapshot_name"
+          sudo ${pkgs.coreutils}/bin/mkdir -p "$restore_root"
+        fi
+        if ! sudo ${pkgs.restic}/bin/restic \
           --repo "$repository" \
           --password-file "$metadata/restic-password" \
           --no-lock \
-          restore "$snapshot" --host "$hostname" --target "$restore_root"
+          restore "$snapshot" --target "$restore_root"; then
+          [ "$apply_mode" != --apply ] || sudo ${pkgs.coreutils}/bin/rm -rf "$restore_root"
+          return 1
+        fi
         restored_vault="$restore_root/data/secrets"
 
         if [ "$apply_mode" != --apply ]; then
@@ -458,20 +464,25 @@ in
         fi
         if ${pkgs.procps}/bin/pgrep -x keepassxc >/dev/null 2>&1; then
           echo "KeePassXC is running. Save and close it before applying a snapshot." >&2
+          sudo ${pkgs.coreutils}/bin/rm -rf "$restore_root"
           return 1
         fi
         echo "WARNING: this makes the live vault match snapshot $snapshot."
         echo "Newer live files will be deleted, except restores/ and lost+found/."
         read -r -p "Type '$snapshot' to apply it: " confirmation
         if [ "$confirmation" != "$snapshot" ]; then
-          echo "Apply cancelled; the staged restore remains at:"
-          echo "  $restored_vault"
+          sudo ${pkgs.coreutils}/bin/rm -rf "$restore_root"
+          echo "Apply cancelled; temporary restore removed."
           return 1
         fi
-        sudo ${pkgs.rsync}/bin/rsync -a --delete \
+        if ! sudo ${pkgs.rsync}/bin/rsync -a --delete \
           --exclude '/restores/' \
           --exclude '/lost+found/' \
-          "$restored_vault/" "$MOUNT_POINT/"
+          "$restored_vault/" "$MOUNT_POINT/"; then
+          sudo ${pkgs.coreutils}/bin/rm -rf "$restore_root"
+          return 1
+        fi
+        sudo ${pkgs.coreutils}/bin/rm -rf "$restore_root"
         echo "Snapshot $snapshot applied to $MOUNT_POINT"
       }
 
@@ -487,7 +498,7 @@ in
           --repo "$repository" \
           --password-file "$metadata/restic-password" \
           --no-lock \
-          snapshots --host "$(${pkgs.inetutils}/bin/hostname)"
+          snapshots
       }
 
       list_secret_files() {
