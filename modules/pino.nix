@@ -80,12 +80,13 @@ let
       ''}
     '';
 
-  generateDispatcher = path: node: delegatedScript:
+  generateDispatcher = path: node: delegatedScript: delegatedPath:
     let
       names = builtins.attrNames node.commands;
       function = functionName path;
       ownScript = node.script;
       effectiveScript = if ownScript != null then ownScript else delegatedScript;
+      effectivePath = if ownScript != null then path else delegatedPath;
       childCases = lib.concatMapStringsSep "\n" (name: ''
         ${lib.escapeShellArg name})
           shift
@@ -96,12 +97,13 @@ let
       delegatedInvocation = lib.optionalString (effectiveScript != null) (
         if ownScript != null then ownScript
         else ''
-          set -- ${lib.escapeShellArg (lib.last path)} "$@"
+          set -- ${lib.concatMapStringsSep " " lib.escapeShellArg
+            (lib.drop (builtins.length delegatedPath) path)} "$@"
           ${effectiveScript}
         ''
       );
       children = lib.concatMapStringsSep "\n" (name:
-        generateDispatcher (path ++ [ name ]) node.commands.${name} effectiveScript
+        generateDispatcher (path ++ [ name ]) node.commands.${name} effectiveScript effectivePath
       ) names;
     in ''
       ${function}() {
@@ -132,7 +134,7 @@ let
       ${children}
     '';
 
-  dispatcher = generateDispatcher [ ] root null;
+  dispatcher = generateDispatcher [ ] root null [ ];
 
   completionForNode = path: node:
     let
