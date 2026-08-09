@@ -56,6 +56,7 @@ in
       externalInterface = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
+        description = "Outbound VPN interface override; null detects the default IPv4 route";
       };
       clientSubnet = lib.mkOption {
         type = lib.types.str;

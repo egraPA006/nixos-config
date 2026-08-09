@@ -1,10 +1,108 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.pino.server.vpn;
   awg = "${pkgs.amneziawg-tools}/bin/awg";
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
   table = "pino_vpn_egress";
+  vpnMode = pkgs.writeShellScript "pino-vpn-mode" ''
+    set -euo pipefail
+
+    operation="''${1:-apply}"
+    requested="''${2:-}"
+    state_dir=/var/lib/pino/vpn
+    mode_file="$state_dir/mode"
+    external_override=${lib.escapeShellArg (if cfg.externalInterface == null then "" else cfg.externalInterface)}
+
+    stored_mode() {
+      if [ -f "$mode_file" ]; then
+        ${pkgs.coreutils}/bin/cat "$mode_file"
+      else
+        echo private
+      fi
+    }
+
+    external_interface() {
+      if [ -n "$external_override" ]; then
+        echo "$external_override"
+        return
+      fi
+      ${pkgs.iproute2}/bin/ip -4 route show default \
+        | ${pkgs.gawk}/bin/awk '$1 == "default" { for (i=1; i<=NF; i++) if ($i == "dev") { print $(i+1); exit } }'
+    }
+
+    apply_mode() {
+      local mode="$1" external
+      case "$mode" in
+        private)
+          ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
+          ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
+          ;;
+        egress)
+          external="$(external_interface)"
+          [ -n "$external" ] || {
+            echo "Cannot determine the default IPv4 interface; set pino.server.vpn.externalInterface." >&2
+            return 1
+          }
+          ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
+          ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
+          ${pkgs.nftables}/bin/nft -f - <<EOF
+    table inet ${table} {
+      chain forward {
+        type filter hook forward priority 10; policy accept;
+        iifname "${cfg.interface}" oifname "$external" ip saddr ${cfg.clientSubnet} accept
+        iifname "$external" oifname "${cfg.interface}" ip daddr ${cfg.clientSubnet} ct state established,related accept
+        iifname "${cfg.interface}" oifname "$external" drop
+        iifname "$external" oifname "${cfg.interface}" drop
+      }
+      chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        ip saddr ${cfg.clientSubnet} oifname "$external" masquerade
+      }
+    }
+    EOF
+          ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=1 >/dev/null
+          ;;
+        *) echo "Invalid VPN mode in $mode_file: $mode" >&2; return 1 ;;
+      esac
+    }
+
+    write_mode() {
+      local mode="$1" replacement
+      ${pkgs.coreutils}/bin/install -d -m 0700 "$state_dir"
+      replacement="$(${pkgs.coreutils}/bin/mktemp "$state_dir/mode.XXXXXX")"
+      cleanup() { ${pkgs.coreutils}/bin/rm -f "$replacement"; }
+      trap cleanup EXIT INT TERM
+      ${pkgs.coreutils}/bin/printf '%s\n' "$mode" > "$replacement"
+      ${pkgs.coreutils}/bin/chmod 0600 "$replacement"
+      ${pkgs.coreutils}/bin/mv -f "$replacement" "$mode_file"
+      trap - EXIT INT TERM
+    }
+
+    case "$operation" in
+      apply)
+        mode="$(stored_mode)"
+        apply_mode "$mode"
+        echo "VPN mode: $mode"
+        ;;
+      set)
+        case "$requested" in private|egress) ;; *) echo "Usage: $0 set <private|egress>" >&2; exit 1 ;; esac
+        apply_mode "$requested"
+        write_mode "$requested"
+        echo "VPN mode: $requested"
+        ;;
+      status)
+        mode="$(stored_mode)"
+        echo "Stored mode: $mode"
+        external="$(external_interface || true)"
+        echo "External interface: ''${external:-unavailable}"
+        printf 'ip_forward: '
+        ${pkgs.procps}/bin/sysctl -n net.ipv4.ip_forward
+        ${pkgs.nftables}/bin/nft list table inet ${table} 2>/dev/null || echo "NAT: disabled"
+        ;;
+      *) echo "Usage: $0 <apply|set MODE|status>" >&2; exit 1 ;;
+    esac
+  '';
 in
 {
   boot.extraModulePackages = [ config.boot.kernelPackages.amneziawg ];
@@ -28,9 +126,23 @@ in
     unitConfig.ConditionPathExists = cfg.configFile;
   };
 
+  systemd.services.pino-vpn-mode = {
+    description = "Apply the persisted Pino VPN forwarding mode";
+    after = [ "amneziawg-server.service" "firewall.service" ];
+    requires = [ "amneziawg-server.service" ];
+    partOf = [ "firewall.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${vpnMode} apply";
+    };
+    unitConfig.ConditionPathExists = cfg.configFile;
+  };
+
   pino.bootstrap.secrets."server/awg0.conf" = {
     target = cfg.configFile;
-    restartUnits = [ "amneziawg-server.service" ];
+    restartUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
   };
 
   boot.kernel.sysctl."net.ipv4.ip_forward" = 0;
@@ -56,7 +168,8 @@ in
 
       private keeps server/VPN access but disables forwarded Internet traffic.
       egress enables IPv4 forwarding and NAT through the configured external
-      interface. The default after boot is private.
+      interface. The selected mode persists across rebuilds and reboots; the
+      initial mode is private.
     '';
     script = ''
       case "''${1:-}" in
@@ -81,41 +194,8 @@ in
         logs) journalctl -u amneziawg-server -n 100 --no-pager ;;
         mode)
           case "''${2:-}" in
-            private)
-              sudo ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
-              sudo ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
-              echo "VPN mode: private"
-              ;;
-            egress)
-              external=${if cfg.externalInterface == null then "" else cfg.externalInterface}
-              if [ -z "$external" ]; then
-                echo "Set pino.server.vpn.externalInterface before enabling egress." >&2
-                exit 1
-              fi
-              sudo ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=1 >/dev/null
-              sudo ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
-              sudo ${pkgs.nftables}/bin/nft -f - <<EOF
-      table inet ${table} {
-        chain forward {
-          type filter hook forward priority 10; policy accept;
-          iifname "${cfg.interface}" oifname "$external" ip saddr ${cfg.clientSubnet} accept
-          iifname "$external" oifname "${cfg.interface}" ip daddr ${cfg.clientSubnet} ct state established,related accept
-          iifname "${cfg.interface}" oifname "$external" drop
-          iifname "$external" oifname "${cfg.interface}" drop
-        }
-        chain postrouting {
-          type nat hook postrouting priority srcnat; policy accept;
-          ip saddr ${cfg.clientSubnet} oifname "$external" masquerade
-        }
-      }
-      EOF
-              echo "VPN mode: egress through $external"
-              ;;
-            status)
-              printf 'ip_forward: '
-              ${pkgs.procps}/bin/sysctl -n net.ipv4.ip_forward
-              sudo ${pkgs.nftables}/bin/nft list table inet ${table} 2>/dev/null || echo "NAT: disabled"
-              ;;
+            private|egress) sudo ${vpnMode} set "''${2}" ;;
+            status) sudo ${vpnMode} status ;;
             *) echo "Usage: pino server vpn mode <private|egress|status>" >&2; exit 1 ;;
           esac
           ;;
