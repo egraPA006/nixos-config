@@ -351,12 +351,12 @@ in
           return 1
         fi
         if sudo ${pkgs.coreutils}/bin/test -d "$MOUNT_POINT/system"; then
-          sudo ${pkgs.coreutils}/bin/install -d -m 0700 "$backup_mount/bootstrap"
+          sudo ${pkgs.coreutils}/bin/install -d -m 0700 "$backup_mount/system"
           sudo ${pkgs.rsync}/bin/rsync -a --delete \
-            "$MOUNT_POINT/system/" "$backup_mount/bootstrap/"
+            "$MOUNT_POINT/system/" "$backup_mount/system/"
           echo "Installation secrets synchronized to $BACKUP_LABEL"
         else
-          echo "No system-secret tree exists at $MOUNT_POINT/system; bootstrap sync skipped." >&2
+          echo "No system-secret tree exists at $MOUNT_POINT/system; installation-secret sync skipped." >&2
         fi
           sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o ${lib.escapeShellArg config.pino.user.name} -g users "$metadata" "$repository"
         if [ ! -f "$metadata/restic-password" ]; then

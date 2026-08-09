@@ -23,6 +23,7 @@ DATA_MOUNT="${PINO_DATA_MOUNT:-/run/pino-install-data}"
 DATA_SELECTOR="${PINO_DATA_LABEL:-${PINO_DATA_DISK:-}}"
 DATA_MOUNTED=false
 DATA_RESTORED=false
+PASSWORD_CONFIGURED=false
 
 cleanup_bootstrap() {
   if [ "$DATA_MOUNTED" = true ]; then
@@ -182,16 +183,17 @@ if git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 if mount_bootstrap; then
-  if [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/shared" ] && [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST" ]; then
+  if [ ! -d "$BOOTSTRAP_MOUNT/system/shared" ] && [ ! -d "$BOOTSTRAP_MOUNT/system/hosts/$HOST" ]; then
     echo "$BOOTSTRAP_LABEL has no installation secrets for $HOST; continuing without them." >&2
+    echo "Expected system/shared or system/hosts/$HOST on the mounted vault." >&2
   else
     echo "Provisioning $HOST secrets from $BOOTSTRAP_LABEL..."
     sudo install -d -m 0700 -o root -g root /mnt/var/lib/pino/secrets
-    if [ -d "$BOOTSTRAP_MOUNT/bootstrap/shared" ]; then
-      sudo cp -a "$BOOTSTRAP_MOUNT/bootstrap/shared/." /mnt/var/lib/pino/secrets/
+    if [ -d "$BOOTSTRAP_MOUNT/system/shared" ]; then
+      sudo cp -a "$BOOTSTRAP_MOUNT/system/shared/." /mnt/var/lib/pino/secrets/
     fi
-    if [ -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST" ]; then
-      sudo cp -a "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST/." /mnt/var/lib/pino/secrets/
+    if [ -d "$BOOTSTRAP_MOUNT/system/hosts/$HOST" ]; then
+      sudo cp -a "$BOOTSTRAP_MOUNT/system/hosts/$HOST/." /mnt/var/lib/pino/secrets/
     fi
     sudo find /mnt/var/lib/pino/secrets -type d -exec chmod 0700 {} +
     sudo find /mnt/var/lib/pino/secrets -type f -exec chmod 0600 {} +
@@ -218,13 +220,22 @@ if [ -f /mnt/var/lib/pino/secrets/user-password-hash ]; then
   echo "Applying the provisioned $PINO_USER password hash..."
   PASSWORD_HASH="$(sudo head -n 1 /mnt/var/lib/pino/secrets/user-password-hash)"
   printf '%s:%s\n' "$PINO_USER" "$PASSWORD_HASH" | sudo chpasswd --root /mnt --encrypted
+  PASSWORD_CONFIGURED=true
+elif [ -t 0 ]; then
+  echo "No provisioned password hash exists for $PINO_USER. Set a local password before rebooting."
+  sudo nixos-enter --root /mnt -c "passwd $PINO_USER"
+  PASSWORD_CONFIGURED=true
 fi
 
 echo ""
 if [ "$SECRETS_PROVISIONED" = true ]; then
   echo "Done. Vault-backed system secrets were provisioned from $BOOTSTRAP_LABEL."
 else
-  echo "Done without vault secrets. Set the $PINO_USER password with: passwd $PINO_USER"
+  echo "Done without vault-backed installation secrets."
+fi
+if [ "$PASSWORD_CONFIGURED" = false ]; then
+  echo "The $PINO_USER password is not configured. Before rebooting, run:"
+  echo "  sudo nixos-enter --root /mnt -c 'passwd $PINO_USER'"
 fi
 if [ "$DATA_RESTORED" = true ]; then
   echo "Non-secret profile data was restored from the selected pino-data medium."

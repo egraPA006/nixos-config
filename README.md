@@ -42,8 +42,9 @@ bash scripts/install.sh <hostname>
 ```
 
 Then reboot. If the selected vault contains
-`bootstrap/{shared,hosts/<hostname>}/user-password-hash`, the installer applies
-it automatically; otherwise set the password with `passwd` on first login.
+`system/{shared,hosts/<hostname>}/user-password-hash`, the installer applies
+it automatically; otherwise the interactive installer asks for a local password
+after `nixos-install` and before rebooting.
 
 ### Bootstrap la1n from the removable vault
 
@@ -162,7 +163,7 @@ pino <command> <subcommand> help help for a leaf command
 > answering no rebuilds using its existing root-only copies. Rebuilds never
 > unlock the vault automatically.
 
-> Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its system-secret tree into the disk's root-only installation bootstrap.
+> Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its canonical `system/` tree onto the disk for root-only installation provisioning.
 
 Create a complete removable backup disk with matching data and vault IDs:
 
@@ -228,7 +229,9 @@ For `re-1`, every regular file below `system/hosts/re-1/ssh/` is installed into
 the user-owned `~/.ssh/` tree; Home Manager selects `github_ed25519` for
 `github.com`.
 
-`pino storage vault backup [disk]` also updates the selected disk's `bootstrap/` tree.
+`pino storage vault backup [disk]` also updates the selected disk's canonical
+`system/` tree. This is the only installation-secret layout accepted by the
+installer.
 During installation, `scripts/install.sh` selects the only connected
 `pino-vault-*` disk, or the label supplied through `PINO_VAULT_LABEL` when
 several are connected. With no vault disk it installs normally and falls back
