@@ -71,7 +71,7 @@ nixos-generate-config --show-hardware-config --no-filesystems > "$HARDWARE_FILE"
 partition_direct() {
   local command partition
   local -a missing=() existing_partitions=() partitions=()
-  for command in parted partprobe udevadm wipefs mkfs.btrfs btrfs mount umount; do
+  for command in parted partprobe udevadm wipefs mkfs.ext4 mount; do
     command -v "$command" >/dev/null 2>&1 || missing+=("$command")
   done
   if [ "${#missing[@]}" -ne 0 ]; then
@@ -89,12 +89,12 @@ partition_direct() {
     fi
   done
 
-  echo "Creating the hard-coded Mosk GPT/BIOS/Btrfs layout on $DISK..."
+  echo "Creating the hard-coded Mosk GPT/BIOS/ext4 layout on $DISK..."
   wipefs --all --force "$DISK"
   parted --script --align optimal "$DISK" mklabel gpt
   parted --script --align optimal "$DISK" mkpart disk-system-BIOS 1MiB 2MiB
   parted --script "$DISK" set 1 bios_grub on
-  parted --script --align optimal "$DISK" mkpart disk-system-root btrfs 2MiB 100%
+  parted --script --align optimal "$DISK" mkpart disk-system-root ext4 2MiB 100%
   partprobe "$DISK"
   udevadm settle
 
@@ -108,17 +108,9 @@ partition_direct() {
     return 1
   fi
 
-  mkfs.btrfs -f -L nixos "${partitions[1]}"
-  mount "${partitions[1]}" /mnt
-  btrfs subvolume create /mnt/@
-  btrfs subvolume create /mnt/@nix
-  btrfs subvolume create /mnt/@home
-  umount /mnt
-
-  mount -o subvol=@,compress=zstd,noatime "${partitions[1]}" /mnt
-  install -d /mnt/boot /mnt/nix /mnt/home
-  mount -o subvol=@nix,compress=zstd,noatime "${partitions[1]}" /mnt/nix
-  mount -o subvol=@home,compress=zstd,noatime "${partitions[1]}" /mnt/home
+  mkfs.ext4 -F -L nixos "${partitions[1]}"
+  mount -o noatime "${partitions[1]}" /mnt
+  install -d /mnt/boot
 }
 
 if [ "$PARTITION_METHOD" = direct ]; then
@@ -141,13 +133,8 @@ fi
 
 PINO_USER="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.name")"
-PINO_HOME="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
-  "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.home")"
 PINO_CONFIG_DIR="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.configDir")"
-user_uid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $3 }' /mnt/etc/passwd)"
-user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mnt/etc/passwd)"
-[ -n "$user_uid" ] && [ -n "$user_gid" ] || { echo "Installed user $PINO_USER was not found." >&2; exit 1; }
 
 installed_repo="/mnt$PINO_CONFIG_DIR"
 if [ -d "$installed_repo/.git" ]; then
@@ -165,8 +152,6 @@ if [ -d "$installed_repo/.git" ]; then
 else
   echo "WARNING: the installation source was not a Git checkout; updates on $HOST will require a fresh clone." >&2
 fi
-
-chown -R "$user_uid:$user_gid" "/mnt$PINO_HOME"
 install -d -m 0755 /mnt/etc/ssh/authorized_keys.d
 printf '%s\n' "$SSH_PUBLIC_KEY" > "/mnt/etc/ssh/authorized_keys.d/$PINO_USER"
 chmod 0644 "/mnt/etc/ssh/authorized_keys.d/$PINO_USER"

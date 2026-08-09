@@ -171,7 +171,7 @@ tar \
   --exclude='./result' \
   --exclude='./result-*' \
   -C "$REPO_DIR" -cf - . \
-  | sudo tar -C "$INSTALL_CONFIG_DIR" -xf -
+  | sudo tar --no-same-owner -C "$INSTALL_CONFIG_DIR" -xf -
 
 if mount_bootstrap; then
   if [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/shared" ] && [ ! -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST" ]; then
@@ -197,6 +197,14 @@ fi
 
 echo "Installing NixOS for $HOST..."
 sudo nixos-install --flake "$INSTALL_CONFIG_DIR#$HOST"
+
+installed_user_uid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $3 }' /mnt/etc/passwd)"
+installed_user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mnt/etc/passwd)"
+[ -n "$installed_user_uid" ] && [ -n "$installed_user_gid" ] || {
+  echo "Installed user $PINO_USER was not found." >&2
+  exit 1
+}
+sudo chown -R "$installed_user_uid:$installed_user_gid" "/mnt$PINO_HOME"
 
 if [ -f /mnt/var/lib/pino/secrets/user-password-hash ]; then
   echo "Applying the provisioned $PINO_USER password hash..."
