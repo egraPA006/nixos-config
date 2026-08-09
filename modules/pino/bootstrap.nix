@@ -48,19 +48,27 @@ in
       '';
       script = ''
         operation="''${1:-}"
+        if [ "$operation" = vpn ]; then
+          shift
+          operation="''${1:-}"
+          shift || true
+          if [ "$operation" = peer ]; then
+            operation="''${1:-}"
+            shift || true
+          fi
+          case "$operation" in
+            init|migrate|list|export|set-endpoint|add|remove) ;;
+            *) echo "Run 'pino bootstrap server vpn help' for usage." >&2; exit 1 ;;
+          esac
+          export PINO_CONFIG_DIR=${lib.escapeShellArg configDir}
+          export PINO_VAULT_ROOT=${lib.escapeShellArg vaultRoot}
+          export PINO_OPERATION="$operation"
+          ${vpnBootstrap}
+          exit
+        fi
         host="''${2:-}"
         address="''${3:-}"
         [ -n "$host" ] || { echo "A host name is required." >&2; exit 1; }
-        case "$operation" in
-          init|migrate|list|export|set-endpoint|add|remove)
-            export PINO_CONFIG_DIR=${lib.escapeShellArg configDir}
-            export PINO_VAULT_ROOT=${lib.escapeShellArg vaultRoot}
-            export PINO_OPERATION="$operation"
-            shift
-            ${vpnBootstrap}
-            exit
-            ;;
-        esac
         flake=${lib.escapeShellArg configDir}
         source_root=${lib.escapeShellArg vaultRoot}/"$host"
         attr="path:$flake#nixosConfigurations.$host.config.pino.bootstrap.secrets"
