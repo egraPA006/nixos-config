@@ -15,7 +15,7 @@ Download from [nixos.org](https://nixos.org/download). Use the minimal ISO.
 
 ```bash
 nix-shell -p git
-git clone https://github.com/egrapa/nixos-config /tmp/nixos-config
+git clone https://github.com/egraPA006/nixos-config.git /tmp/nixos-config
 cd /tmp/nixos-config
 ```
 
@@ -405,7 +405,7 @@ This is the complete first-deployment order. Mosk currently enables only
 
    ```bash
    nix-shell -p git
-   git clone https://github.com/egrapa/nixos-config
+   git clone https://github.com/egraPA006/nixos-config.git
    cd nixos-config
    cat hosts/mosk/active-profiles.nix
    ```
@@ -483,8 +483,10 @@ This is the complete first-deployment order. Mosk currently enables only
     ```
 
 11. The staging checkout now contains generated, non-secret Mosk hardware and
-    disk files. Copy them back to re-1, review, commit, and push them so future
-    rebuilds reproduce the installed machine:
+    disk files. The installer preserves its Git metadata and changes Mosk's
+    GitHub origin to public HTTPS, so the server can pull without a GitHub key.
+    Copy the generated files back to re-1, review, commit, and push them before
+    pulling or reinstalling so future rebuilds reproduce the installed machine:
 
     ```bash
     cd ~/nixos-config

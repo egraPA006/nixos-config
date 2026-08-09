@@ -167,7 +167,6 @@ INSTALL_CONFIG_DIR="/mnt$PINO_CONFIG_DIR"
 echo "Copying repo to $INSTALL_CONFIG_DIR..."
 sudo mkdir -p "/mnt$PINO_HOME" "$INSTALL_CONFIG_DIR"
 tar \
-  --exclude='./.git' \
   --exclude='./secrets' \
   --exclude='./result' \
   --exclude='./result-*' \

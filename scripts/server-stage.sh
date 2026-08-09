@@ -143,9 +143,29 @@ PINO_USER="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-comma
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.name")"
 PINO_HOME="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
   "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.user.home")"
+PINO_CONFIG_DIR="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw \
+  "path:$REPO_DIR#nixosConfigurations.$HOST.config.pino.configDir")"
 user_uid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $3 }' /mnt/etc/passwd)"
 user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mnt/etc/passwd)"
 [ -n "$user_uid" ] && [ -n "$user_gid" ] || { echo "Installed user $PINO_USER was not found." >&2; exit 1; }
+
+installed_repo="/mnt$PINO_CONFIG_DIR"
+if [ -d "$installed_repo/.git" ]; then
+  origin="$(git -c safe.directory="$installed_repo" -C "$installed_repo" remote get-url origin 2>/dev/null || true)"
+  case "$origin" in
+    git@github.com:*)
+      git -c safe.directory="$installed_repo" -C "$installed_repo" remote set-url origin \
+        "https://github.com/${origin#git@github.com:}"
+      ;;
+    ssh://git@github.com/*)
+      git -c safe.directory="$installed_repo" -C "$installed_repo" remote set-url origin \
+        "https://github.com/${origin#ssh://git@github.com/}"
+      ;;
+  esac
+else
+  echo "WARNING: the installation source was not a Git checkout; updates on $HOST will require a fresh clone." >&2
+fi
+
 chown -R "$user_uid:$user_gid" "/mnt$PINO_HOME"
 install -d -m 0755 /mnt/etc/ssh/authorized_keys.d
 printf '%s\n' "$SSH_PUBLIC_KEY" > "/mnt/etc/ssh/authorized_keys.d/$PINO_USER"
