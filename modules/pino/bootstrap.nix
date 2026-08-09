@@ -101,8 +101,10 @@ in
         }
         fingerprint="$(${pkgs.openssh}/bin/ssh-keygen -lf "$known_hosts" -E sha256 | ${pkgs.gawk}/bin/awk '{print $2}')"
         echo "Remote ED25519 fingerprint: $fingerprint"
-        read -r -p "Type the fingerprint shown by the server console: " expected
-        [ "$expected" = "$fingerprint" ] || { echo "Fingerprint mismatch." >&2; exit 1; }
+        echo "On the server's trusted console, display its fingerprint with:"
+        echo "  ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256"
+        read -r -p "Does this exactly match the fingerprint shown by the trusted server console? Type 'yes': " confirmation
+        [ "$confirmation" = "yes" ] || { echo "Fingerprint verification cancelled." >&2; exit 1; }
 
         ssh_options=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes)
         remote_host="$(${pkgs.openssh}/bin/ssh "''${ssh_options[@]}" "$remote" hostname)"

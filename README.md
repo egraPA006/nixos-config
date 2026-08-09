@@ -448,8 +448,9 @@ This is the complete first-deployment order. Mosk currently enables only
    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
    ```
 
-8. From re-1, provision the manifest-listed server file. Type the console
-   fingerprint and one-time code when prompted:
+8. From re-1, provision the manifest-listed server file. Compare the fingerprint
+   printed by Pino with the one shown on the trusted server console, type `yes`
+   if they match exactly, then enter the one-time code when prompted:
 
    ```bash
    ssh-add ~/.ssh/mosk_ed25519
