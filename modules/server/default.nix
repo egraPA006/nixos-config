@@ -53,9 +53,11 @@
     script = ''
       case "''${1:-}" in
         status)
+          echo "Failed services:"
           systemctl --failed --no-pager
           echo
-          systemctl list-units --type=service --state=running --no-pager \
+          echo "Active Pino server services:"
+          systemctl list-units --type=service --state=active --no-pager \
             | grep -E 'caddy|sing-box|amneziawg|syncthing|postfix|dovecot|rspamd' || true
           ;;
         connections)
