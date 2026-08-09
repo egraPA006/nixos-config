@@ -37,7 +37,8 @@ bash scripts/disko.sh <hostname>
 
 The wrapper does not pre-evaluate the full host. Disko partitions and mounts
 the target first; the installation step then uses `/mnt` as its Nix store root
-instead of filling the live ISO's writable store.
+for both flake resolution and building, instead of filling the live ISO's
+writable store.
 
 ### 5. Install
 

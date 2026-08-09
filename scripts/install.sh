@@ -9,12 +9,15 @@ fi
 HOST="$1"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NIX_STORE_ARGS=()
+NIXOS_INSTALL_STORE_ARGS=()
 if [ -n "${PINO_INSTALL_NIX_STORE:-}" ]; then
   NIX_STORE_ARGS=(--store "$PINO_INSTALL_NIX_STORE")
+  NIXOS_INSTALL_STORE_ARGS=(--option store "$PINO_INSTALL_NIX_STORE")
 elif findmnt --mountpoint /mnt >/dev/null 2>&1; then
   # Partitioning gives evaluations a large target-backed store
   # instead of the installer ISO's small writable tmpfs.
   NIX_STORE_ARGS=(--store /mnt)
+  NIXOS_INSTALL_STORE_ARGS=(--option store /mnt)
 fi
 NIX_EVAL=(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw)
 BOOTSTRAP_MOUNT="${PINO_BOOTSTRAP_MOUNT:-/run/pino-bootstrap}"
@@ -211,7 +214,7 @@ if mount_data_backup; then
 fi
 
 echo "Installing NixOS for $HOST..."
-sudo nixos-install --flake "$INSTALL_CONFIG_DIR#$HOST"
+sudo nixos-install "${NIXOS_INSTALL_STORE_ARGS[@]}" --flake "$INSTALL_CONFIG_DIR#$HOST"
 
 installed_user_uid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $3 }' /mnt/etc/passwd)"
 installed_user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mnt/etc/passwd)"
