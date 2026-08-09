@@ -446,7 +446,11 @@ This is the complete first-deployment order. Mosk currently enables only
 
    ```bash
    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+   pino server bootstrap code
    ```
+
+   If the one-hour code was lost or expired before initial provisioning, issue
+   a replacement from the root console with `pino server bootstrap renew`.
 
 8. From re-1, provision the manifest-listed server file. Compare the fingerprint
    printed by Pino with the one shown on the trusted server console, type `yes`

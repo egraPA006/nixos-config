@@ -111,6 +111,95 @@ in
 
   environment.systemPackages = [ receiver ];
 
+  pino.subcommands.server.commands.bootstrap = {
+    description = "Inspect or renew the initial bootstrap code";
+    commands = {
+      status.description = "Show whether initial bootstrap is pending or complete";
+      code.description = "Display the current unexpired bootstrap code";
+      renew.description = "Issue a replacement code valid for one hour";
+    };
+    helpText = ''
+      pino server bootstrap — initial secret provisioning
+        pino server bootstrap status   Show pending, expired, or complete state
+        pino server bootstrap code     Display the current code and expiry
+        pino server bootstrap renew    Replace a missing or expired code
+
+      Run these commands as root from the trusted server console. A successful
+      initial bootstrap consumes the code permanently; later changes use
+      `pino bootstrap server sync` from the vault machine.
+    '';
+    script = ''
+      [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ] || {
+        echo "Run this command as root from the trusted server console." >&2
+        exit 1
+      }
+
+      operation="''${1:-}"
+      state_dir=/var/lib/pino/bootstrap
+      pending="$state_dir/pending"
+      complete="$state_dir/complete"
+
+      read_pending() {
+        [ -f "$pending" ] || return 1
+        read -r code expires < "$pending"
+        [[ "$code" =~ ^[0-9a-f]{12}$ && "$expires" =~ ^[0-9]+$ ]] || {
+          echo "The pending bootstrap state is malformed." >&2
+          exit 1
+        }
+      }
+
+      case "$operation" in
+        status)
+          if [ -f "$complete" ]; then
+            echo "Initial bootstrap: complete"
+          elif ! read_pending; then
+            echo "Initial bootstrap: not pending"
+          elif [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$expires" ]; then
+            echo "Initial bootstrap: pending"
+            echo "Expires: $(${pkgs.coreutils}/bin/date --date="@$expires" --iso-8601=seconds)"
+          else
+            echo "Initial bootstrap: expired"
+          fi
+          ;;
+        code)
+          [ ! -f "$complete" ] || {
+            echo "Initial bootstrap is already complete; use server secret sync for later changes." >&2
+            exit 1
+          }
+          read_pending || {
+            echo "No bootstrap code is pending. Run: pino server bootstrap renew" >&2
+            exit 1
+          }
+          [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$expires" ] || {
+            echo "The bootstrap code has expired. Run: pino server bootstrap renew" >&2
+            exit 1
+          }
+          echo "Bootstrap code: $code"
+          echo "Expires: $(${pkgs.coreutils}/bin/date --date="@$expires" --iso-8601=seconds)"
+          ;;
+        renew)
+          [ ! -f "$complete" ] || {
+            echo "Initial bootstrap is already complete; refusing to reopen it." >&2
+            exit 1
+          }
+          ${pkgs.coreutils}/bin/install -d -m 0700 "$state_dir"
+          code="$(${pkgs.coreutils}/bin/od -An -N6 -tx1 /dev/urandom | ${pkgs.coreutils}/bin/tr -d ' \n')"
+          expires="$(( $(${pkgs.coreutils}/bin/date +%s) + 3600 ))"
+          replacement="$(${pkgs.coreutils}/bin/mktemp "$state_dir/pending.XXXXXX")"
+          cleanup() { ${pkgs.coreutils}/bin/rm -f "$replacement"; }
+          trap cleanup EXIT INT TERM
+          ${pkgs.coreutils}/bin/printf '%s %s\n' "$code" "$expires" > "$replacement"
+          ${pkgs.coreutils}/bin/chmod 0600 "$replacement"
+          ${pkgs.coreutils}/bin/mv -f "$replacement" "$pending"
+          trap - EXIT INT TERM
+          echo "Bootstrap code: $code"
+          echo "Expires: $(${pkgs.coreutils}/bin/date --date="@$expires" --iso-8601=seconds)"
+          ;;
+        *) echo "Run 'pino server bootstrap help' for usage." >&2; exit 1 ;;
+      esac
+    '';
+  };
+
   security.sudo.extraRules = [{
     users = [ user ];
     commands = [{

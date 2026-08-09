@@ -46,6 +46,7 @@
         pino server connections
         pino server disk
         pino server logs <unit>
+        pino server bootstrap help
 
       No monitoring dashboard or management port is exposed.
     '';
