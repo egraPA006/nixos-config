@@ -13,6 +13,10 @@
     };
   };
 
+  # Server administration is authenticated by the user's SSH key. The server
+  # user intentionally has no local password, so wheel must not prompt for one.
+  security.sudo.wheelNeedsPassword = false;
+
   systemd.tmpfiles.rules = [
     "d /etc/ssh/authorized_keys.d 0755 root root -"
   ];
