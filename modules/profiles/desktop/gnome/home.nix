@@ -92,6 +92,11 @@
   };
 
   dconf.settings = {
+    "org/gnome/desktop/media-handling" = {
+      automount = false;
+      automount-open = false;
+    };
+
     "org/gnome/desktop/session" = {
       idle-delay = lib.hm.gvariant.mkUint32 0;
     };
