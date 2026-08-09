@@ -61,6 +61,7 @@ pino <command> <subcommand> help help for a leaf command
 |---|---|
 | `pino os info/top` | System information and live monitoring |
 | `pino os list` | List NixOS system generations |
+| `pino os pull` | Fast-forward the configuration checkout as the Pino user |
 | `pino os rebuild/update` | Interactively rebuild or update the flake |
 | `pino os rollback [N]` | Select and activate a system generation |
 | `pino os gc` | Keep current + previous generation and collect the rest |

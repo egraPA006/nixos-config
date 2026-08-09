@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 CONFIG_DIR=@configDir@
+GIT=@git@
+PINO_USER=@pinoUser@
+RUNUSER=@runuser@
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 HOST_NAME="$(hostname)"
 VAULT_ENABLED=@vaultEnabled@
+
+# Git checkout and flake updates belong to the configured user. When invoked
+# from a recovery root console, delegate first and let individual operations
+# elevate only the system mutation they require.
+if [ "$(id -u)" -eq 0 ]; then
+  exec "$RUNUSER" -u "$PINO_USER" -- /run/current-system/sw/bin/pino os "$@"
+fi
 
 confirm() {
   local prompt="$1" answer
@@ -19,6 +29,19 @@ list_generations() {
 
 current_generation() {
   list_generations | awk '$NF == "(current)" { print $1; exit }'
+}
+
+pull_os() {
+  "$GIT" -C "$CONFIG_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "$CONFIG_DIR is not a Git checkout." >&2
+    return 1
+  }
+  if [ -n "$("$GIT" -C "$CONFIG_DIR" status --porcelain --untracked-files=no)" ]; then
+    echo "Tracked changes prevent a safe pull:" >&2
+    "$GIT" -C "$CONFIG_DIR" status --short --untracked-files=no >&2
+    return 1
+  fi
+  "$GIT" -C "$CONFIG_DIR" pull --ff-only
 }
 
 maybe_populate_vault() {
@@ -129,6 +152,7 @@ gc_os() {
 
 case "${1:-}" in
   list) list_generations ;;
+  pull) pull_os ;;
   rebuild) rebuild_os ;;
   update) update_os ;;
   rollback) rollback_os "${2:-}" ;;
@@ -137,6 +161,7 @@ case "${1:-}" in
     echo "pino os — manage the NixOS system"
     echo
     echo "  list             List system generations"
+    echo "  pull             Fast-forward the configuration checkout"
     echo "  rebuild          Confirm, rebuild, and switch the flake"
     echo "  update           Confirm, update flake inputs, and rebuild"
     echo "  rollback [N]     Interactively activate generation N"
