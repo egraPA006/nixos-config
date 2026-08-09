@@ -15,6 +15,8 @@
     home = "/home/vincent";
   };
   pino.configDir = "${config.pino.user.home}/nixos-config";
+  pino.server.passwordSync.devices.re-1.id =
+    "LVLTAKU-35ENIVC-BSHN3KB-5FMLBUQ-YBXHKAA-IAB6QTT-2NVKQFB-BZHXCQU";
 
   # Public domain, service profiles, and client device IDs are selected before
   # staging. scripts/server-stage.sh replaces the disk placeholder and
