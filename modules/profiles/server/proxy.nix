@@ -72,12 +72,19 @@ in
   };
 
   pino.secrets.entries = {
-    "server/sing-box/reality-private-key".restartUnits = [ "sing-box.service" ];
-    "server/sing-box/reality-short-id".restartUnits = [ "sing-box.service" ];
+    "server/sing-box/reality-private-key" = {
+      restartUnits = [ "sing-box.service" ];
+      startUnits = [ "sing-box.service" ];
+    };
+    "server/sing-box/reality-short-id" = {
+      restartUnits = [ "sing-box.service" ];
+      startUnits = [ "sing-box.service" ];
+    };
   } // lib.mapAttrs' (name: user: lib.nameValuePair
     "server/sing-box/users/${name}.uuid" {
       target = user.uuidFile;
       restartUnits = [ "sing-box.service" ];
+      startUnits = [ "sing-box.service" ];
     }) cfg.proxy.users;
 
   systemd.services.sing-box.unitConfig = {

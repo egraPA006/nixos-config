@@ -145,6 +145,7 @@ in
       then null
       else cfg.configFile;
     restartUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
+    startUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
   };
 
   boot.kernel.sysctl."net.ipv4.ip_forward" = 0;

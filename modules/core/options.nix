@@ -78,6 +78,11 @@ in
               type = lib.types.listOf lib.types.str;
               default = [ ];
             };
+            startUnits = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "Units to start after provisioning, including units previously skipped for a missing secret";
+            };
           };
         }));
       };

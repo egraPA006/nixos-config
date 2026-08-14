@@ -72,6 +72,10 @@ in
         "pino-storage-webdav.service"
         "pino-share-webdav.service"
       ];
+      startUnits = [
+        "pino-storage-webdav.service"
+        "pino-share-webdav.service"
+      ];
     };
 
     systemd.services.pino-storage-webdav = {

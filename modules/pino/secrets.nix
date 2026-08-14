@@ -38,8 +38,11 @@ let
       ${lib.concatStringsSep "\n" (lib.mapAttrsToList deployEntry entries)}
       if [ "$restart" = true ]; then
         ${lib.concatMapStringsSep "\n" (unit:
-          "${pkgs.systemd}/bin/systemctl reload-or-restart ${lib.escapeShellArg unit}")
+          "${pkgs.systemd}/bin/systemctl try-restart ${lib.escapeShellArg unit}")
           (lib.unique (lib.concatMap (entry: entry.restartUnits) (lib.attrValues entries)))}
+        ${lib.concatMapStringsSep "\n" (unit:
+          "${pkgs.systemd}/bin/systemctl start ${lib.escapeShellArg unit}")
+          (lib.unique (lib.concatMap (entry: entry.startUnits) (lib.attrValues entries)))}
       fi
     '';
   };
