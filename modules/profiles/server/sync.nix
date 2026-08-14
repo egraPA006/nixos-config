@@ -78,7 +78,9 @@ in
     "d ${cfg.encryptedRoot} 0700 syncthing syncthing -"
   ] ++ map (directory:
     "d ${cfg.encryptedRoot}/${directory} 0700 syncthing syncthing -"
-  ) secretDirectories;
+  ) secretDirectories ++ map (scope:
+    "d ${cfg.encryptedRoot}/${scope}/.stfolder 0755 syncthing syncthing -"
+  ) cfg.secretScopes;
 
   assertions = [
     {
