@@ -56,8 +56,9 @@ in
           };
         };
         share = {
-          label = "Pino temporary encrypted share";
-          path = "/var/lib/syncthing/share";
+          label = "Pino disposable share";
+          path = cfg.encryptedShare;
+          type = "receiveencrypted";
           devices = deviceNames;
         };
       } // secretFolders;
@@ -74,7 +75,7 @@ in
 
   systemd.tmpfiles.rules = [
     "d ${cfg.folder} 0700 syncthing syncthing -"
-    "d /var/lib/syncthing/share 0700 syncthing syncthing -"
+    "d ${cfg.encryptedShare} 0700 syncthing syncthing -"
     "d ${cfg.encryptedRoot} 0700 syncthing syncthing -"
   ] ++ map (directory:
     "d ${cfg.encryptedRoot}/${directory} 0700 syncthing syncthing -"
@@ -115,7 +116,8 @@ in
     };
     helpText = ''
       KeePass databases and Cryptomator ciphertext synchronize automatically.
-      Vault passwords and plaintext never reach this server. NixOS configuration
+      The disposable share uses Syncthing receive-encrypted storage. Vault and
+      folder passwords and plaintext never reach this server. NixOS configuration
       uses the separate bare Git mirror and is updated explicitly by `pino repo
       push` on a trusted client, preserving commits and preventing file races.
     '';
@@ -132,7 +134,7 @@ in
           sudo -u syncthing ${pkgs.coreutils}/bin/du -sh \
             ${lib.escapeShellArg cfg.folder} \
             ${lib.escapeShellArg cfg.encryptedRoot} \
-            /var/lib/syncthing/share
+            ${lib.escapeShellArg cfg.encryptedShare}
           ;;
         logs) journalctl -u syncthing -n 100 --no-pager ;;
         *) echo "Run 'pino server sync help' for usage." >&2; exit 1 ;;

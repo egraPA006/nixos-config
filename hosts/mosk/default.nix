@@ -26,5 +26,9 @@
 
     sync.devices.re-1.id = "LVLTAKU-35ENIVC-BSHN3KB-5FMLBUQ-YBXHKAA-IAB6QTT-2NVKQFB-BZHXCQU";
     sync.devices.la1n.id = "RLH5AIW-CXNIN2A-Q43HCST-CROXC7J-PVJ7BNW-MTDGTLE-PIGGVJQ-SRPQSQ7";
+    sync.devices.phone = {
+      id = "45KTUT3-MEB7LR6-HFPB4KW-QB6O63T-BNOYOO3-ZDI2LID-RSVQRX2-5P74HAH";
+      secretScopes = [ "shared_sec" "hosts/phone" ];
+    };
   };
 }

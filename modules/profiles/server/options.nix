@@ -77,6 +77,11 @@ in
         default = "/var/lib/syncthing/secrets";
         description = "Ciphertext-only Cryptomator vault root";
       };
+      encryptedShare = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/syncthing/shared-encrypted";
+        description = "Receive-encrypted Syncthing storage for the disposable share";
+      };
       secretScopes = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ "shared_sec" ] ++ map (host: "hosts/${host}") config.pino.secrets.knownHosts;

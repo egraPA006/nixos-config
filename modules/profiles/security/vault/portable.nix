@@ -4,7 +4,6 @@ let
   cfg = config.pino.portableVaults;
   user = config.pino.user.name;
   home = config.pino.user.home;
-  primary = cfg.remotes.${cfg.primary};
   effectiveScopes = lib.unique (
     cfg.scopes
     ++ [ "shared_sec" ]
@@ -12,20 +11,20 @@ let
         then map (host: "hosts/${host}") config.pino.secrets.knownHosts
         else [ "hosts/${config.networking.hostName}" ])
   );
-  cryptomatorScopes = [ "shared" ] ++ effectiveScopes;
+  cryptomatorScopes = effectiveScopes;
   scopeId = scope: "pino-${builtins.substring 0 12 (builtins.hashString "sha256" scope)}";
   syncFolderId = scope: "pino-secret-${lib.replaceStrings [ "/" ] [ "-" ] scope}";
   cryptomatorEntry = scope: {
     id = scopeId scope;
     path = "${cfg.cipherRoot}/${scope}";
     displayName = lib.last (lib.splitString "/" scope);
-    unlockAfterStartup = scope == "shared";
+    unlockAfterStartup = false;
     revealAfterMount = false;
     usesReadOnlyMode = false;
     mountFlags = "";
     maxCleartextFilenameLength = -1;
     actionAfterUnlock = "ASK";
-    autoLockWhenIdle = scope != "shared";
+    autoLockWhenIdle = true;
     autoLockIdleSeconds = 1800;
     mountPoint = "${cfg.mountRoot}/${scope}";
     port = 42427;
@@ -89,6 +88,10 @@ let
   clientSyncDevices =
     lib.optional (config.pino.vault.sync.serverId != null) config.pino.vault.sync.serverName
     ++ builtins.attrNames config.pino.vault.sync.mirrors;
+  encryptedShareDevices = map (name: {
+    inherit name;
+    encryptionPasswordFile = cfg.sharePasswordFile;
+  }) clientSyncDevices;
   secretSyncFolders = lib.listToAttrs (map (scope: {
     name = syncFolderId scope;
     value = {
@@ -117,6 +120,16 @@ in
       default = "${home}/Secrets";
       description = "Parent directory for unlocked Cryptomator vaults";
     };
+    shareRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "${home}/Shared";
+      description = "Plaintext disposable share on this trusted client";
+    };
+    sharePasswordFile = lib.mkOption {
+      type = lib.types.str;
+      default = "${home}/.local/state/pino/shared-encryption-password";
+      description = "Provisioned Syncthing password used to encrypt the share for untrusted mirrors";
+    };
     scopes = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -138,7 +151,6 @@ in
           sshHost = "mosk";
           path = "/var/lib/pino/storage";
           webdavUrl = "https://storage.egrapa.com";
-          shareUrl = "https://share.egrapa.com";
         };
       };
       type = lib.types.attrsOf (lib.types.submodule {
@@ -146,7 +158,6 @@ in
           sshHost = lib.mkOption { type = lib.types.str; };
           path = lib.mkOption { type = lib.types.str; default = "/var/lib/pino/storage"; };
           webdavUrl = lib.mkOption { type = lib.types.str; };
-          shareUrl = lib.mkOption { type = lib.types.str; };
         };
       });
       description = "Ciphertext-only storage mirrors";
@@ -164,6 +175,14 @@ in
           builtins.match "[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*" scope != null
           && !(lib.hasInfix ".." scope)) effectiveScopes;
         message = "pino.portableVaults.scopes must contain safe relative paths";
+      }
+      {
+        assertion = lib.hasPrefix "${home}/" cfg.shareRoot;
+        message = "pino.portableVaults.shareRoot must be inside the Pino user's home";
+      }
+      {
+        assertion = lib.hasPrefix "${home}/" cfg.sharePasswordFile;
+        message = "pino.portableVaults.sharePasswordFile must be inside the Pino user's home";
       }
     ];
 
@@ -184,6 +203,7 @@ in
       "d ${home}/.local/state/pino 0700 ${user} users -"
       "d ${cfg.cipherRoot} 0700 ${user} users -"
       "d ${cfg.mountRoot} 0700 ${user} users -"
+      "d ${cfg.shareRoot} 0700 ${user} users -"
       "d ${home}/.local/state/pino/secrets 0700 ${user} users -"
       "L+ /run/pino-secrets - - - - ${cfg.mountRoot}"
     ] ++ lib.concatMap (scope: [
@@ -194,13 +214,24 @@ in
     services.syncthing.settings.folders = lib.mkIf
       ((config.pino.vault.sync.serverId != null) || (config.pino.vault.sync.mirrors != { })) ({
         share = {
-          label = "Pino temporary encrypted share";
-          path = "${cfg.cipherRoot}/shared";
-          devices =
-            lib.optional (config.pino.vault.sync.serverId != null) config.pino.vault.sync.serverName
-            ++ builtins.attrNames config.pino.vault.sync.mirrors;
+          label = "Pino disposable share";
+          path = cfg.shareRoot;
+          devices = encryptedShareDevices;
         };
       } // secretSyncFolders);
+
+    systemd.services.syncthing.unitConfig.ConditionPathExists = cfg.sharePasswordFile;
+    systemd.services.syncthing-init.unitConfig.ConditionPathExists = cfg.sharePasswordFile;
+
+    pino.secrets.entries."sync/shared-password" = {
+      target = cfg.sharePasswordFile;
+      owner = user;
+      group = "users";
+      mode = "0600";
+      directoryMode = "0700";
+      restartUnits = [ "syncthing.service" "syncthing-init.service" ];
+      startUnits = [ "syncthing.service" "syncthing-init.service" ];
+    };
 
     home-manager.users.${user}.systemd.user.services.cryptomator = {
       Unit = {
@@ -219,45 +250,57 @@ in
     };
 
     pino.subcommands.vault.commands.share = {
-      description = "Open the temporary client-encrypted file exchange";
+      description = "Manage the disposable Syncthing file exchange";
       commands = {
-        init.description = "Prepare the local encrypted share and open Cryptomator";
-        open.description = "Open the encrypted share in Cryptomator";
-        status.description = "Show local transport and Android WebDAV information";
+        configure.description = "Store the untrusted-mirror password in this host vault";
+        status.description = "Show the local share and synchronization state";
       };
       helpText = ''
-        Share is a disposable Cryptomator vault transported as ciphertext by
-        Syncthing. It has no versioned or external backup policy. Enable
-        password storage in the desktop keyring after its first unlock.
+        Share is plaintext on trusted clients and encrypted by Syncthing before
+        reaching an untrusted mirror. It has no versioned or external backup
+        policy. Generate one strong password in identity.kdbx, configure that same
+        password on every trusted client and in the phone's Syncthing folder,
+        and never give it to the mirror.
       '';
       script = ''
-        CIPHER_ROOT=${lib.escapeShellArg cfg.cipherRoot}
         MOUNT_ROOT=${lib.escapeShellArg cfg.mountRoot}
+        SHARE_ROOT=${lib.escapeShellArg cfg.shareRoot}
+        PASSWORD_FILE=${lib.escapeShellArg cfg.sharePasswordFile}
+        HOST_SCOPE=${lib.escapeShellArg "hosts/${config.networking.hostName}"}
         case "''${1:-}" in
-          init)
-            ${pkgs.coreutils}/bin/mkdir -p "$CIPHER_ROOT/shared" "$MOUNT_ROOT/shared"
-            echo "Create a Cryptomator vault in $CIPHER_ROOT/shared."
-            echo "Use the declared mount point $MOUNT_ROOT/shared."
-            echo "After unlocking it, store its password through KeePassXC Secret Service."
-            ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
-            ;;
-          open)
-            [ -f "$CIPHER_ROOT/shared/vault.cryptomator" ] || {
-              echo "The shared vault has not been created yet." >&2
-              echo "Run: pino vault share init" >&2
+          configure)
+            source="$MOUNT_ROOT/$HOST_SCOPE/sync/shared-password"
+            ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$HOST_SCOPE" >/dev/null 2>&1 || {
+              echo "Unlock $HOST_SCOPE in Cryptomator first." >&2
               exit 1
             }
-            echo "Unlock shared in Cryptomator; it mounts at $MOUNT_ROOT/shared"
-            ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
+            [ ! -e "$source" ] || {
+              echo "The shared-folder password is already configured for this host." >&2
+              echo "Coordinated password rotation is intentionally not automatic." >&2
+              exit 1
+            }
+            IFS= read -r -s -p "Shared-folder password from identity.kdbx: " password
+            echo
+            IFS= read -r -s -p "Repeat password: " confirmation
+            echo
+            [ -n "$password" ] || { echo "Password must not be empty." >&2; exit 1; }
+            [ "$password" = "$confirmation" ] || { echo "Passwords do not match." >&2; exit 1; }
+            [ "''${#password}" -ge 20 ] || { echo "Use at least 20 characters." >&2; exit 1; }
+            ${pkgs.coreutils}/bin/install -d -m 0700 "$(${pkgs.coreutils}/bin/dirname "$source")"
+            umask 077
+            ${pkgs.coreutils}/bin/printf '%s' "$password" > "$source"
+            unset password confirmation
+            /run/current-system/sw/bin/pino vault secrets populate
+            echo "Shared-folder encryption configured. Use the same password on every trusted peer."
             ;;
           status)
-            if [ -f "$CIPHER_ROOT/shared/vault.cryptomator" ]; then cipher=ready; else cipher=missing; fi
-            if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/shared" >/dev/null 2>&1; then mount=unlocked; else mount=locked; fi
-            echo "Share: $cipher, $mount"
-            echo "Ciphertext: $CIPHER_ROOT/shared"
-            echo "Android shared_sec: ${primary.webdavUrl}/shared_sec (read-only)"
-            echo "Android live share: ${primary.shareUrl}"
-            systemctl status syncthing.service --no-pager
+            echo "Share: $SHARE_ROOT"
+            if [ -f "$PASSWORD_FILE" ]; then echo "Encryption password: provisioned"; else echo "Encryption password: missing"; fi
+            if ${pkgs.systemd}/bin/systemctl is-active --quiet syncthing.service; then
+              echo "Syncthing: active"
+            else
+              echo "Syncthing: inactive"
+            fi
             ;;
           *) echo "Run 'pino vault share help' for usage." >&2; exit 1 ;;
         esac
@@ -274,7 +317,7 @@ in
       };
       helpText = ''
         The backup contains only ciphertext, the encrypted KeePass database,
-        and a public Git bundle. The disposable `shared` vault is excluded.
+        and a public Git bundle. The disposable plaintext share is excluded.
         The target keeps exactly current and previous generations.
 
         Restore deliberately leaves Syncthing stopped. Inspect the restored
@@ -289,6 +332,7 @@ in
         MOUNT_POINT=
         DATA_DEVICE=
         RESTART_SYNC=false
+        BACKUP_SCOPES=( ${scopeWords} )
 
         cleanup_backup() {
           if [ "$MOUNTED" = true ]; then
@@ -375,7 +419,7 @@ in
         }
 
         backup_run() {
-          local root incoming bundle_tmp
+          local root incoming bundle_tmp scope
           require_closed
           select_disk "''${1:-}"
           mount_disk rw
@@ -388,9 +432,12 @@ in
             sudo ${pkgs.rsync}/bin/rsync -rt --delete --exclude='.stversions/' \
               "$IDENTITY_ROOT/" "$incoming/identity/"
           fi
-          sudo ${pkgs.rsync}/bin/rsync -rt --delete \
-            --exclude='/shared/' --exclude='.stversions/' \
-            "$CIPHER_ROOT/" "$incoming/encrypted/"
+          for scope in "''${BACKUP_SCOPES[@]}"; do
+            [ -d "$CIPHER_ROOT/$scope" ] || continue
+            sudo ${pkgs.coreutils}/bin/mkdir -p "$incoming/encrypted/$scope"
+            sudo ${pkgs.rsync}/bin/rsync -rt --delete --exclude='.stversions/' \
+              "$CIPHER_ROOT/$scope/" "$incoming/encrypted/$scope/"
+          done
           bundle_tmp="$(${pkgs.coreutils}/bin/mktemp /tmp/pino-config-bundle.XXXXXX)"
           if ${pkgs.git}/bin/git -C ${lib.escapeShellArg config.pino.configDir} \
             bundle create "$bundle_tmp" --all; then
@@ -507,7 +554,7 @@ in
           local requested="''${1:-all}"
           local configured
           if [ "$requested" = shared ]; then
-            echo "The disposable shared vault is managed by 'pino vault share'." >&2
+            echo "shared is a plaintext Syncthing folder, not a Cryptomator secret scope." >&2
             return 1
           fi
           if [ "$requested" = all ]; then

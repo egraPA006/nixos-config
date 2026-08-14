@@ -74,19 +74,21 @@ The portable layout separates ciphertext transport from local decryption:
 │   ├── identity.kdbx             # everyday accounts
 │   └── infra.kdbx                # infrastructure credentials
 └── encrypted/                    # Syncthing sees only this representation
-    ├── shared/                   # disposable file exchange
     ├── shared_sec/               # recovery documents
     └── hosts/<host>/             # runtime configuration for one host
 
 ~/Secrets/                        # Cryptomator plaintext mounts; never synced
-├── shared/
 ├── shared_sec/
 └── hosts/<host>/
+
+~/Shared/                         # disposable plaintext on trusted clients
 ```
 
 Syncthing transports the encrypted KDBX files and independent Cryptomator
 ciphertext folders. Cryptomator alone exposes `~/Secrets`; passwords remain in
-KeePassXC. Mosk stores synchronized ciphertext and cannot decrypt it.
+KeePassXC. The disposable share is plaintext only on trusted clients and uses
+Syncthing's untrusted-device encryption before reaching Mosk. Mosk cannot
+decrypt any of these representations.
 
 `shared_sec` is never a runtime system-configuration source. NixOS stages
 configuration only from `hosts/<hostname>`. re-1 and la1n are trusted and
@@ -135,18 +137,15 @@ pino vault sync status
 
 KeePass and Syncthing do not depend on a mounted system-secret filesystem.
 
-### KeePassXC Secret Service and automatic share
+### KeePassXC Secret Service
 
 The configuration disables GNOME Keyring's Secret Service provider and enables
 KeePassXC's provider with access confirmation. One encrypted database choice
 cannot be stored in Nix: in `identity.kdbx`, create a group such as `Desktop
 Secret Service`, then select it under **Database Settings → Secret Service
-Integration**. Put only the Cryptomator `shared` password there.
-
-In Cryptomator, unlock `shared` once and select **Remember password**. Its
-declarative entry has `unlockAfterStartup = true`. `shared_sec` and every host
-vault remain manual and auto-lock after 30 minutes. Keep their passwords in
-KeePassXC without exposing them through Secret Service.
+Integration**. Keep Cryptomator and infrastructure credentials outside that
+group. `shared_sec` and every host vault remain manual and auto-lock after 30
+minutes.
 
 ### Secret editing protocol
 
@@ -173,26 +172,47 @@ for offline rebuilds and normal boots while portable vaults are locked.
 
 ### Temporary shared files
 
-Create the disposable Cryptomator-backed share once:
+The disposable share is an ordinary folder on trusted clients:
 
-```bash
-pino vault share init
+```text
+~/Shared
 ```
 
-Save its password in the desktop keyring and configure Cryptomator to unlock it
-automatically. Syncthing transports only its ciphertext. Pino deliberately
-provides no external-backup policy for this approximately 5 GB
-transfer area:
+Generate one strong random folder password in `identity.kdbx`. Unlock the current
+host vault and provision the same password independently on re-1 and la1n:
 
 ```bash
-pino vault share open
+pino vault secrets open hosts/$(hostname)
+pino vault share configure
 pino vault share status
 ```
 
-Android may use `https://share.egrapa.com` for the live encrypted share. The
-read-only secret archive is exposed at
-`https://storage.egrapa.com/shared_sec`; the free Cryptomator
-Android application is sufficient for reading recovery documents.
+Mosk stores the folder as Syncthing `Receive Encrypted` data and never receives
+the password. On Android, install
+[Syncthing-Fork by nel0x](https://play.google.com/store/apps/details?id=com.github.catfriend1.syncthingandroid)
+from Google Play. Add the phone's device ID to Mosk before rebuilding it:
+
+```nix
+pino.server.sync.devices.phone = {
+  id = "PHONE-DEVICE-ID";
+  secretScopes = [ "shared_sec" "hosts/phone" ];
+};
+```
+
+In Syncthing-Fork, add Mosk at `tcp://10.77.0.1:22000` over the VPN, accept
+folder ID `share` into a normal local directory, and set the same encryption
+password for the Mosk device. The phone can then edit the files with normal
+Android apps. The app is community-maintained rather than an official
+Syncthing release.
+
+Pino deliberately provides no versioning or external-backup policy for this
+approximately 5 GB transfer area. The read-only secret archive remains exposed
+at `https://storage.egrapa.com/shared_sec`; free Cryptomator for Android is
+sufficient for reading recovery documents.
+
+To migrate the previous Cryptomator share, unlock it before removing its old
+Cryptomator entry and copy its cleartext contents into `~/Shared`. The old
+ciphertext directory is not reused by the new protocol.
 
 ### Offline SSD backup
 
@@ -210,9 +230,9 @@ pino vault backup resume
 
 The exFAT disk keeps exactly `current` and `previous` under
 `pino/portable-backup/`. Each generation contains encrypted KDBX files,
-Cryptomator ciphertext except disposable `shared`, and a public Git bundle.
-Restore replaces local encrypted state but deliberately leaves Syncthing
-stopped until `pino vault backup resume`.
+Cryptomator secret ciphertext, and a public Git bundle. The disposable
+plaintext share is excluded. Restore replaces local encrypted state but
+deliberately leaves Syncthing stopped until `pino vault backup resume`.
 
 ### Adding a ciphertext mirror
 
@@ -228,9 +248,9 @@ pino repo push
 ```
 
 Syncthing then seeds every permitted encrypted scope. No server receives a
-Cryptomator or KeePass master password.
+Cryptomator, KeePass, or disposable-share password.
 
-DNS requires `storage.<domain>`, `share.<domain>`, and `git.<domain>` A records
+DNS requires `storage.<domain>` and `git.<domain>` A records
 pointing at the active server. Caddy obtains and renews their TLS certificates.
 
 ## GitHub-independent configuration copies
