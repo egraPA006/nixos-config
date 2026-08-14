@@ -242,15 +242,18 @@ in
             ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
             ;;
           open)
+            [ -f "$CIPHER_ROOT/shared/vault.cryptomator" ] || {
+              echo "The shared vault has not been created yet." >&2
+              echo "Run: pino vault share init" >&2
+              exit 1
+            }
             echo "Unlock shared in Cryptomator; it mounts at $MOUNT_ROOT/shared"
             ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
             ;;
           status)
-            if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/shared" >/dev/null 2>&1; then
-              echo "Share: unlocked at $MOUNT_ROOT/shared"
-            else
-              echo "Share: locked"
-            fi
+            if [ -f "$CIPHER_ROOT/shared/vault.cryptomator" ]; then cipher=ready; else cipher=missing; fi
+            if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/shared" >/dev/null 2>&1; then mount=unlocked; else mount=locked; fi
+            echo "Share: $cipher, $mount"
             echo "Ciphertext: $CIPHER_ROOT/shared"
             echo "Android shared_sec: ${primary.webdavUrl}/shared_sec (read-only)"
             echo "Android live share: ${primary.shareUrl}"
@@ -503,6 +506,10 @@ in
         selected_scopes() {
           local requested="''${1:-all}"
           local configured
+          if [ "$requested" = shared ]; then
+            echo "The disposable shared vault is managed by 'pino vault share'." >&2
+            return 1
+          fi
           if [ "$requested" = all ]; then
             printf '%s\n' "''${CONFIGURED_SCOPES[@]}"
             return
@@ -524,7 +531,7 @@ in
         case "''${1:-}" in
           status)
             printf '%-24s %-12s %-12s\n' SCOPE CIPHERTEXT MOUNT
-            for scope in shared "''${CONFIGURED_SCOPES[@]}"; do
+            for scope in "''${CONFIGURED_SCOPES[@]}"; do
               if [ -f "$CIPHER_ROOT/$scope/vault.cryptomator" ]; then cipher=ready; else cipher=missing; fi
               if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$scope" >/dev/null 2>&1; then mount=unlocked; else mount=locked; fi
               printf '%-24s %-12s %-12s\n' "$scope" "$cipher" "$mount"
@@ -541,6 +548,11 @@ in
           open)
             if [ -n "''${2:-}" ]; then
               selected_scopes "$2" >/dev/null
+              [ -f "$CIPHER_ROOT/$2/vault.cryptomator" ] || {
+                echo "The $2 vault has not been created yet." >&2
+                echo "Run: pino vault secrets init $2" >&2
+                exit 1
+              }
               echo "Unlock $2 in Cryptomator; it mounts at $MOUNT_ROOT/$2"
             fi
             ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
