@@ -7,7 +7,7 @@
     settings = {
       model_reasoning_effort = "high";
 
-      approval_policy = "on-request";
+      approval_policy = "never";
       sandbox_mode = "workspace-write";
 
       web_search = "cached";
