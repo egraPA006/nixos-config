@@ -46,83 +46,222 @@ writable store.
 bash scripts/install.sh <hostname>
 ```
 
-Then reboot. If the selected vault contains
-`bootstrap/{shared,hosts/<hostname>}/user-password-hash`, the installer applies
-it automatically; otherwise the interactive installer asks for a local password
-after `nixos-install` and before rebooting.
+The installer asks for a local password. It may also restore encrypted portable
+state from one connected `pino-data-*` disk. It never opens a secret vault.
 
-### Bootstrap la1n from the removable vault
-
-la1n is an Intel laptop with one internal NVMe. Its Disko layout uses a 512 MiB
-EFI partition, an 8 GiB on-demand LUKS vault, and the remaining space for one
-ext4 system/home filesystem. The removable `pino-vault-*` disk is only the installation source;
-never select it as the Disko target.
-
-Before booting the installer, prepare la1n's VPN configuration and refresh the
-removable backup from re-1:
+For remote first provisioning, paste a public SSH key when prompted. The
+installer prints a one-hour code. After first boot, unlock `hosts/<hostname>` on
+an existing trusted client and run:
 
 ```bash
-pino storage vault open
-pino bootstrap server vpn list mosk
-# Run this only if la1n is not listed yet:
-pino bootstrap server vpn peer add mosk la1n
-pino bootstrap server sync mosk vpn.egrapa.com
-pino storage vault backup 1
+pino bootstrap host check <hostname>
+pino bootstrap host apply <hostname> <new-host-address>
 ```
 
-The VPN peer must be unique to la1n; never reuse re-1's client configuration.
-The existing `github_ed25519` and `mosk_ed25519` SSH keypairs may be shared by
-placing them below `system/shared/ssh/` in the vault. la1n provisions that
-directory into `~/.ssh`, selects `github_ed25519` for GitHub, and provides
-`ssh mosk` as an alias using `mosk_ed25519`. Separate per-device SSH keys are
-still preferable when independent revocation is important.
+For a restored desktop, the alternative is to unlock its own host vault locally
+and run `pino secrets populate`. The root-only cache then supports offline boots
+and rebuilds while Cryptomator is locked.
 
-On the live ISO, connect the removable backup disk, clone the repository, and
-run the normal install sequence. Confirm that the sole internal drive really is
-`/dev/nvme0n1`; if not, change only `hosts/la1n/disko.nix` before partitioning:
+---
+
+## Portable encrypted storage
+
+The portable layout separates ciphertext transport from local decryption:
+
+```text
+~/.local/share/pino/
+├── identity/
+│   ├── identity.kdbx             # everyday accounts
+│   └── infra.kdbx                # infrastructure credentials
+└── encrypted/                    # Syncthing sees only this representation
+    ├── shared/                   # disposable file exchange
+    ├── shared_sec/               # recovery documents
+    └── hosts/<host>/             # runtime configuration for one host
+
+~/Secrets/                        # Cryptomator plaintext mounts; never synced
+├── shared/
+├── shared_sec/
+└── hosts/<host>/
+```
+
+Syncthing transports the encrypted KDBX files and independent Cryptomator
+ciphertext folders. Cryptomator alone exposes `~/Secrets`; passwords remain in
+KeePassXC. Mosk stores synchronized ciphertext and cannot decrypt it.
+
+`shared_sec` is never a runtime system-configuration source. NixOS stages
+configuration only from `hosts/<hostname>`. re-1 and la1n are trusted and
+receive every declared host ciphertext folder. A phone can be restricted with
+`sync.devices.<name>.secretScopes = [ "shared_sec" ];`.
+Add a future machine once to `pino.secrets.knownHosts`; trusted clients and the
+server derive their matching Syncthing scopes from that list.
+
+Prepare Cryptomator vaults. Use a different random password for each vault.
+Ciphertext paths and mount points are declared by Nix; the GUI is needed only
+to create each encrypted vault initially:
+
+```bash
+pino secrets init shared_sec
+pino secrets init hosts/re-1
+pino secrets init hosts/la1n
+pino secrets init hosts/mosk
+```
+
+After creating or editing them, close every vault and let Syncthing seed its
+ciphertext folders:
+
+```bash
+pino secrets reconcile
+pino secrets sync restart
+pino secrets status
+```
+
+The KeePass database moves independently to:
+
+```text
+~/.local/share/pino/identity/identity.kdbx
+~/.local/share/pino/identity/infra.kdbx
+```
+
+Both files use the same automatic ciphertext synchronization and external
+backup path. Only `identity.kdbx` opens automatically. Open the infrastructure
+database explicitly when managing host-vault passwords:
+
+```bash
+pino identity open
+pino identity infra
+pino identity files
+pino identity sync status
+```
+
+KeePass and Syncthing do not depend on a mounted system-secret filesystem.
+
+### KeePassXC Secret Service and automatic share
+
+The configuration disables GNOME Keyring's Secret Service provider and enables
+KeePassXC's provider with access confirmation. One encrypted database choice
+cannot be stored in Nix: in `identity.kdbx`, create a group such as `Desktop
+Secret Service`, then select it under **Database Settings → Secret Service
+Integration**. Put only the Cryptomator `shared` password there.
+
+In Cryptomator, unlock `shared` once and select **Remember password**. Its
+declarative entry has `unlockAfterStartup = true`. `shared_sec` and every host
+vault remain manual and auto-lock after 30 minutes. Keep their passwords in
+KeePassXC without exposing them through Secret Service.
+
+### Secret editing protocol
+
+Syncthing is automatic. Let it reach an idle state before opening a sensitive
+scope, and do not edit the same scope concurrently on two computers:
+
+```bash
+pino secrets sync status
+pino secrets open hosts/re-1
+# edit through the mounted Cryptomator filesystem
+# lock the vault in Cryptomator
+```
+
+Before rebuilding, Pino offers to stage secrets from the current host vault:
+
+```bash
+pino secrets open hosts/$(hostname)
+pino secrets populate
+pino os rebuild
+```
+
+Only `hosts/$(hostname)` is staged. Existing provisioned secrets remain usable
+for offline rebuilds and normal boots while portable vaults are locked.
+
+### Temporary shared files
+
+Create the disposable Cryptomator-backed share once:
+
+```bash
+pino share init
+```
+
+Save its password in the desktop keyring and configure Cryptomator to unlock it
+automatically. Syncthing transports only its ciphertext. Pino deliberately
+provides no snapshots or external-backup policy for this approximately 5 GB
+transfer area:
+
+```bash
+pino share open
+pino share status
+```
+
+Android may use `https://share.egrapa.com` for the live encrypted share. The
+read-only secret archive is exposed at
+`https://storage.egrapa.com/shared_sec`; the free Cryptomator
+Android application is sufficient for reading recovery documents.
+
+### Offline SSD backup
+
+An occasionally connected `pino-data-*` SSD is an offline backup, not a
+Syncthing device. KeePassXC must be closed and sensitive Cryptomator vaults must
+be locked:
+
+```bash
+pino backup run 1
+pino backup list 1
+pino backup restore 1 previous
+# inspect the restored databases and vaults
+pino backup resume
+```
+
+The exFAT disk keeps exactly `current` and `previous` under
+`pino/portable-backup/`. Each generation contains encrypted KDBX files,
+Cryptomator ciphertext except disposable `shared`, and a public Git bundle.
+Restore replaces local encrypted state but deliberately leaves Syncthing
+stopped until `pino backup resume`.
+
+### Adding a ciphertext mirror
+
+Add the VPS as a normal NixOS server, enable `server-sync`, and add its
+public Syncthing device identity. Create the read-only WebDAV credential inside
+its unlocked host vault:
+
+```bash
+pino secrets storage-init <server-host>
+pino secrets populate
+pino bootstrap host sync <server-host> <address>
+pino repo sync
+```
+
+Syncthing then seeds every permitted encrypted scope. No server receives a
+Cryptomator or KeePass master password.
+
+DNS requires `storage.<domain>`, `share.<domain>`, and `git.<domain>` A records
+pointing at the active server. Caddy obtains and renews their TLS certificates.
+
+## GitHub-independent configuration copies
+
+Configure and update GitHub plus every Pino server mirror:
+
+```bash
+pino repo configure
+pino repo status
+pino repo sync
+```
+
+Create an external-drive installation copy with:
+
+```bash
+pino repo bundle /path/on/external/disk/nixos-config.bundle
+```
+
+On a live ISO, use the fallback-aware clone helper before the normal hardware,
+Disko, and installation scripts:
 
 ```bash
 nix-shell -p git
-git clone https://github.com/egraPA006/nixos-config.git /tmp/nixos-config
+curl -O https://raw.githubusercontent.com/egraPA006/nixos-config/main/scripts/clone.sh
+bash clone.sh /tmp/nixos-config
 cd /tmp/nixos-config
-bash scripts/hardware.sh la1n
-lsblk -d -o NAME,PATH,SIZE,MODEL,SERIAL
-bash scripts/disko.sh la1n
-bash scripts/install.sh la1n
 ```
 
-Disko asks for the new internal vault passphrase. The installer reads the
-root-only installation payload from the connected removable vault and applies
-the configured user password when its hash is present.
-
-After reboot, seed the empty internal vault from a specific removable snapshot.
-Snapshot listing is intentionally cross-host, so a snapshot created by re-1 can
-initialize la1n:
-
-```bash
-pino storage vault open
-pino storage vault snapshots 1
-pino storage vault restore 1 <snapshot-id> --apply
-pino storage vault populate
-pino network vpn on mosk
-pino storage vault sync id
-```
-
-Add the final ID printed above to Mosk's public host configuration:
-
-```nix
-pino.server.passwordSync.devices.la1n.id = "LA1N-SYNCTHING-DEVICE-ID";
-```
-
-Commit and push that public change, then run `pino os pull` and
-`pino os rebuild` on Mosk. Finish on la1n with:
-
-```bash
-pino storage vault sync restart
-pino storage vault sync status
-```
-
----
+If GitHub is unavailable, `clone.sh` tries `https://git.egrapa.com` and then an
+external `nixos-config.bundle`. The helper itself can also be kept beside the
+bundle so installation does not depend on GitHub at all.
 
 ## Day-to-day
 
@@ -150,37 +289,38 @@ pino <command> <subcommand> help help for a leaf command
 | `pino storage snap data <label>` | Snapshot configured data volumes when present |
 | `pino storage snap data help` | Show host-specific data snapshot operations |
 | `pino network vpn list/on/off/status` | Select and operate named AmneziaWG connections |
-| `pino bootstrap server vpn help` | Generate server VPN state and manage/export peers |
+| `pino bootstrap host vpn help` | Generate server VPN state and manage/export peers |
 | `pino network hotspot start/stop` | WiFi access point (re-1) |
-| `pino storage vault files/populate` | List and provision root-only system secrets from the local vault |
-| `pino storage vault disks/backup/check/restore` | Manage any labelled offline vault disk and its snapshots |
 | `pino storage data list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
+| `pino secrets status/open/populate/sync` | Operate declarative Cryptomator secret scopes |
+| `pino backup run/list/restore/resume` | Manage current/previous encrypted backups on pino-data media |
 | `pino desktop music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
 | `pino desktop music-lite set-latency/set-volume` | Adjust PipeWire latency and output level |
 | `pino server status/connections/disk/logs` | Inspect the server without a dashboard |
-| `pino server web/proxy/vpn/passwords/mail help` | Operate an enabled server capability |
+| `pino server web/proxy/vpn/sync/mail help` | Operate an enabled server capability |
+| `pino server sync status/files/config` | Inspect Syncthing ciphertext and the NixOS Git mirror |
 
-> System-secret source files live only under `/data/secrets/system/{shared,hosts/<hostname>}`. `pino storage vault populate` merges the shared and current-host trees into root-only `/var/lib/pino/secrets`; Nix modules declare only filenames, destinations, permissions, and restart units.
+> Runtime-secret source files live only in the Cryptomator scope
+> `hosts/<hostname>`. `pino secrets populate` refreshes root-only
+> `/var/lib/pino/secrets`; Nix declares filenames, destinations, permissions,
+> recursion, and restart units without importing secret contents into the store.
 
-> When the `vault` profile is enabled, `pino os rebuild` and `pino os update`
+> On desktops, `pino os rebuild` and `pino os update`
 > ask whether to populate before evaluating the new system. Answering yes
 > requires the local vault to be open and refreshes the provisioned cache;
 > answering no rebuilds using its existing root-only copies. Rebuilds never
 > unlock the vault automatically.
 
-> Offline vault disks use unique LUKS labels matching `pino-vault-*`. If exactly one is connected it is selected automatically; otherwise pass any full label or suffix. A backup includes the complete `/data/secrets` vault and synchronizes its local `system/` tree into the disk's root-only `bootstrap/` installation payload.
-
-Create a complete removable backup disk with matching data and vault IDs:
+Create a portable backup disk:
 
 ```bash
-sudo scripts/backup-disk-init.sh /dev/sdX 16GiB 1
+sudo scripts/backup-disk-init.sh /dev/sdX 1
 ```
 
-This erases the selected whole disk, creates `pino-data-1` as exFAT using all
-space except the final 16 GiB, and creates `pino-vault-1` there as LUKS2 with
-ext4. Change the size and numeric ID for other media.
-
-> Use `pino storage vault snapshots 1` to select a snapshot. `pino storage vault restore 1 <snapshot>` stages it under `/data/secrets/restores/`; adding `--apply` makes the live vault exactly match it after explicit confirmation.
+This erases the selected whole disk and creates one full-size exFAT partition
+named `pino-data-1`. KeePass and Cryptomator already encrypt their contents, so
+the medium needs no second filesystem password. `pino backup run` retains only
+`current` and `previous` encrypted generations.
 
 > Hosts map logical datasets to local paths with `pino.data.datasets`. Shared
 > datasets live under `pino-data-*/pino/datasets/shared/`; host-specific datasets
@@ -199,26 +339,25 @@ ext4. Change the size and numeric ID for other media.
 > records the actual per-volume Snapper numbers as one logical snapshot set;
 > rollback and deletion therefore remain correct when counters differ.
 
-### Vault-backed system secrets
+### Host runtime secrets
 
-When the optional `vault` profile is enabled, the internal vault separates the user-writable KeePass database from root-only
-system material:
+The desktop secret stack is part of the desktop configuration, not an optional
+profile. Each host has one independent Cryptomator scope:
 
 ```text
-/data/secrets/keepass/                    egrapa-only
-/data/secrets/system/shared/              root-only, every host
-/data/secrets/system/hosts/<hostname>/     root-only, one host
-/data/secrets/system/devices/<device>/     root-only, manually exported devices
+~/.local/share/pino/encrypted/hosts/<hostname>/  # synchronized ciphertext
+~/Secrets/hosts/<hostname>/                      # unlocked plaintext
+/var/lib/pino/secrets/                           # root-only deployed cache
 ```
 
-Shared files are merged first and host files override them. Provision with
-`pino storage vault populate`; deployed copies live under root-only
-`/var/lib/pino/secrets`, so normal rebuilds do not require the vault.
+Provision locally with `pino secrets populate`, or remotely with
+`pino bootstrap host apply/sync`. A host never accepts `shared_sec` as runtime
+configuration.
 
 A module declares a secret without reading it into the Nix store:
 
 ```nix
-pino.vault.secrets.proxy-config = {
+pino.secrets.entries.proxy-config = {
   source = "proxy.conf";
   target = "/etc/example-proxy/config.conf";
   mode = "0600";
@@ -230,18 +369,12 @@ Set `recursive = true` to copy every regular file below `source` into a target
 directory. Recursive secrets preserve their relative layout, ignore symlinks,
 and do not delete unrelated files already present in the target.
 
-For `re-1`, every regular file below `system/hosts/re-1/ssh/` is installed into
+For `re-1`, every regular file below `hosts/re-1/ssh/` is installed into
 the user-owned `~/.ssh/` tree; Home Manager selects `github_ed25519` for
 `github.com`.
 
-`pino storage vault backup [disk]` also updates the selected disk's root-only
-`bootstrap/` tree. This is the only installation-secret layout accepted by the
-installer; `system/` remains the canonical layout inside the local vault.
-During installation, `scripts/install.sh` selects the only connected
-`pino-vault-*` disk, or the label supplied through `PINO_VAULT_LABEL` when
-several are connected. With no vault disk it installs normally and falls back
-to setting the user password manually. Without the vault profile, VPN and
-hotspot retain their local gitignored configuration-file fallbacks.
+The installer consumes no plaintext secret medium. Its temporary key plus
+one-time code only authorizes the first constrained host projection.
 
 > Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino desktop monitor save <name>` to capture it.
 
@@ -281,7 +414,6 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `music-full` | Reaper + yabridge + Wine VST support |
 | `dev-cpp` | GCC, Clang, CMake, Meson, Ninja, GDB + VSCode clangd/meson extensions |
 | `torrent` | On-demand Transmission daemon and storage |
-| `vault` | KeePassXC, root-only system secrets, and offline backups |
 | `gnome` | GNOME session, extensions, portals, and display tooling |
 | `vscode` | VS Code, Nix language support, and shared editor settings |
 | `codex` | Codex CLI and user configuration |
@@ -294,7 +426,7 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `server-web` | Caddy, ACME, and a small static website |
 | `server-proxy` | VLESS Reality over TCP 443 with switchable Internet egress |
 | `server-vpn` | AmneziaWG private access with optional Internet egress |
-| `server-password-sync` | KeePass-only Syncthing over the private VPN |
+| `server-sync` | KeePass and Cryptomator ciphertext synchronization over the private VPN |
 | `server-mail` | Postfix, Dovecot, Rspamd, DKIM, and ACME mail certificates |
 
 Profiles can overlap freely when their packages and services are compatible.
@@ -316,7 +448,7 @@ A minimal service selection looks like:
   "server-web"
   "server-proxy"
   "server-vpn"
-  "server-password-sync"
+  "server-sync"
   "server-mail"
 ]
 
@@ -326,7 +458,7 @@ pino.server = {
   acmeEmail = "admin@example.com";
   proxy.users.vincent = { };
   vpn.externalInterface = "ens3";
-  passwordSync.devices.re-1.id = "SYNCTHING-DEVICE-ID";
+  sync.devices.re-1.id = "SYNCTHING-DEVICE-ID";
   mail.accounts."vincent@example.com".aliases = [ "postmaster@example.com" ];
 };
 ```
@@ -335,7 +467,7 @@ Keep the referenced secret files outside Git. The local vault source exactly
 mirrors their server-relative paths:
 
 ```text
-/data/secrets/system/hosts/mosk/
+~/Secrets/hosts/mosk/
 └── server/
     ├── awg0.conf
     ├── sing-box/
@@ -345,59 +477,49 @@ mirrors their server-relative paths:
     └── mail/accounts/vincent@example.com.hash
 ```
 
-The deployable files are also the authoritative VPN state. NixOS clients live
-under `hosts`; phones and other unmanaged clients live under `devices`. Only a
-host's own tree is ever populated or uploaded:
+The deployable files are also the authoritative VPN state. Every managed or
+unmanaged client gets its own host scope; only the target host's scope is ever
+populated or uploaded:
 
 ```text
-/data/secrets/system/
-├── hosts/
-│   ├── mosk/server/awg0.conf
-│   └── re-1/vpn/mosk.conf
-└── devices/
-    └── phone/vpn/mosk.conf
+~/Secrets/
+├── hosts/mosk/server/awg0.conf
+├── hosts/re-1/vpn/mosk.conf
+└── hosts/phone/vpn/mosk.conf
 ```
 
 After receiving the VPS public IP, initialize it locally. With no peer names,
 the defaults are `re-1` and `phone`:
 
 ```bash
-pino storage vault open
-pino bootstrap server vpn init mosk 203.0.113.10
-pino bootstrap server vpn list mosk
+pino secrets open hosts/mosk
+pino bootstrap host vpn init mosk 203.0.113.10
+pino bootstrap host vpn list mosk
 ```
 
 The generator creates independent keys and preshared keys, assigns Mosk
 `10.77.0.1` and peers from `.2`, and generates common AmneziaWG masking
-parameters. It writes each peer directly to its canonical host/device path and
-refuses to overwrite initialized state. Existing vaults using the former
-`/data/secrets/vpn/<host>` generator layout migrate once with:
-
-```bash
-pino bootstrap server vpn migrate mosk
-```
-
-Migration verifies and installs every client before offering to remove the
-redundant legacy state.
+parameters. It writes each peer directly to its canonical host path and refuses
+to overwrite initialized state.
 
 Peer lifecycle does not rotate unaffected clients:
 
 ```bash
-pino bootstrap server vpn peer add mosk laptop
-pino bootstrap server vpn peer remove mosk phone
-pino bootstrap server vpn set-endpoint mosk vpn.example.com
+pino bootstrap host vpn peer add mosk laptop
+pino bootstrap host vpn peer remove mosk phone
+pino bootstrap host vpn set-endpoint mosk vpn.example.com
 ```
 
-After a peer change, run `pino bootstrap server sync mosk <address>` to deploy
+After a peer change, run `pino bootstrap host sync mosk <address>` to deploy
 the updated server peer list. Export never prints key material. It copies an
 existing canonical configuration to a user-owned `0600` file suitable for
 Android import:
 
 ```bash
-pino bootstrap server vpn export mosk phone ~/Downloads/mosk-phone.conf
+pino bootstrap host vpn export mosk phone ~/Downloads/mosk-phone.conf
 ```
 
-Adding the `re-1` peer writes `system/hosts/re-1/vpn/mosk.conf` immediately.
+Adding the `re-1` peer writes `hosts/re-1/vpn/mosk.conf` immediately.
 re-1 declares `mosk` as a named connection alongside the legacy `awg0`
 connection. More servers use the same model through
 `pino.profiles.vpn.connections.<name>` and can then be selected without
@@ -415,12 +537,12 @@ full-route VPN, avoiding conflicting default routes. Configurations remain
 saved and independently selectable.
 
 Each server profile contributes its required files to
-`pino.bootstrap.secrets`; there is no second shell-script manifest to maintain.
+`pino.secrets.entries`; there is no second shell-script manifest to maintain.
 Check the vault before installing:
 
 ```bash
-pino storage vault open
-pino bootstrap server check mosk
+pino secrets open hosts/mosk
+pino bootstrap host check mosk
 ```
 
 #### Install and bootstrap Mosk
@@ -438,7 +560,7 @@ This is the complete first-deployment order. Mosk currently enables only
    ```
 
    Review the diff, commit all intended tracked and new files, then `git push`.
-   Never add anything below `/data/secrets` or an exported client config.
+   Never add unlocked Cryptomator data or an exported client config.
 
 2. Create a dedicated administrator key. Keep its passphrase; only its `.pub`
    file is pasted into the installer:
@@ -459,14 +581,11 @@ This is the complete first-deployment order. Mosk currently enables only
 
    ```bash
    pino os rebuild
-   pino storage vault open
-   # Existing vaults only: migrate the former /data/secrets/vpn/mosk state.
-   pino bootstrap server vpn migrate mosk
-   # New vaults instead: initialize the VPN once.
-   # pino bootstrap server vpn init mosk 203.0.113.10
-   pino bootstrap server vpn list mosk
-   pino storage vault populate
-   pino bootstrap server check mosk
+   pino secrets open hosts/mosk
+   # Initialize the VPN once; use list when it already exists.
+   pino bootstrap host vpn init mosk 203.0.113.10
+   pino bootstrap host vpn list mosk
+   pino bootstrap host check mosk
    ```
 
    The final check must show `server/awg0.conf` as `OK`.
@@ -526,11 +645,11 @@ This is the complete first-deployment order. Mosk currently enables only
 
    ```bash
    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
-   pino server bootstrap code
+   pino bootstrap receiver code
    ```
 
    If the one-hour code was lost or expired before initial provisioning, issue
-   a replacement from the root console with `pino server bootstrap renew`.
+   a replacement from the root console with `pino bootstrap receiver renew`.
 
 8. From re-1, provision the manifest-listed server file. Compare the fingerprint
    printed by Pino with the one shown on the trusted server console, type `yes`
@@ -538,7 +657,7 @@ This is the complete first-deployment order. Mosk currently enables only
 
    ```bash
    ssh-add ~/.ssh/mosk_ed25519
-   pino bootstrap server apply mosk 203.0.113.10
+   pino bootstrap host apply mosk 203.0.113.10
    ```
 
 9. Verify the installed server and private VPN:
@@ -563,7 +682,7 @@ This is the complete first-deployment order. Mosk currently enables only
     remove the temporary exported copy afterward:
 
     ```bash
-    pino bootstrap server vpn export mosk phone ~/Downloads/mosk-phone.conf
+    pino bootstrap host vpn export mosk phone ~/Downloads/mosk-phone.conf
     ```
 
 11. The staging checkout now contains generated, non-secret Mosk hardware and
@@ -581,8 +700,9 @@ This is the complete first-deployment order. Mosk currently enables only
     git diff -- hosts/mosk
     ```
 
-The receiver accepts only regular files declared by the evaluated manifest and
-only destinations below `/var/lib/pino/secrets`. It rejects extra files,
+The receiver accepts only regular files/directories declared by the evaluated
+manifest, first caches them below `/var/lib/pino/secrets`, and then deploys only
+the targets declared by Nix. It rejects extra files,
 symlinks, missing files, wrong bootstrap codes, expired codes, and a mismatched
 hostname. It never performs a root rebuild from the user-owned checkout.
 Successful initial provisioning consumes the code and restarts only declared
@@ -590,8 +710,8 @@ units. Later secret changes use the same constrained receiver without reopening
 initial bootstrap access:
 
 ```bash
-pino bootstrap server check mosk
-pino bootstrap server sync mosk 203.0.113.10
+pino bootstrap host check mosk
+pino bootstrap host sync mosk 203.0.113.10
 ```
 
 Both remote operations scan the ED25519 host key and require typing the
@@ -607,27 +727,27 @@ synchronization is reachable only through the trusted VPN interface and the
 GUI binds to localhost.
 
 The default mail quota is 5 GiB per account, journals are capped at 256 MiB,
-and only five KeePass sync versions are retained. Those defaults are intended
+and only two previous synchronized versions are retained. Those defaults are intended
 to fit a 10–20 GiB server, but mail usage still needs monitoring with
 `pino server disk`.
 
-#### Pair re-1 with Mosk for KeePass
+#### Pair a trusted client with Mosk
 
-The desktop client belongs to the existing `vault` profile rather than a
-separate profile: it can synchronize only the KeePass directory inside the
-mounted encrypted vault. Discovery, relays, NAT traversal, incoming listening,
-and the public GUI are disabled; re-1 connects directly to Mosk at
+The desktop client belongs to the existing `vault` profile. It synchronizes
+the KeePass directory plus separate Cryptomator ciphertext folders; plaintext
+mounts are never Syncthing folders. Discovery, relays, NAT traversal, incoming
+listening, and the public GUI are disabled; clients connect directly to Mosk at
 `10.77.0.1:22000` over AmneziaWG.
 
 Pair both ends once:
 
-1. On re-1, open the vault and run `pino storage vault sync id`. Put that ID in
-   Mosk as `pino.server.passwordSync.devices.re-1.id`.
-2. On Mosk, run `pino server passwords id`. Put that ID on re-1 as
+1. On the client, run `pino identity sync id`. Put that ID in
+   Mosk as `pino.server.sync.devices.re-1.id`.
+2. On Mosk, run `pino server sync id`. Put that ID on re-1 as
    `pino.vault.sync.serverId`.
-3. Rebuild both machines, connect re-1 to the VPN, then run
-   `pino storage vault open`. Opening starts the client; closing the vault stops
-   it before unmounting.
+3. Rebuild both machines and connect the client to the VPN. Syncthing starts
+   independently of KeePassXC and Cryptomator because it handles ciphertext
+   only.
 
 Override `pino.vault.sync.serverAddress` only if Mosk uses a different VPN
 address. Syncthing remains unconfigured until `serverId` is set, so no fake or
@@ -678,7 +798,7 @@ scripts/                     # installation helpers (run once, not part of the b
   disko.sh                   # partition disks
   install.sh                 # run nixos-install
   server-stage.sh            # confirm disk, install server, and issue one-time bootstrap code
-  backup-disk-init.sh        # create matching pino-data/pino-vault partitions
+  backup-disk-init.sh        # create a full-size pino-data exFAT backup disk
   monitor.py                 # built into monitor binary
 ```
 

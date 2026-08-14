@@ -1,5 +1,5 @@
 [
   "server-vpn"
-  "server-password-sync"
+  "server-sync"
   "server-web"
 ]

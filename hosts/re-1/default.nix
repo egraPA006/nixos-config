@@ -66,7 +66,7 @@
     };
   };
 
-  pino.vault.secrets.ssh = {
+  pino.secrets.entries.ssh = {
     source = "ssh";
     target = "${config.pino.user.home}/.ssh";
     owner = config.pino.user.name;
@@ -77,6 +77,8 @@
   };
 
   networking.hostName = "re-1";
+
+  pino.portableVaults.trustedClient = true;
 
   systemd.tmpfiles.rules = [
     "z /data/fast 0755 ${config.pino.user.name} users -"

@@ -20,12 +20,14 @@
     vpn.connections.mosk = { };
   };
 
+  pino.portableVaults.trustedClient = true;
+
   pino.data.datasets.music-lite = {
     localPath = config.pino.profiles.musicLite.localDir;
     scope = "shared";
   };
 
-  pino.vault.secrets.ssh = {
+  pino.secrets.entries.ssh = {
     source = "ssh";
     target = "${config.pino.user.home}/.ssh";
     owner = config.pino.user.name;

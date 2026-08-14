@@ -1,4 +1,4 @@
-{ activeProfiles, config, lib, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
   osScript = builtins.replaceStrings
     [ "@configDir@" "@git@" "@pinoUser@" "@runuser@" "@vaultEnabled@" ]
@@ -7,7 +7,7 @@ let
       "${pkgs.git}/bin/git"
       (lib.escapeShellArg config.pino.user.name)
       "${pkgs.util-linux}/bin/runuser"
-      (if lib.elem "vault" activeProfiles then "true" else "false")
+      (if config.pino ? portableVaults && config.pino.portableVaults.enable then "true" else "false")
     ]
     (builtins.readFile ./os.sh);
 in

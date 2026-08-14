@@ -67,10 +67,20 @@ in
         default = "/var/lib/pino/secrets/server/awg0.conf";
       };
     };
-    passwordSync = {
+    sync = {
       folder = lib.mkOption {
         type = lib.types.str;
         default = "/var/lib/syncthing/keepass";
+      };
+      encryptedRoot = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/syncthing/secrets";
+        description = "Ciphertext-only Cryptomator vault root";
+      };
+      secretScopes = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "shared_sec" ] ++ map (host: "hosts/${host}") config.pino.secrets.knownHosts;
+        description = "Cryptomator scopes mirrored by Syncthing";
       };
       devices = lib.mkOption {
         type = lib.types.attrsOf (lib.types.submodule {
@@ -79,6 +89,11 @@ in
             addresses = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ "dynamic" ];
+            };
+            secretScopes = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              description = "Allowed secret scopes; null grants every configured scope";
             };
           };
         });

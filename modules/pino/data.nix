@@ -41,7 +41,7 @@ in
   config = {
     assertions = lib.mapAttrsToList (name: dataset: {
       assertion = lib.hasPrefix "/" dataset.localPath
-        && !builtins.elem dataset.localPath [ "/" "/nix" "/data/secrets" ];
+        && !builtins.elem dataset.localPath [ "/" "/nix" ];
       message = "pino.data.datasets.${name}.localPath must be a safe absolute data path";
     }) datasets;
 

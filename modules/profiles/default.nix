@@ -27,10 +27,9 @@ let
       "server-web" = ./server/web.nix;
       "server-proxy" = ./server/proxy.nix;
       "server-vpn" = ./server/vpn.nix;
-      "server-password-sync" = ./server/password-sync.nix;
+      "server-sync" = ./server/sync.nix;
       "server-mail" = ./server/mail.nix;
     };
-    security.vault = ./security/vault;
     storage = {
       datasets = ./storage/datasets.nix;
       snapshots = ./storage/snapshots.nix;
@@ -40,7 +39,7 @@ let
   profileModules = lib.mergeAttrsList (builtins.attrValues profileGroups);
   desktopProfiles = builtins.attrNames profileGroups.desktop;
   networkProfiles = builtins.attrNames profileGroups.network;
-  storageProfiles = (builtins.attrNames profileGroups.storage) ++ [ "vault" ];
+  storageProfiles = builtins.attrNames profileGroups.storage;
   serverProfiles = builtins.attrNames profileGroups.server;
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
@@ -60,7 +59,6 @@ in
     ./desktop/options.nix
     ./network/options.nix
     ./server/options.nix
-    ./security/vault/options.nix
   ] ++ map (name: profileModules.${name}) (lib.filter (name: builtins.hasAttr name profileModules) activeProfiles);
 
   assertions = map (name: {

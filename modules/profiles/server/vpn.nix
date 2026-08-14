@@ -140,7 +140,7 @@ in
     unitConfig.ConditionPathExists = cfg.configFile;
   };
 
-  pino.bootstrap.secrets."server/awg0.conf" = {
+  pino.secrets.entries."server/awg0.conf" = {
     target = cfg.configFile;
     restartUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
   };

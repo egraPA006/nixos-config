@@ -22,15 +22,25 @@ in
       default = "${cfg.user.home}/nixos-config";
       description = "Working checkout used by Pino OS commands";
     };
-    bootstrap = {
-      vaultRoot = lib.mkOption {
-        type = lib.types.str;
-        default = "/data/secrets/system/hosts";
-        description = "Local vault directory containing per-host bootstrap payloads";
+    secrets = {
+      knownHosts = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "re-1" "la1n" "mosk" "phone" ];
+        description = "Independent host-secret scopes known to trusted clients and ciphertext mirrors";
       };
-      secrets = lib.mkOption {
+      sourceRoot = lib.mkOption {
+        type = lib.types.str;
+        default = "/run/pino-secrets/hosts";
+        description = "Unlocked directory containing one runtime-secret projection per host";
+      };
+      provisionedDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/pino/secrets";
+        description = "Root-only cache populated before declared secrets are deployed";
+      };
+      entries = lib.mkOption {
         default = { };
-        description = "Files accepted by the constrained remote bootstrap receiver";
+        description = "Runtime secrets accepted by bootstrap and deployed by Pino";
         type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
           options = {
             source = lib.mkOption {
@@ -39,9 +49,9 @@ in
               description = "Path relative to the host's vault bootstrap directory";
             };
             target = lib.mkOption {
-              type = lib.types.str;
-              default = "/var/lib/pino/secrets/${name}";
-              description = "Root-owned destination on the target host";
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Final destination; null keeps the file only in the root cache";
             };
             owner = lib.mkOption {
               type = lib.types.str;
@@ -54,6 +64,15 @@ in
             mode = lib.mkOption {
               type = lib.types.str;
               default = "0600";
+            };
+            directoryMode = lib.mkOption {
+              type = lib.types.str;
+              default = "0700";
+            };
+            recursive = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Deploy the complete source directory to the target directory";
             };
             restartUnits = lib.mkOption {
               type = lib.types.listOf lib.types.str;

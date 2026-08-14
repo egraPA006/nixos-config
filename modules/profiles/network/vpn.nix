@@ -1,5 +1,4 @@
 {
-  activeProfiles,
   pkgs,
   config,
   lib,
@@ -8,21 +7,8 @@
 
 let
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
-  vaultEnabled = lib.elem "vault" activeProfiles;
   connections = config.pino.profiles.vpn.connections;
   connectionNames = builtins.attrNames connections;
-  fallbackConfigs = lib.concatMapStringsSep "\n" (
-    name:
-    let
-      connection = connections.${name};
-    in
-    ''
-      source=${lib.escapeShellArg "${config.pino.configDir}/secrets/${connection.source}"}
-      if [ -f "$source" ]; then
-        ${pkgs.coreutils}/bin/install -D -m 0600 "$source" ${lib.escapeShellArg "/etc/amneziawg/${name}.conf"}
-      fi
-    ''
-  ) connectionNames;
 in
 {
   programs.amnezia-vpn.enable = true;
@@ -32,7 +18,7 @@ in
     message = "AmneziaWG connection name '${name}' must be 1-15 safe interface characters";
   }) connectionNames;
 
-  pino.vault.secrets = lib.mkIf vaultEnabled (
+  pino.secrets.entries =
     lib.mapAttrs' (
       name: connection:
       lib.nameValuePair "vpn-${name}-config" {
@@ -42,16 +28,11 @@ in
         restartUnits = [ "amneziawg@${name}.service" ];
       }
     ) connections
-  );
+  ;
 
   systemd.tmpfiles.rules = [
     "d /etc/amneziawg 0755 root root -"
   ];
-
-  system.activationScripts.amneziawg-config = lib.mkIf (!vaultEnabled) ''
-    ${pkgs.coreutils}/bin/mkdir -p /etc/amneziawg
-    ${fallbackConfigs}
-  '';
 
   boot.extraModulePackages = [ config.boot.kernelPackages.amneziawg ];
   boot.kernelModules = [ "amneziawg" ];
@@ -120,12 +101,7 @@ in
         pino network vpn off [name]    Stop one connection (all when omitted)
         pino network vpn status [name] Show service and peer status
 
-        Configs: ${
-          if vaultEnabled then
-            "provisioned from the encrypted vault"
-          else
-            "local gitignored secrets/ fallback"
-        }.
+        Configs are provisioned from this host's encrypted secret projection.
         Pino selects one full-route connection at a time to avoid route conflicts.
     '';
     script = builtins.readFile ../../pino/vpn.sh;

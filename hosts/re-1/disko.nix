@@ -81,35 +81,6 @@
         type = "gpt";
 
         partitions = {
-          secrets = {
-            size = "8G";
-            label = "secrets";
-
-            content = {
-              type = "luks";
-              name = "secrets";
-              initrdUnlock = false;
-
-              settings = {
-                allowDiscards = true;
-              };
-
-              content = {
-                type = "filesystem";
-                format = "ext4";
-                mountpoint = "/data/secrets";
-
-                mountOptions = [
-                  "noauto"
-                  "noatime"
-                  "nodev"
-                  "nosuid"
-                  "noexec"
-                ];
-              };
-            };
-          };
-
           data = {
             size = "100%";
 

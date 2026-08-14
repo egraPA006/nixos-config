@@ -1,10 +1,6 @@
 { lib, ... }:
 {
   options.pino.vault = {
-    provisionedDir = lib.mkOption {
-      type = lib.types.str;
-      default = "/var/lib/pino/secrets";
-    };
     sync = {
       serverName = lib.mkOption {
         type = lib.types.str;
@@ -21,28 +17,22 @@
         default = "tcp://10.77.0.1:22000";
         description = "Direct Syncthing address reachable through the private VPN";
       };
-    };
-    secrets = lib.mkOption {
-      default = { };
-      type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-        options = {
-          source = lib.mkOption { type = lib.types.str; default = name; };
-          target = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
-          owner = lib.mkOption { type = lib.types.str; default = "root"; };
-          group = lib.mkOption { type = lib.types.str; default = "root"; };
-          mode = lib.mkOption { type = lib.types.str; default = "0600"; };
-          directoryMode = lib.mkOption { type = lib.types.str; default = "0700"; };
-          recursive = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Copy every regular file below source into the target directory";
+      mirrors = lib.mkOption {
+        default = { };
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            id = lib.mkOption {
+              type = lib.types.str;
+              description = "Public Syncthing device ID of the storage mirror";
+            };
+            address = lib.mkOption {
+              type = lib.types.str;
+              description = "Direct Syncthing address, normally reachable through VPN";
+            };
           };
-          restartUnits = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            default = [ ];
-          };
-        };
-      }));
+        });
+        description = "Additional Syncthing mirrors for identity and Cryptomator ciphertext";
+      };
     };
   };
 }

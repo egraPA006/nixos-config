@@ -170,4 +170,4 @@ else
   echo "  ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256"
 fi
 echo "After reboot, run from the vault machine:"
-echo "  pino bootstrap server apply $HOST <server-address>"
+echo "  pino bootstrap host apply $HOST <server-address>"

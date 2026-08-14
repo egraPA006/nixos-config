@@ -2,7 +2,7 @@
 
 let
   configDir = config.pino.configDir;
-  vaultRoot = config.pino.bootstrap.vaultRoot;
+  vaultRoot = config.pino.secrets.sourceRoot;
   vpnBootstrap = builtins.replaceStrings
     [ "@awg@" "@nix@" "@findmnt@" "@find@" "@awk@" ]
     [
@@ -17,17 +17,16 @@ in
 {
   pino.subcommands.bootstrap = {
     description = "Provision a staged machine from the local vault";
-    commands.server = {
-      description = "Check or provision a remote NixOS server";
+    commands.host = {
+      description = "Check or provision a remote NixOS host";
       commands = {
         check = { description = "Check a host's required files in the local vault"; usage = "<host>"; };
-        apply = { description = "Perform the one-time initial server bootstrap"; usage = "<host> <address>"; };
+        apply = { description = "Perform the one-time initial host bootstrap"; usage = "<host> <address>"; };
         sync = { description = "Synchronize changed server secrets later"; usage = "<host> <address>"; };
         vpn = {
           description = "Generate and manage AmneziaWG server peers";
           commands = {
             init = { description = "Create server and canonical client configurations"; usage = "<host> <endpoint> [peer ...]"; };
-            migrate = { description = "Migrate legacy VPN generator state into the system tree"; usage = "<host>"; };
             list = { description = "List a server's VPN peers"; usage = "<host>"; };
             export = { description = "Copy one canonical client configuration"; usage = "<host> <peer> [path]"; };
             set-endpoint = { description = "Change the endpoint in every client configuration"; usage = "<host> <endpoint>"; };
@@ -42,9 +41,10 @@ in
         };
       };
       helpText = ''
-        The source is ${vaultRoot}/<host>/ and mirrors the remote
-        /var/lib/pino/secrets/ tree. apply asks for the one-time code printed by
-        scripts/server-stage.sh; sync works only after a successful apply.
+        The source is the unlocked Cryptomator scope `hosts/<host>`. apply asks
+        for the one-time code printed by the installer; sync works only after
+        a successful apply. The receiver stages only the projection declared
+        by that host's Nix configuration.
       '';
       script = ''
         operation="''${1:-}"
@@ -57,11 +57,11 @@ in
             shift || true
           fi
           case "$operation" in
-            init|migrate|list|export|set-endpoint|add|remove) ;;
-            *) echo "Run 'pino bootstrap server vpn help' for usage." >&2; exit 1 ;;
+            init|list|export|set-endpoint|add|remove) ;;
+            *) echo "Run 'pino bootstrap host vpn help' for usage." >&2; exit 1 ;;
           esac
           export PINO_CONFIG_DIR=${lib.escapeShellArg configDir}
-          export PINO_VAULT_ROOT=${lib.escapeShellArg vaultRoot}
+          export PINO_SECRET_ROOT=${lib.escapeShellArg vaultRoot}
           export PINO_OPERATION="$operation"
           ${vpnBootstrap}
           exit
@@ -71,7 +71,7 @@ in
         [ -n "$host" ] || { echo "A host name is required." >&2; exit 1; }
         flake=${lib.escapeShellArg configDir}
         source_root=${lib.escapeShellArg vaultRoot}/"$host"
-        attr="path:$flake#nixosConfigurations.$host.config.pino.bootstrap.secrets"
+        attr="path:$flake#nixosConfigurations.$host.config.pino.secrets.entries"
         user_attr="path:$flake#nixosConfigurations.$host.config.pino.user.name"
 
         manifest="$(${pkgs.nix}/bin/nix --extra-experimental-features 'nix-command flakes' eval --json "$attr")" || {
@@ -86,14 +86,15 @@ in
 
         missing=0
         echo "Bootstrap manifest for $host:"
-        while IFS=$'\t' read -r name source target; do
-          if sudo ${pkgs.coreutils}/bin/test -f "$source_root/$source"; then
+        while IFS=$'\t' read -r name source target recursive; do
+          if { [ "$recursive" = true ] && ${pkgs.coreutils}/bin/test -d "$source_root/$source"; } \
+            || { [ "$recursive" = false ] && ${pkgs.coreutils}/bin/test -f "$source_root/$source"; }; then
             printf '  OK       %-40s -> %s\n' "$source" "$target"
           else
             printf '  MISSING  %-40s -> %s\n' "$source" "$target"
             missing=1
           fi
-        done < <(${pkgs.jq}/bin/jq -r 'to_entries[] | [.key, .value.source, .value.target] | @tsv' <<< "$manifest")
+        done < <(${pkgs.jq}/bin/jq -r 'to_entries[] | [.key, .value.source, (.value.target // "cache only"), .value.recursive] | @tsv' <<< "$manifest")
         [ "$missing" -eq 0 ] || exit 1
         [ "$operation" != check ] || exit 0
 
@@ -129,14 +130,14 @@ in
           receiver_operation=apply
           receiver_args=(apply "$code")
         fi
-        echo "Sending ''${#sources[@]} root-only file(s) to $host..."
+        echo "Sending ''${#sources[@]} declared root-only projection(s) to $host..."
         printf -v remote_command '%q ' sudo pino-bootstrap-receive "''${receiver_args[@]}"
         # The command is deliberately shell-escaped above before SSH receives it.
         # shellcheck disable=SC2029
-        sudo ${pkgs.gnutar}/bin/tar -C "$source_root" -cf - -- "''${sources[@]}" \
+        ${pkgs.gnutar}/bin/tar -C "$source_root" -cf - -- "''${sources[@]}" \
           | ${pkgs.openssh}/bin/ssh "''${ssh_options[@]}" "$remote" \
               "$remote_command"
-        echo "Server secret $receiver_operation completed for $host."
+        echo "Host secret $receiver_operation completed for $host."
       '';
     };
   };

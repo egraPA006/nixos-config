@@ -71,7 +71,7 @@ in
     inherit settings;
   };
 
-  pino.bootstrap.secrets = {
+  pino.secrets.entries = {
     "server/sing-box/reality-private-key".restartUnits = [ "sing-box.service" ];
     "server/sing-box/reality-short-id".restartUnits = [ "sing-box.service" ];
   } // lib.mapAttrs' (name: user: lib.nameValuePair

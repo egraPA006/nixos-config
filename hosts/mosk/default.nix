@@ -24,7 +24,7 @@
     domain = "egrapa.com";
     acmeEmail = "admin@egrapa.com";
 
-    passwordSync.devices.re-1.id = "LVLTAKU-35ENIVC-BSHN3KB-5FMLBUQ-YBXHKAA-IAB6QTT-2NVKQFB-BZHXCQU";
-    passwordSync.devices.la1n.id = "RLH5AIW-CXNIN2A-Q43HCST-CROXC7J-PVJ7BNW-MTDGTLE-PIGGVJQ-SRPQSQ7";
+    sync.devices.re-1.id = "LVLTAKU-35ENIVC-BSHN3KB-5FMLBUQ-YBXHKAA-IAB6QTT-2NVKQFB-BZHXCQU";
+    sync.devices.la1n.id = "RLH5AIW-CXNIN2A-Q43HCST-CROXC7J-PVJ7BNW-MTDGTLE-PIGGVJQ-SRPQSQ7";
   };
 }

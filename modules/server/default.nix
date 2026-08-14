@@ -1,27 +1,12 @@
 { config, lib, pkgs, ... }:
 {
-  imports = [ ./bootstrap-receiver.nix ];
-
-  services.openssh = {
-    enable = true;
-    openFirewall = true;
-    settings = {
-      PasswordAuthentication = false;
-      KbdInteractiveAuthentication = false;
-      PermitRootLogin = "no";
-      AuthorizedKeysFile = ".ssh/authorized_keys /etc/ssh/authorized_keys.d/%u";
-    };
-  };
+  imports = [ ./storage-mirror.nix ./git-mirror.nix ];
 
   # Server administration is authenticated by the user's SSH key. The server
   # user intentionally has no local password, so wheel must not prompt for one.
   security.sudo.wheelNeedsPassword = false;
 
   environment.systemPackages = [ pkgs.git ];
-
-  systemd.tmpfiles.rules = [
-    "d /etc/ssh/authorized_keys.d 0755 root root -"
-  ];
 
   services.journald.extraConfig = ''
     SystemMaxUse=256M
@@ -46,7 +31,7 @@
         pino server connections
         pino server disk
         pino server logs <unit>
-        pino server bootstrap help
+        pino bootstrap receiver help
 
       No monitoring dashboard or management port is exposed.
     '';
@@ -58,7 +43,7 @@
           echo
           echo "Active Pino server services:"
           systemctl list-units --type=service --state=active --no-pager \
-            | grep -E 'caddy|sing-box|amneziawg|syncthing|postfix|dovecot|rspamd' || true
+            | grep -E 'caddy|sing-box|amneziawg|syncthing|pino-storage|pino-share|postfix|dovecot|rspamd' || true
           ;;
         connections)
           ${pkgs.iproute2}/bin/ss -H -tupn state established

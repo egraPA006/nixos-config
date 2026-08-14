@@ -20,27 +20,17 @@ elif findmnt --mountpoint /mnt >/dev/null 2>&1; then
   NIXOS_INSTALL_STORE_ARGS=(--option store /mnt)
 fi
 NIX_EVAL=(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --raw)
-BOOTSTRAP_MOUNT="${PINO_BOOTSTRAP_MOUNT:-/run/pino-bootstrap}"
-BOOTSTRAP_LABEL="${PINO_VAULT_LABEL:-}"
-BOOTSTRAP_MAPPER="pino-install-vault"
-BOOTSTRAP_MOUNTED=false
-BOOTSTRAP_OPENED=false
-SECRETS_PROVISIONED=false
 DATA_MOUNT="${PINO_DATA_MOUNT:-/run/pino-install-data}"
 DATA_SELECTOR="${PINO_DATA_LABEL:-${PINO_DATA_DISK:-}}"
 DATA_MOUNTED=false
 DATA_RESTORED=false
 PASSWORD_CONFIGURED=false
+BOOTSTRAP_SSH_KEY="${PINO_BOOTSTRAP_SSH_KEY:-}"
+BOOTSTRAP_READY=false
 
-cleanup_bootstrap() {
+cleanup_install_media() {
   if [ "$DATA_MOUNTED" = true ]; then
     sudo umount "$DATA_MOUNT" || true
-  fi
-  if [ "$BOOTSTRAP_MOUNTED" = true ]; then
-    sudo umount "$BOOTSTRAP_MOUNT" || true
-  fi
-  if [ "$BOOTSTRAP_OPENED" = true ]; then
-    sudo cryptsetup close "$BOOTSTRAP_MAPPER" || true
   fi
 }
 
@@ -67,7 +57,7 @@ mount_data_backup() {
     sudo mkdir -p "$DATA_MOUNT"
     sudo mount -o ro,nodev,nosuid,noexec "${devices[0]}" "$DATA_MOUNT"
     DATA_MOUNTED=true
-    trap cleanup_bootstrap EXIT
+    trap cleanup_install_media EXIT
   fi
 }
 
@@ -125,41 +115,29 @@ restore_data_backup() {
   done
 }
 
-mount_bootstrap() {
-  if mountpoint -q "$BOOTSTRAP_MOUNT"; then
+restore_portable_backup() {
+  local portable="$DATA_MOUNT/pino/portable-backup/current"
+  if [ ! -d "$portable" ]; then
+    echo "No portable Pino backup exists on the selected data medium; continuing." >&2
     return
   fi
-
-  local device
-  local -a labels devices
-  mapfile -t labels < <(lsblk -rno LABEL,FSTYPE | awk '$2 == "crypto_LUKS" && $1 ~ /^pino-vault-/ { print $1 }')
-  if [ -z "$BOOTSTRAP_LABEL" ]; then
-    case "${#labels[@]}" in
-      1) BOOTSTRAP_LABEL="${labels[0]}" ;;
-      0) echo "No connected pino-vault-* disk found; continuing without vault secrets." >&2; return 1 ;;
-      *)
-        echo "Error: several vault disks are connected; select one with PINO_VAULT_LABEL:" >&2
-        printf '  %s\n' "${labels[@]}" >&2
-        return 1
-        ;;
-    esac
-  elif [[ "$BOOTSTRAP_LABEL" != pino-vault-* ]]; then
-    BOOTSTRAP_LABEL="pino-vault-$BOOTSTRAP_LABEL"
+  echo "Restoring encrypted identity and portable vault backing data..."
+  sudo mkdir -p \
+    "/mnt$PINO_HOME/.local/share/pino/identity" \
+    "/mnt$PINO_HOME/.local/share/pino/encrypted"
+  if [ -d "$portable/identity" ]; then
+    sudo rsync -rt --delete \
+      "$portable/identity/" "/mnt$PINO_HOME/.local/share/pino/identity/"
   fi
-  mapfile -t devices < <(lsblk -rpn -o NAME,LABEL,FSTYPE | awk -v label="$BOOTSTRAP_LABEL" '$2 == label && $3 == "crypto_LUKS" { print $1 }')
-  if [ "${#devices[@]}" -ne 1 ]; then
-    echo "Error: expected exactly one LUKS partition labelled '$BOOTSTRAP_LABEL'" >&2
-    return 1
+  if [ -d "$portable/encrypted" ]; then
+    sudo rsync -rt --delete \
+      "$portable/encrypted/" "/mnt$PINO_HOME/.local/share/pino/encrypted/"
   fi
-  device="${devices[0]}"
-  sudo cryptsetup open --readonly "$device" "$BOOTSTRAP_MAPPER"
-  device="/dev/mapper/$BOOTSTRAP_MAPPER"
-  BOOTSTRAP_OPENED=true
-
-  sudo mkdir -p "$BOOTSTRAP_MOUNT"
-  sudo mount -o ro,nodev,nosuid,noexec "$device" "$BOOTSTRAP_MOUNT"
-  BOOTSTRAP_MOUNTED=true
-  trap cleanup_bootstrap EXIT
+  sudo find "/mnt$PINO_HOME/.local/share/pino/identity" \
+    "/mnt$PINO_HOME/.local/share/pino/encrypted" -type d -exec chmod 0700 {} +
+  sudo find "/mnt$PINO_HOME/.local/share/pino/identity" \
+    "/mnt$PINO_HOME/.local/share/pino/encrypted" -type f -exec chmod 0600 {} +
+  DATA_RESTORED=true
 }
 
 if [ ! -d "$REPO_DIR/hosts/$HOST" ]; then
@@ -175,41 +153,13 @@ INSTALL_CONFIG_DIR="/mnt$PINO_CONFIG_DIR"
 echo "Copying repo to $INSTALL_CONFIG_DIR..."
 sudo mkdir -p "/mnt$PINO_HOME" "$INSTALL_CONFIG_DIR"
 tar \
-  --exclude='./secrets' \
   --exclude='./result' \
   --exclude='./result-*' \
   -C "$REPO_DIR" -cf - . \
   | sudo tar --no-same-owner -C "$INSTALL_CONFIG_DIR" -xf -
 
-# The working secrets directory may contain untracked private material, so it
-# is excluded above. Restore only files committed in the public repository
-# (currently placeholder examples) to keep the installed Git tree clean.
-if git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git -C "$REPO_DIR" archive --format=tar HEAD -- secrets \
-    | sudo tar --no-same-owner -C "$INSTALL_CONFIG_DIR" -xf -
-fi
-
-if mount_bootstrap; then
-  if ! sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/shared" \
-    && ! sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST"; then
-    echo "$BOOTSTRAP_LABEL has no installation secrets for $HOST; continuing without them." >&2
-    echo "Expected bootstrap/shared or bootstrap/hosts/$HOST." >&2
-  else
-    echo "Provisioning $HOST secrets from $BOOTSTRAP_LABEL..."
-    sudo install -d -m 0700 -o root -g root /mnt/var/lib/pino/secrets
-    if sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/shared"; then
-      sudo cp -a "$BOOTSTRAP_MOUNT/bootstrap/shared/." /mnt/var/lib/pino/secrets/
-    fi
-    if sudo test -d "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST"; then
-      sudo cp -a "$BOOTSTRAP_MOUNT/bootstrap/hosts/$HOST/." /mnt/var/lib/pino/secrets/
-    fi
-    sudo find /mnt/var/lib/pino/secrets -type d -exec chmod 0700 {} +
-    sudo find /mnt/var/lib/pino/secrets -type f -exec chmod 0600 {} +
-    SECRETS_PROVISIONED=true
-  fi
-fi
-
 if mount_data_backup; then
+  restore_portable_backup
   restore_data_backup
 fi
 
@@ -224,22 +174,41 @@ installed_user_gid="$(awk -F: -v user="$PINO_USER" '$1 == user { print $4 }' /mn
 }
 sudo chown -R "$installed_user_uid:$installed_user_gid" "/mnt$PINO_HOME"
 
-if [ -f /mnt/var/lib/pino/secrets/user-password-hash ]; then
-  echo "Applying the provisioned $PINO_USER password hash..."
-  PASSWORD_HASH="$(sudo head -n 1 /mnt/var/lib/pino/secrets/user-password-hash)"
-  printf '%s:%s\n' "$PINO_USER" "$PASSWORD_HASH" | sudo chpasswd --root /mnt --encrypted
-  PASSWORD_CONFIGURED=true
-elif [ -t 0 ]; then
-  echo "No provisioned password hash exists for $PINO_USER. Set a local password before rebooting."
+if [ -z "$BOOTSTRAP_SSH_KEY" ] && [ -t 0 ]; then
+  echo "A public SSH key lets a trusted Pino client send this host's first secret projection."
+  read -r -p "Bootstrap SSH public key (leave empty for local Cryptomator population): " BOOTSTRAP_SSH_KEY
+fi
+if [ -n "$BOOTSTRAP_SSH_KEY" ]; then
+  case "$BOOTSTRAP_SSH_KEY" in
+    ssh-ed25519\ *|ssh-rsa\ *|sk-ssh-ed25519@openssh.com\ *) ;;
+    *) echo "Unsupported SSH public-key format." >&2; exit 1 ;;
+  esac
+  sudo install -d -m 0755 /mnt/etc/ssh/authorized_keys.d
+  printf '%s\n' "$BOOTSTRAP_SSH_KEY" | sudo tee "/mnt/etc/ssh/authorized_keys.d/$PINO_USER" >/dev/null
+  sudo chmod 0644 "/mnt/etc/ssh/authorized_keys.d/$PINO_USER"
+  sudo install -d -m 0700 /mnt/var/lib/pino/bootstrap
+  bootstrap_code="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+  bootstrap_expires="$(( $(date +%s) + 3600 ))"
+  printf '%s %s\n' "$bootstrap_code" "$bootstrap_expires" \
+    | sudo tee /mnt/var/lib/pino/bootstrap/pending >/dev/null
+  sudo chmod 0600 /mnt/var/lib/pino/bootstrap/pending
+  BOOTSTRAP_READY=true
+fi
+
+if [ -t 0 ]; then
+  echo "Set a local password for $PINO_USER before rebooting."
   sudo nixos-enter --root /mnt -c "passwd $PINO_USER"
   PASSWORD_CONFIGURED=true
 fi
 
 echo ""
-if [ "$SECRETS_PROVISIONED" = true ]; then
-  echo "Done. Vault-backed system secrets were provisioned from $BOOTSTRAP_LABEL."
+echo "Done. No plaintext secret source was opened by the installer."
+if [ "$BOOTSTRAP_READY" = true ]; then
+  echo "One-time bootstrap code (valid for one hour): $bootstrap_code"
+  echo "After first boot, run on a trusted client:"
+  echo "  pino bootstrap host apply $HOST <new-host-address>"
 else
-  echo "Done without vault-backed installation secrets."
+  echo "After first desktop login, unlock hosts/$HOST and run: pino secrets populate"
 fi
 if [ "$PASSWORD_CONFIGURED" = false ]; then
   echo "The $PINO_USER password is not configured. Before rebooting, run:"

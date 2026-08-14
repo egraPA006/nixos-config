@@ -50,7 +50,7 @@ maybe_populate_vault() {
   read -r -p "Populate system secrets from the mounted vault before rebuilding? [y/N] " answer
   case "$answer" in
     y|Y|yes|YES)
-      if ! pino storage vault populate; then
+      if ! pino secrets populate; then
         echo "Vault population failed; rebuild cancelled." >&2
         return 1
       fi
