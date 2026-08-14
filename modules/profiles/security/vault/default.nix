@@ -130,36 +130,42 @@ in
     };
   };
 
-  pino.subcommands.identity = {
-    description = "Open and inspect synchronized KeePass identity databases";
+  pino.subcommands.vault = {
+    description = "Manage synchronized encrypted identity and secret data";
     commands = {
-      open.description = "Open the normal identity database";
-      infra.description = "Open the infrastructure database manually";
-      files.description = "List synchronized KeePass database files";
+      identity = {
+        description = "Open and inspect synchronized KeePass databases";
+        commands = {
+          open.description = "Open the normal identity database";
+          infra.description = "Open the infrastructure database manually";
+          files.description = "List synchronized KeePass database files";
+        };
+        helpText = ''
+          identity.kdbx is the everyday database. infra.kdbx uses an independent
+          master password and is opened manually. Both synchronize only as KDBX
+          ciphertext; never store the infrastructure master password in identity.
+        '';
+        script = ''
+          case "''${1:-}" in
+            open) ${pkgs.systemd}/bin/systemctl --user start keepassxc-identity.service ;;
+            infra) exec ${keepassxcInfrastructure} ;;
+            files)
+              ${pkgs.findutils}/bin/find ${lib.escapeShellArg databaseDir} \
+                -maxdepth 1 -type f -name '*.kdbx' -printf '%f\n' | ${pkgs.coreutils}/bin/sort
+              ;;
+            *) echo "Run 'pino vault identity help' for usage." >&2; exit 1 ;;
+          esac
+        '';
+      };
       sync = {
-        description = "Inspect or restart identity synchronization";
+        description = "Inspect or restart encrypted-data synchronization";
         commands = {
           status.description = "Show Syncthing service status";
-          restart.description = "Restart identity synchronization";
+          restart.description = "Restart synchronization after local inspection";
           id.description = "Print this client's public Syncthing device ID";
         };
-      };
-    };
-    helpText = ''
-      identity.kdbx is the everyday database. infra.kdbx uses an independent
-      master password and is opened manually. Both synchronize only as KDBX
-      ciphertext; never store the infrastructure master password in identity.
-    '';
-    script = ''
-      case "''${1:-}" in
-        open) ${pkgs.systemd}/bin/systemctl --user start keepassxc-identity.service ;;
-        infra) exec ${keepassxcInfrastructure} ;;
-        files)
-          ${pkgs.findutils}/bin/find ${lib.escapeShellArg databaseDir} \
-            -maxdepth 1 -type f -name '*.kdbx' -printf '%f\n' | ${pkgs.coreutils}/bin/sort
-          ;;
-        sync)
-          case "''${2:-}" in
+        script = ''
+          case "''${1:-}" in
             status) ${pkgs.systemd}/bin/systemctl status syncthing.service --no-pager ;;
             restart) sudo ${pkgs.systemd}/bin/systemctl restart syncthing.service ;;
             id)
@@ -167,11 +173,10 @@ in
                 --home=${lib.escapeShellArg "${home}/.config/syncthing"} \
                 show system | ${pkgs.jq}/bin/jq -r .myID
               ;;
-            *) echo "Run 'pino identity sync help' for usage." >&2; exit 1 ;;
+            *) echo "Run 'pino vault sync help' for usage." >&2; exit 1 ;;
           esac
-          ;;
-        *) echo "Run 'pino identity help' for usage." >&2; exit 1 ;;
-      esac
-    '';
+        '';
+      };
+    };
   };
 }

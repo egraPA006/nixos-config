@@ -218,7 +218,7 @@ in
       Install.WantedBy = [ "graphical-session.target" ];
     };
 
-    pino.subcommands.share = {
+    pino.subcommands.vault.commands.share = {
       description = "Open the temporary client-encrypted file exchange";
       commands = {
         init.description = "Prepare the local encrypted share and open Cryptomator";
@@ -227,7 +227,7 @@ in
       };
       helpText = ''
         Share is a disposable Cryptomator vault transported as ciphertext by
-        Syncthing. It has no Pino snapshots or external backup policy. Enable
+        Syncthing. It has no versioned or external backup policy. Enable
         password storage in the desktop keyring after its first unlock.
       '';
       script = ''
@@ -256,15 +256,15 @@ in
             echo "Android live share: ${primary.shareUrl}"
             systemctl status syncthing.service --no-pager
             ;;
-          *) echo "Run 'pino share help' for usage." >&2; exit 1 ;;
+          *) echo "Run 'pino vault share help' for usage." >&2; exit 1 ;;
         esac
       '';
     };
 
-    pino.subcommands.backup = {
+    pino.subcommands.vault.commands.backup = {
       description = "Back up encrypted identity, secrets, and configuration offline";
       commands = {
-        run = { description = "Write current and previous portable copies to a pino-data disk"; usage = "[disk-id]"; };
+        create = { description = "Write current and previous portable copies to a pino-data disk"; usage = "[disk-id]"; };
         list = { description = "List portable generations on a pino-data disk"; usage = "[disk-id]"; };
         restore = { description = "Replace local encrypted state from an offline generation"; usage = "[disk-id] <current|previous>"; };
         resume.description = "Resume Syncthing after inspecting a restored generation";
@@ -275,7 +275,7 @@ in
         The target keeps exactly current and previous generations.
 
         Restore deliberately leaves Syncthing stopped. Inspect the restored
-        databases and vaults, then run `pino backup resume` to synchronize.
+        databases and vaults, then run `pino vault backup resume` to synchronize.
       '';
       script = ''
         CIPHER_ROOT=${lib.escapeShellArg cfg.cipherRoot}
@@ -428,7 +428,7 @@ in
             selector=""
             generation="''${2:-}"
           fi
-          case "$generation" in current|previous) ;; *) echo "Usage: pino backup restore [disk] <current|previous>" >&2; return 1 ;; esac
+          case "$generation" in current|previous) ;; *) echo "Usage: pino vault backup restore [disk] <current|previous>" >&2; return 1 ;; esac
           require_closed
           select_disk "$selector"
           mount_disk ro
@@ -438,7 +438,7 @@ in
             return 1
           }
           echo "This replaces local encrypted identity and secret-vault ciphertext."
-          echo "Syncthing will remain stopped until 'pino backup resume'."
+          echo "Syncthing will remain stopped until 'pino vault backup resume'."
           read -r -p "Type 'restore $generation' to continue: " confirmation
           [ "$confirmation" = "restore $generation" ] || {
             echo "Restore cancelled."
@@ -454,36 +454,29 @@ in
             --chmod=D0700,F0600 \
             "$source/encrypted/" "$CIPHER_ROOT/"
           RESTART_SYNC=false
-          echo "Restored $generation. Inspect locally before running: pino backup resume"
+          echo "Restored $generation. Inspect locally before running: pino vault backup resume"
           if [ -f "$source/nixos-config.bundle" ]; then
             echo "Configuration bundle retained on the disk; the working checkout was not overwritten."
           fi
         }
 
         case "''${1:-}" in
-          run) backup_run "''${2:-}" ;;
+          create) backup_run "''${2:-}" ;;
           list) backup_list "''${2:-}" ;;
           restore) backup_restore "$@" ;;
           resume) sudo ${pkgs.systemd}/bin/systemctl start syncthing.service ;;
-          *) echo "Run 'pino backup help' for usage." >&2; exit 1 ;;
+          *) echo "Run 'pino vault backup help' for usage." >&2; exit 1 ;;
         esac
       '';
     };
 
-    pino.subcommands.secrets = {
+    pino.subcommands.vault.commands.secrets = {
       description = "Open and stage client-encrypted secret vaults";
       commands = {
         status.description = "Show declared vault and Syncthing state";
         init = { description = "Prepare a scope and open Cryptomator to create it"; usage = "<scope>"; };
         open = { description = "Open Cryptomator for the configured secret vaults"; usage = "[scope]"; };
         reconcile.description = "Reconcile existing vaults into Cryptomator settings";
-        sync = {
-          description = "Inspect or restart ciphertext synchronization";
-          commands = {
-            status.description = "Show Syncthing service status";
-            restart.description = "Restart Syncthing after local inspection";
-          };
-        };
         populate.description = "Stage only this host's unlocked runtime secrets";
         storage-init = { description = "Generate WebDAV credentials inside a host vault"; usage = "<server-host>"; };
       };
@@ -566,13 +559,6 @@ in
             ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
             echo "Cryptomator settings reconciled and reloaded."
             ;;
-          sync)
-            case "''${2:-}" in
-              status) ${pkgs.systemd}/bin/systemctl status syncthing.service --no-pager ;;
-              restart) sudo ${pkgs.systemd}/bin/systemctl restart syncthing.service ;;
-              *) echo "Run 'pino secrets sync help' for usage." >&2; exit 1 ;;
-            esac
-            ;;
           populate)
             host_scope="hosts/${config.networking.hostName}"
             source="$MOUNT_ROOT/$host_scope"
@@ -599,7 +585,7 @@ in
           storage-init)
             server_host="''${2:-}"
             valid_scope "$server_host" || {
-              echo "Usage: pino secrets storage-init <server-host>" >&2
+              echo "Usage: pino vault secrets storage-init <server-host>" >&2
               exit 1
             }
             host_root="$MOUNT_ROOT/hosts/$server_host"
@@ -620,7 +606,7 @@ in
             } > "$credential"
             echo "Generated $credential without displaying its contents."
             ;;
-          *) echo "Run 'pino secrets help' for usage." >&2; exit 1 ;;
+          *) echo "Run 'pino vault secrets help' for usage." >&2; exit 1 ;;
         esac
       '';
     };

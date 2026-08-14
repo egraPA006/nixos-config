@@ -26,13 +26,6 @@
       };
     };
     helpText = ''
-      pino server — lightweight server operations
-        pino server status
-        pino server connections
-        pino server disk
-        pino server logs <unit>
-        pino bootstrap receiver help
-
       No monitoring dashboard or management port is exposed.
     '';
     script = ''

@@ -150,22 +150,20 @@ in
   pino.subcommands.server.commands.vpn = {
     description = "Operate the AmneziaWG private network";
     commands = {
-      on.description = "Start the VPN interface";
-      off.description = "Stop the VPN interface";
+      start.description = "Start the VPN interface";
+      stop.description = "Stop the VPN interface";
       status.description = "Show VPN service and peers";
       peers.description = "Show peer handshakes and traffic";
       logs.description = "Show recent VPN service logs";
       mode = {
         description = "Control client Internet forwarding";
-        usage = "<private|egress|status>";
+        commands = {
+          status.description = "Show forwarding and NAT state";
+          set = { description = "Select the persistent forwarding mode"; usage = "<private|egress>"; };
+        };
       };
     };
     helpText = ''
-      pino server vpn status       Show config metadata, service, and interface
-      pino server vpn peers        Show safe peer handshake and traffic details
-      pino server vpn logs         Show recent service logs
-      pino server vpn mode status  Show forwarding and NAT state
-
       private keeps server/VPN access but disables forwarded Internet traffic.
       egress enables IPv4 forwarding and NAT through the configured external
       interface. The selected mode persists across rebuilds and reboots; the
@@ -173,8 +171,8 @@ in
     '';
     script = ''
       case "''${1:-}" in
-        on) sudo systemctl start amneziawg-server ;;
-        off) sudo systemctl stop amneziawg-server ;;
+        start) sudo systemctl start amneziawg-server ;;
+        stop) sudo systemctl stop amneziawg-server ;;
         status)
           sudo test -f ${cfg.configFile} || {
             echo "VPN config is missing: ${cfg.configFile}" >&2
@@ -194,9 +192,14 @@ in
         logs) journalctl -u amneziawg-server -n 100 --no-pager ;;
         mode)
           case "''${2:-}" in
-            private|egress) sudo ${vpnMode} set "''${2}" ;;
             status) sudo ${vpnMode} status ;;
-            *) echo "Usage: pino server vpn mode <private|egress|status>" >&2; exit 1 ;;
+            set)
+              case "''${3:-}" in
+                private|egress) sudo ${vpnMode} set "''${3}" ;;
+                *) echo "Usage: pino server vpn mode set <private|egress>" >&2; exit 1 ;;
+              esac
+              ;;
+            *) echo "Run 'pino server vpn mode help' for usage." >&2; exit 1 ;;
           esac
           ;;
         *) echo "Run 'pino server vpn help' for usage." >&2; exit 1 ;;

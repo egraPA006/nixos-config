@@ -52,20 +52,6 @@
                     "noatime"
                   ];
                 };
-                "@snapshots" = {
-                  mountpoint = "/.snapshots";
-                  mountOptions = [
-                    "compress=zstd"
-                    "noatime"
-                  ];
-                };
-                "@home_snapshots" = {
-                  mountpoint = "/home/.snapshots";
-                  mountOptions = [
-                    "compress=zstd"
-                    "noatime"
-                  ];
-                };
               };
             };
           };
@@ -101,13 +87,6 @@
                   ];
                 };
 
-                "@fast_snapshots" = {
-                  mountpoint = "/data/fast/.snapshots";
-                  mountOptions = [
-                    "compress=zstd"
-                    "noatime"
-                  ];
-                };
               };
             };
           };
@@ -132,13 +111,6 @@
             subvolumes = {
               "@slow" = {
                 mountpoint = "/data/slow";
-                mountOptions = [
-                  "compress=zstd"
-                  "noatime"
-                ];
-              };
-              "@slow_snapshots" = {
-                mountpoint = "/data/slow/.snapshots";
                 mountOptions = [
                   "compress=zstd"
                   "noatime"

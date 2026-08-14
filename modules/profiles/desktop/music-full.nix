@@ -77,17 +77,6 @@ in
         reaper = { description = "Launch Reaper"; usage = "[samples]"; };
       };
       helpText = ''
-        pino desktop music-full — manage full music production setup
-          pino desktop music-full list              List Linux and bridged Windows plugins
-          pino desktop music-full setup             Init Wine prefix and configure yabridge
-          pino desktop music-full bridge            Sync yabridge (update .so bridges for Win plugins)
-          pino desktop music-full bridge-add <dir>  Register a Win plugin directory with yabridge
-          pino desktop music-full install <exe>        Run a Windows plugin installer (with network)
-          pino desktop music-full install-nonet <exe>  Run a Windows plugin installer (network blocked)
-          pino desktop music-full reaper [samples]  Launch Reaper (with optional PIPEWIRE_LATENCY, e.g. 128)
-          pino desktop music-full prefix            Print Wine prefix path
-          pino desktop music-full status            Show plugin counts
-
         Plugin source dirs (commit .dll/.so files here):
           Windows: ${srcDir}/plugins/win/
           Linux:   ${srcDir}/plugins/linux/

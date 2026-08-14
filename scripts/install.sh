@@ -208,7 +208,7 @@ if [ "$BOOTSTRAP_READY" = true ]; then
   echo "After first boot, run on a trusted client:"
   echo "  pino bootstrap host apply $HOST <new-host-address>"
 else
-  echo "After first desktop login, unlock hosts/$HOST and run: pino secrets populate"
+  echo "After first desktop login, unlock hosts/$HOST and run: pino vault secrets populate"
 fi
 if [ "$PASSWORD_CONFIGURED" = false ]; then
   echo "The $PINO_USER password is not configured. Before rebooting, run:"

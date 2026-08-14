@@ -97,7 +97,10 @@ in
       logs.description = "Show recent sing-box logs";
       mode = {
         description = "Select proxy Internet access";
-        usage = "<direct|blocked>";
+        commands = {
+          status.description = "Show the selected proxy mode";
+          set = { description = "Select the proxy mode"; usage = "<direct|blocked>"; };
+        };
       };
     };
     helpText = ''
@@ -122,8 +125,13 @@ in
           ;;
         logs) journalctl -u sing-box -n 100 --no-pager ;;
         mode)
-          mode="''${2:-}"
-          case "$mode" in direct|blocked) ;; *) echo "Usage: pino server proxy mode <direct|blocked>" >&2; exit 1 ;; esac
+          if [ "''${2:-}" = status ]; then
+            ${pkgs.curl}/bin/curl -fsS "$api/proxies/internet" | jq -r '"mode: \(.now)"'
+            exit
+          fi
+          [ "''${2:-}" = set ] || { echo "Run 'pino server proxy mode help' for usage." >&2; exit 1; }
+          mode="''${3:-}"
+          case "$mode" in direct|blocked) ;; *) echo "Usage: pino server proxy mode set <direct|blocked>" >&2; exit 1 ;; esac
           ${pkgs.curl}/bin/curl -fsS -X PUT -H 'Content-Type: application/json' \
             -d "{\"name\":\"$mode\"}" "$api/proxies/internet" >/dev/null
           echo "Proxy mode: $mode"

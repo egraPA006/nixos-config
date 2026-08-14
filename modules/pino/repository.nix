@@ -45,18 +45,36 @@ in
       description = "Maintain GitHub, server, and offline configuration copies";
       commands = {
         status.description = "Show repository state and configured mirrors";
-        configure.description = "Install or update local mirror remotes";
-        sync.description = "Push the current committed branch and tags to every mirror";
-        bundle = { description = "Create a self-contained offline Git bundle"; usage = "<path>"; };
+        pull.description = "Fast-forward the configuration checkout";
+        push.description = "Push the current committed branch and tags to every mirror";
+        remote = {
+          description = "Inspect and configure repository remotes";
+          commands = {
+            list.description = "List configured repository remotes";
+            configure.description = "Install or update configured mirror remotes";
+          };
+        };
+        inputs = {
+          description = "Manage flake inputs";
+          commands.update.description = "Update flake.lock without rebuilding";
+        };
+        bundle = {
+          description = "Manage self-contained offline Git bundles";
+          commands.create = { description = "Create and verify an offline Git bundle"; usage = "<path>"; };
+        };
       };
       helpText = ''
         GitHub remains canonical, but every configured server receives the same
-        committed branch. `bundle` creates an installation source that works
+        committed branch. `bundle create` creates an installation source that works
         without GitHub or any network connection. Uncommitted files are never
-        copied by `sync`.
+        copied by `push`.
       '';
       script = ''
         CONFIG_DIR=${lib.escapeShellArg configDir}
+        PINO_USER=${lib.escapeShellArg config.pino.user.name}
+        if [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ]; then
+          exec ${pkgs.util-linux}/bin/runuser -u "$PINO_USER" -- /run/current-system/sw/bin/pino repo "$@"
+        fi
         cd "$CONFIG_DIR"
 
         configure_mirrors() {
@@ -72,11 +90,25 @@ in
             echo
             ${pkgs.git}/bin/git remote -v
             ;;
-          configure)
-            configure_mirrors
-            ${pkgs.git}/bin/git remote -v
+          pull)
+            if [ -n "$(${pkgs.git}/bin/git status --porcelain --untracked-files=no)" ]; then
+              echo "Tracked changes prevent a safe pull:" >&2
+              ${pkgs.git}/bin/git status --short --untracked-files=no >&2
+              exit 1
+            fi
+            ${pkgs.git}/bin/git pull --ff-only
             ;;
-          sync)
+          remote)
+            case "''${2:-}" in
+              list) ${pkgs.git}/bin/git remote -v ;;
+              configure)
+                configure_mirrors
+                ${pkgs.git}/bin/git remote -v
+                ;;
+              *) echo "Run 'pino repo remote help' for usage." >&2; exit 1 ;;
+            esac
+            ;;
+          push)
             configure_mirrors
             branch="$(${pkgs.git}/bin/git branch --show-current)"
             [ -n "$branch" ] || {
@@ -91,10 +123,17 @@ in
             ${pkgs.git}/bin/git push origin --tags
             ${pushCommands}
             ;;
+          inputs)
+            case "''${2:-}" in
+              update) ${pkgs.nix}/bin/nix flake update --flake "$CONFIG_DIR" ;;
+              *) echo "Run 'pino repo inputs help' for usage." >&2; exit 1 ;;
+            esac
+            ;;
           bundle)
-            output="''${2:-}"
+            [ "''${2:-}" = create ] || { echo "Run 'pino repo bundle help' for usage." >&2; exit 1; }
+            output="''${3:-}"
             [ -n "$output" ] || {
-              echo "Usage: pino repo bundle <path>" >&2
+              echo "Usage: pino repo bundle create <path>" >&2
               exit 1
             }
             ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$output")"

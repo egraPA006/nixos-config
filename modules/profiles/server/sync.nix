@@ -92,26 +92,23 @@ in
   ];
 
   pino.subcommands.server.commands.sync = {
-    description = "Inspect encrypted data and configuration mirrors";
+    description = "Inspect synchronized encrypted data";
     commands = {
       status.description = "Show Syncthing service status";
       id.description = "Print the server Syncthing device ID";
       files.description = "Summarize synchronized encrypted data";
-      config.description = "Show the mirrored NixOS configuration refs";
       logs.description = "Show recent synchronization logs";
     };
     helpText = ''
       KeePass databases and Cryptomator ciphertext synchronize automatically.
       Vault passwords and plaintext never reach this server. NixOS configuration
       uses the separate bare Git mirror and is updated explicitly by `pino repo
-      sync` on a trusted client, preserving commits and preventing file races.
+      push` on a trusted client, preserving commits and preventing file races.
     '';
     script = ''
       case "''${1:-}" in
         status)
           systemctl status syncthing --no-pager
-          echo
-          systemctl status pino-git-mirror-init --no-pager
           ;;
         id)
           sudo -u syncthing ${pkgs.syncthing}/bin/syncthing \
@@ -123,7 +120,18 @@ in
             ${lib.escapeShellArg cfg.encryptedRoot} \
             /var/lib/syncthing/share
           ;;
-        config)
+        logs) journalctl -u syncthing -n 100 --no-pager ;;
+        *) echo "Run 'pino server sync help' for usage." >&2; exit 1 ;;
+      esac
+    '';
+  };
+
+  pino.subcommands.server.commands.repo = {
+    description = "Inspect the server's NixOS configuration mirror";
+    commands.status.description = "Show mirrored branch and tag references";
+    script = ''
+      case "''${1:-}" in
+        status)
           [ -d ${lib.escapeShellArg gitRepository} ] || {
             echo "Git mirror is not initialized: ${gitRepository}" >&2
             exit 1
@@ -132,8 +140,7 @@ in
             for-each-ref --format='%(refname:short) %(objectname:short) %(committerdate:iso8601)' \
             refs/heads refs/tags
           ;;
-        logs) journalctl -u syncthing -n 100 --no-pager ;;
-        *) echo "Run 'pino server sync help' for usage." >&2; exit 1 ;;
+        *) echo "Run 'pino server repo help' for usage." >&2; exit 1 ;;
       esac
     '';
   };

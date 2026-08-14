@@ -81,11 +81,11 @@ in
     description = "AmneziaWG VPN";
     commands = {
       list.description = "List installed named VPN connections";
-      on = {
+      connect = {
         description = "Select, start, and autostart a connection";
         usage = "[name]";
       };
-      off = {
+      disconnect = {
         description = "Stop one or all connections and disable autostart";
         usage = "[name|all]";
       };
@@ -95,14 +95,8 @@ in
       };
     };
     helpText = ''
-      pino desktop services vpn — AmneziaWG VPN
-        pino desktop services vpn list          List saved connections
-        pino desktop services vpn on [name]     Select one connection and enable autostart
-        pino desktop services vpn off [name]    Stop one connection (all when omitted)
-        pino desktop services vpn status [name] Show service and peer status
-
-        Configs are provisioned from this host's encrypted secret projection.
-        Pino selects one full-route connection at a time to avoid route conflicts.
+      Configs are provisioned from this host's encrypted secret projection.
+      Pino selects one full-route connection at a time to avoid route conflicts.
     '';
     script = builtins.readFile ../../../pino/vpn.sh;
   };

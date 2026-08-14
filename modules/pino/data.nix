@@ -45,7 +45,7 @@ in
       message = "pino.data.datasets.${name}.localPath must be a safe absolute data path";
     }) datasets;
 
-    pino.subcommands.storage.commands.data = {
+    pino.subcommands.storage.commands.dataset = {
       description = "Manage portable, non-secret datasets";
       commands = {
         list.description = "List configured datasets";
@@ -55,14 +55,6 @@ in
         merge = { description = "Interactively merge medium into local"; usage = "[disk] <dataset>"; };
       };
       helpText = ''
-        pino storage data — plain datasets on a pino-data-* medium
-          pino storage data list
-          pino storage data disks
-          pino storage data backup  [disk] <dataset|all>
-                                                Make medium copies exactly match local
-          pino storage data restore [disk] <dataset>  Make local exactly match the medium
-          pino storage data merge   [disk] <dataset>  Interactively merge medium into local
-
         A disk selector is a suffix (for example 1) or full pino-data-* label.
         It is optional when exactly one pino-data-* partition is connected.
 
@@ -75,9 +67,9 @@ in
       script = script;
       fishCompletions = ''
         complete -c pino -f \
-          -n '__fish_pino_at_path storage data backup; or __fish_pino_at_path storage data restore; or __fish_pino_at_path storage data merge' \
+          -n '__fish_pino_at_path storage dataset backup; or __fish_pino_at_path storage dataset restore; or __fish_pino_at_path storage dataset merge' \
           -a '${lib.concatStringsSep " " names}' -d 'Dataset'
-        complete -c pino -f -n '__fish_pino_at_path storage data backup' \
+        complete -c pino -f -n '__fish_pino_at_path storage dataset backup' \
           -a all -d 'Every configured dataset'
       '';
     };

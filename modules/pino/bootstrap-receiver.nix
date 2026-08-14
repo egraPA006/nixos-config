@@ -131,11 +131,6 @@ in
       renew.description = "Issue a replacement code valid for one hour";
     };
     helpText = ''
-      pino bootstrap receiver — initial secret provisioning
-        pino bootstrap receiver status   Show pending, expired, or complete state
-        pino bootstrap receiver code     Display the current code and expiry
-        pino bootstrap receiver renew    Replace a missing or expired code
-
       Run these commands as root from the trusted server console. A successful
       initial bootstrap consumes the code permanently; later changes use
       `pino bootstrap host sync` from a trusted vault machine.

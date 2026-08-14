@@ -27,14 +27,17 @@ in
           description = "Generate and manage AmneziaWG server peers";
           commands = {
             init = { description = "Create server and canonical client configurations"; usage = "<host> <endpoint> [peer ...]"; };
-            list = { description = "List a server's VPN peers"; usage = "<host>"; };
-            export = { description = "Copy one canonical client configuration"; usage = "<host> <peer> [path]"; };
-            set-endpoint = { description = "Change the endpoint in every client configuration"; usage = "<host> <endpoint>"; };
+            endpoint = {
+              description = "Manage the endpoint in client configurations";
+              commands.set = { description = "Change the endpoint in every client configuration"; usage = "<host> <endpoint>"; };
+            };
             peer = {
-              description = "Add or remove individual VPN peers";
+              description = "List, add, remove, or export VPN peers";
               commands = {
+                list = { description = "List a server's VPN peers"; usage = "<host>"; };
                 add = { description = "Add a peer without rotating existing keys"; usage = "<host> <peer>"; };
                 remove = { description = "Remove a peer and regenerate server configuration"; usage = "<host> <peer>"; };
+                export = { description = "Copy one canonical client configuration"; usage = "<host> <peer> [path]"; };
               };
             };
           };
@@ -54,6 +57,10 @@ in
           shift || true
           if [ "$operation" = peer ]; then
             operation="''${1:-}"
+            shift || true
+          elif [ "$operation" = endpoint ]; then
+            [ "''${1:-}" = set ] || { echo "Run 'pino bootstrap host vpn endpoint help' for usage." >&2; exit 1; }
+            operation=set-endpoint
             shift || true
           fi
           case "$operation" in

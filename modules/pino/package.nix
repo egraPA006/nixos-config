@@ -9,25 +9,16 @@
   environment.systemPackages = [ pkgs.nix-index ];
 
   pino.subcommands.os.commands.package = {
-    description = "Manage temporary packages (no rebuild needed)";
+    description = "Manage ad-hoc user packages (no rebuild needed)";
     commands = {
-      list.description = "List installed temporary packages";
+      list.description = "List installed ad-hoc packages";
       search = { description = "Search top-level nixpkgs packages"; usage = "<query>"; };
       locate = { description = "Find packages containing a file"; usage = "<pattern>"; };
       index.description = "Rebuild the local nix-locate database";
       install = { description = "Install a temporary package"; usage = "<name>"; };
-      remove = { description = "Remove a temporary package"; usage = "<name>"; };
+      remove = { description = "Remove an ad-hoc package"; usage = "<name>"; };
     };
     helpText = ''
-      pino os package — manage per-user temporary packages
-
-        pino os package list              List installed packages
-        pino os package search <query>    Search nixpkgs (top-level only)
-        pino os package locate <pattern>  Find packages containing a file
-        pino os package index             Rebuild the local nix-locate database
-        pino os package install <name>    Install nixpkgs#<name>
-        pino os package remove  <name>    Remove package by name
-
       Packages are stored in ~/.local/share/pino-pkgs and are available
       immediately after install — no NixOS rebuild required.
       Remove a package with 'pino os package remove <name>' when done.
@@ -86,7 +77,7 @@
           ;;
 
         "")
-          echo "pino os package — manage per-user temporary packages"
+          echo "pino os package — manage per-user ad-hoc packages"
           echo ""
           echo "  list              List installed packages"
           echo "  search <query>    Search nixpkgs"

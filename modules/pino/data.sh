@@ -14,7 +14,7 @@ dataset_index() {
     fi
   done
   echo "Unknown dataset: $requested" >&2
-  echo "Run 'pino storage data list' to see configured datasets." >&2
+  echo "Run 'pino storage dataset list' to see configured datasets." >&2
   return 1
 }
 
@@ -190,7 +190,7 @@ parse_dataset_operation() {
   fi
   if [ -z "$dataset" ]; then
     [ "$operation" = backup ] && target='dataset|all'
-    echo "Usage: pino storage data $operation [disk] <$target>" >&2
+    echo "Usage: pino storage dataset $operation [disk] <$target>" >&2
     return 1
   fi
   if [ "$dataset" = all ] && [ "$operation" != backup ]; then
@@ -217,6 +217,6 @@ case "${1:-}" in
     fi
     ;;
   backup|restore|merge) parse_dataset_operation "$1" "${2:-}" "${3:-}" ;;
-  "") echo "Usage: pino storage data <list|disks|backup|restore|merge>" ;;
-  *) echo "pino storage data: unknown command '$1'" >&2; exit 1 ;;
+  "") echo "Usage: pino storage dataset <list|disks|backup|restore|merge>" ;;
+  *) echo "pino storage dataset: unknown command '$1'" >&2; exit 1 ;;
 esac

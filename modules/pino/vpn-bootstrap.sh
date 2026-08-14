@@ -18,7 +18,7 @@ flake="path:$PINO_CONFIG_DIR"
 host_attr="$flake#nixosConfigurations.$host.config"
 
 if ! "$FINDMNT" --mountpoint "$host_vault" >/dev/null 2>&1; then
-  echo "The host vault is closed. Run: pino secrets open hosts/$host" >&2
+  echo "The host vault is closed. Run: pino vault secrets open hosts/$host" >&2
   exit 1
 fi
 
@@ -218,7 +218,7 @@ add_peer() {
   if is_nixos_host "$name"; then
     print_host_enable_steps "$name"
   else
-    echo "Export it for the device with: pino bootstrap host vpn export $host $name [path]"
+    echo "Export it for the device with: pino bootstrap host vpn peer export $host $name [path]"
   fi
 }
 
@@ -327,7 +327,7 @@ case "$PINO_OPERATION" in
     echo "Removed peer $name. Run the server secret sync to apply the new peer list."
     ;;
   list)
-    [ "$#" -eq 0 ] || { echo "Usage: pino bootstrap host vpn list <host>" >&2; exit 1; }
+    [ "$#" -eq 0 ] || { echo "Usage: pino bootstrap host vpn peer list <host>" >&2; exit 1; }
     read_server
     printf 'Server:   %s\nEndpoint: %s:%s\nSubnet:   %s.0/%s\n\n' "$host" "$endpoint" "$port" "$prefix" "$prefix_length"
     printf '%-20s %-15s %s\n' PEER ADDRESS CONFIGURATION
@@ -338,7 +338,7 @@ case "$PINO_OPERATION" in
     done < <(peer_rows)
     ;;
   export)
-    [ "$#" -ge 1 ] && [ "$#" -le 2 ] || { echo "Usage: pino bootstrap host vpn export <host> <peer> [path]" >&2; exit 1; }
+    [ "$#" -ge 1 ] && [ "$#" -le 2 ] || { echo "Usage: pino bootstrap host vpn peer export <host> <peer> [path]" >&2; exit 1; }
     name="$1"
     destination="${2:-./awg-$host-$name.conf}"
     valid_name "$name" || { echo "Invalid peer name: $name" >&2; exit 1; }
@@ -352,7 +352,7 @@ case "$PINO_OPERATION" in
     echo "Exported $name configuration to $destination"
     ;;
   set-endpoint)
-    [ "$#" -eq 1 ] || { echo "Usage: pino bootstrap host vpn set-endpoint <host> <endpoint>" >&2; exit 1; }
+    [ "$#" -eq 1 ] || { echo "Usage: pino bootstrap host vpn endpoint set <host> <endpoint>" >&2; exit 1; }
     new_endpoint="$1"
     [[ "$new_endpoint" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Use an IPv4 address or DNS name without a port." >&2; exit 1; }
     read_server

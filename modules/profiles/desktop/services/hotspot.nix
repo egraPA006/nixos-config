@@ -14,11 +14,8 @@ in
         stop.description = "Tear down the access point";
       };
       helpText = ''
-        pino desktop services hotspot — WiFi access point  (SSID: ${ssid})
-          pino desktop services hotspot start   Bring up AP, traffic routed via VPN
-          pino desktop services hotspot stop    Tear down AP
-
-          Connection: provisioned from this host's encrypted secret projection.
+        SSID: ${ssid}
+        Connection: provisioned from this host's encrypted secret projection.
       '';
       script = ''
         case "''${1:-}" in

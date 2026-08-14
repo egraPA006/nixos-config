@@ -27,25 +27,6 @@
     hotspot.wifiInterface = "wlp8s0";
   };
 
-  pino.snapshots.volumes = {
-    root = {
-      subvolume = "/";
-      group = "system";
-    };
-    home = {
-      subvolume = "/home";
-      group = "system";
-    };
-    fast = {
-      subvolume = "/data/fast";
-      group = "data";
-    };
-    slow = {
-      subvolume = "/data/slow";
-      group = "data";
-    };
-  };
-
   # Host paths for datasets that can be carried between machines on egrapa_hdd.
   pino.data.datasets = {
     music-full = {

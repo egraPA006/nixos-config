@@ -39,20 +39,9 @@ in
         };
       };
       helpText = ''
-        pino desktop music-lite — run NAM guitar amp models in PipeWire
-          pino desktop music-lite list                  List available .nam models
-          pino desktop music-lite start <name>          Load a model as a PipeWire node
-          pino desktop music-lite stop                  Stop the running node
-          pino desktop music-lite status                Show whether a node is running
-          pino desktop music-lite log                   Show last jalv output
-          pino desktop music-lite set-latency <samples> Set PipeWire quantum (32/64/128/256)
-          pino desktop music-lite set-volume <percent>  Set output level (100=default, 200=+6dB)
-          pino desktop music-lite tuner                 Start chromatic tuner (lingot)
-          pino desktop music-lite tuner stop            Stop the tuner
-
-          Models: ${ampsDir}
-          Once started, connect guitar in → NAM → output in qpwgraph.
-          Get models: https://tonehunt.org
+        Models: ${ampsDir}
+        Once started, connect guitar in → NAM → output in qpwgraph.
+        Get models: https://tonehunt.org
       '';
       script = ''
         AMPS_DIR="${ampsDir}"

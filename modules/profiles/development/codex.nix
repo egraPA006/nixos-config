@@ -5,9 +5,10 @@
     enable = true;
 
     settings = {
-      model_reasoning_effort = "high";
+      model_reasoning_effort = "medium";
 
-      approval_policy = "never";
+      approval_policy = "on-request";
+      approvals_reviewer = "auto_review";
       sandbox_mode = "workspace-write";
 
       web_search = "cached";

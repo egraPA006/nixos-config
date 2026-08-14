@@ -52,7 +52,7 @@ case "${1:-}" in
       printf '%-18s %-10s %s\n' "$name" "$active" "$autostart"
     done < <(connections)
     ;;
-  on)
+  connect)
     name="$(select_name "${2:-}")"
     stop_active
     sudo install -d -m 0700 /var/lib/amneziawg
@@ -61,7 +61,7 @@ case "${1:-}" in
     sudo systemctl start "amneziawg@$name.service"
     echo "VPN connection active: $name"
     ;;
-  off)
+  disconnect)
     name="${2:-all}"
     if [ "$name" = all ]; then
       sudo rm -f "$marker"

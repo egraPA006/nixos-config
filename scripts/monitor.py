@@ -141,7 +141,7 @@ def cmd_list():
         except Exception:
             print(f"  {f.stem}")
 
-def cmd_rm(name):
+def cmd_delete(name):
     path = PROFILES_DIR / f'{name}.json'
     if not path.exists():
         sys.exit(f"Profile '{name}' not found — use 'monitor list'")
@@ -167,7 +167,7 @@ def usage():
     print("  list              List saved profiles")
     print("  switch <name>     Apply a saved profile")
     print("  save <name>       Save current layout as a profile")
-    print("  rm <name>         Delete a saved profile")
+    print("  delete <name>     Delete a saved profile")
     print("  status            Show current layout")
 
 cmd  = sys.argv[1] if len(sys.argv) > 1 else ''
@@ -175,7 +175,7 @@ name = sys.argv[2] if len(sys.argv) > 2 else ''
 
 if   cmd == 'save'   and name: cmd_save(name)
 elif cmd == 'switch' and name: cmd_switch(name)
-elif cmd == 'rm'     and name: cmd_rm(name)
+elif cmd == 'delete' and name: cmd_delete(name)
 elif cmd == 'list':            cmd_list()
 elif cmd == 'status':          cmd_status()
 else:                          usage(); sys.exit(0 if not cmd else 1)

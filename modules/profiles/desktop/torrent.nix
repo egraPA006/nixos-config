@@ -50,16 +50,8 @@ in
         stop.description = "Stop the Transmission daemon";
       };
       helpText = ''
-        pino desktop torrent — Transmission torrent client
-          pino desktop torrent list           List all torrents (grouped by status)
-          pino desktop torrent share          Show seeding/completed torrents (what you can share)
-          pino desktop torrent add <url>      Add a torrent by URL or magnet link
-          pino desktop torrent status         Show daemon status
-          pino desktop torrent start          Start the Transmission daemon
-          pino desktop torrent stop           Stop the Transmission daemon
-
-          Downloads: ${downloadsDir}
-          Web UI:    http://localhost:9091
+        Downloads: ${downloadsDir}
+        Web UI:    http://localhost:9091
       '';
       script = ''
         TR="${tr}"

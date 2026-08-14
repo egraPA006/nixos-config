@@ -30,7 +30,6 @@ let
     };
     storage = {
       datasets = ./storage/datasets.nix;
-      snapshots = ./storage/snapshots.nix;
     };
     system."system-monitor" = ./system/monitor.nix;
   };
@@ -87,12 +86,6 @@ in
       disable = { description = "Disable a profile and rebuild"; usage = "<profile>"; };
     };
     helpText = ''
-      pino profile — manage optional profiles
-        pino profile list
-        pino profile list --enabled
-        pino profile enable  <name>
-        pino profile disable <name>
-
       Active profiles: hosts/<hostname>/active-profiles.nix
       Disabling a profile preserves its data.
     '';

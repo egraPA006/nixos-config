@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 CONFIG_DIR=@configDir@
-GIT=@git@
 PINO_USER=@pinoUser@
 RUNUSER=@runuser@
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
@@ -31,26 +30,13 @@ current_generation() {
   list_generations | awk '$NF == "(current)" { print $1; exit }'
 }
 
-pull_os() {
-  "$GIT" -C "$CONFIG_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-    echo "$CONFIG_DIR is not a Git checkout." >&2
-    return 1
-  }
-  if [ -n "$("$GIT" -C "$CONFIG_DIR" status --porcelain --untracked-files=no)" ]; then
-    echo "Tracked changes prevent a safe pull:" >&2
-    "$GIT" -C "$CONFIG_DIR" status --short --untracked-files=no >&2
-    return 1
-  fi
-  "$GIT" -C "$CONFIG_DIR" pull --ff-only
-}
-
 maybe_populate_vault() {
   local answer
   [ "$VAULT_ENABLED" = true ] || return 0
   read -r -p "Populate system secrets from the mounted vault before rebuilding? [y/N] " answer
   case "$answer" in
     y|Y|yes|YES)
-      if ! pino secrets populate; then
+      if ! pino vault secrets populate; then
         echo "Vault population failed; rebuild cancelled." >&2
         return 1
       fi
@@ -64,15 +50,6 @@ rebuild_os() {
   echo "Flake:  $CONFIG_DIR#$HOST_NAME"
   confirm "Rebuild and switch this system?" || return
   maybe_populate_vault || return
-  sudo nixos-rebuild switch --flake "$CONFIG_DIR#$HOST_NAME"
-}
-
-update_os() {
-  echo "This updates flake inputs and rebuilds $HOST_NAME."
-  echo "Flake: $CONFIG_DIR"
-  confirm "Continue with the update?" || return
-  maybe_populate_vault || return
-  nix flake update --flake "$CONFIG_DIR"
   sudo nixos-rebuild switch --flake "$CONFIG_DIR#$HOST_NAME"
 }
 
@@ -97,7 +74,7 @@ rollback_os() {
   fi
   read -r -p "Type '$generation' to activate system generation $generation: " confirmation
   if [ "$confirmation" != "$generation" ]; then
-    echo "Rollback cancelled."
+    echo "Generation switch cancelled."
     return 1
   fi
   sudo nix-env --profile "$SYSTEM_PROFILE" --switch-generation "$generation"
@@ -141,7 +118,7 @@ gc_os() {
   echo "Then garbage-collect all unreferenced Nix store paths."
   read -r -p "Type 'gc' to continue: " confirmation
   if [ "$confirmation" != gc ]; then
-    echo "Garbage collection cancelled."
+    echo "Generation cleanup cancelled."
     return 1
   fi
   sudo nix-env --profile "$SYSTEM_PROFILE" --delete-generations "${delete[@]}"
@@ -151,21 +128,20 @@ gc_os() {
 }
 
 case "${1:-}" in
-  list) list_generations ;;
-  pull) pull_os ;;
   rebuild) rebuild_os ;;
-  update) update_os ;;
-  rollback) rollback_os "${2:-}" ;;
-  gc) gc_os ;;
+  generation)
+    case "${2:-}" in
+      list) list_generations ;;
+      switch) rollback_os "${3:-}" ;;
+      clean) gc_os ;;
+      *) echo "Run 'pino os generation help' for usage." >&2; exit 1 ;;
+    esac
+    ;;
   "")
     echo "pino os — manage the NixOS system"
     echo
-    echo "  list             List system generations"
-    echo "  pull             Fast-forward the configuration checkout"
     echo "  rebuild          Confirm, rebuild, and switch the flake"
-    echo "  update           Confirm, update flake inputs, and rebuild"
-    echo "  rollback [N]     Interactively activate generation N"
-    echo "  gc               Keep current + previous generation"
+    echo "  generation       List, activate, and clean generations"
     ;;
   *) echo "pino os: unknown command '$1'" >&2; exit 1 ;;
 esac
