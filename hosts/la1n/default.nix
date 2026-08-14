@@ -22,10 +22,7 @@
 
   pino.portableVaults.trustedClient = true;
 
-  pino.data.datasets.music-lite = {
-    localPath = config.pino.profiles.musicLite.localDir;
-    scope = "shared";
-  };
+  pino.data.datasets.music-lite = config.pino.profiles.musicLite.localDir;
 
   pino.secrets.entries.ssh = {
     source = "ssh";

@@ -1,9 +1,7 @@
 DATA_LABEL_PREFIX=pino-data-
-HOST_NAME=@hostName@
 MERGE_TOOL=@mergeTool@
 DATASET_NAMES=(@datasetNames@)
 DATASET_PATHS=(@datasetPaths@)
-DATASET_SCOPES=(@datasetScopes@)
 
 dataset_index() {
   local requested="$1" index
@@ -19,28 +17,19 @@ dataset_index() {
 }
 
 dataset_medium_path() {
-  local mount_point="$1" index="$2" name scope
+  local mount_point="$1" index="$2" name
   name="${DATASET_NAMES[$index]}"
-  scope="${DATASET_SCOPES[$index]}"
-  if [ "$scope" = shared ]; then
-    printf '%s/pino/datasets/shared/%s\n' "$mount_point" "$name"
-  else
-    printf '%s/pino/datasets/hosts/%s/%s\n' "$mount_point" "$HOST_NAME" "$name"
-  fi
+  printf '%s/pino/datasets/%s\n' "$mount_point" "$name"
 }
 
 list_datasets() {
   local index state medium
-  printf '%-18s %-8s %-8s %-38s %s\n' NAME SCOPE STATE LOCAL MEDIUM
+  printf '%-18s %-8s %-38s %s\n' NAME STATE LOCAL MEDIUM
   for index in "${!DATASET_NAMES[@]}"; do
     if [ -d "${DATASET_PATHS[$index]}" ]; then state=present; else state=missing; fi
-    if [ "${DATASET_SCOPES[$index]}" = shared ]; then
-      medium="shared/${DATASET_NAMES[$index]}"
-    else
-      medium="hosts/$HOST_NAME/${DATASET_NAMES[$index]}"
-    fi
-    printf '%-18s %-8s %-8s %-38s %s\n' \
-      "${DATASET_NAMES[$index]}" "${DATASET_SCOPES[$index]}" "$state" \
+    medium="${DATASET_NAMES[$index]}"
+    printf '%-18s %-8s %-38s %s\n' \
+      "${DATASET_NAMES[$index]}" "$state" \
       "${DATASET_PATHS[$index]}" "$medium"
   done
 }

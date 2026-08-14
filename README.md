@@ -325,10 +325,11 @@ named `pino-data-1`. KeePass and Cryptomator already encrypt their contents, so
 the medium needs no second filesystem password. `pino vault backup create`
 retains only `current` and `previous` encrypted generations.
 
-> Hosts map logical datasets to local paths with `pino.data.datasets`. Shared
-> datasets live under `pino-data-*/pino/datasets/shared/`; host-specific datasets
-> live under `datasets/hosts/<hostname>/`, all as ordinary exFAT files accessible
-> from Windows. `backup` makes the medium exactly match local, `restore` makes
+> Hosts map logical datasets to local paths with `pino.data.datasets`. Datasets
+> live under `pino-data-*/pino/datasets/<name>/` as ordinary exFAT
+> files accessible from Windows. Use a host-specific dataset name when a dataset
+> should not be shared between machines. `backup` makes the medium exactly match
+> local, `restore` makes
 > local exactly match the medium, and `merge` interactively incorporates medium
 > changes locally without changing the medium. Installation can restore selected
 > datasets using `PINO_RESTORE_DATA=all` or a comma-separated list.

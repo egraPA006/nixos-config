@@ -27,20 +27,11 @@
     hotspot.wifiInterface = "wlp8s0";
   };
 
-  # Host paths for datasets that can be carried between machines on egrapa_hdd.
+  # Local paths for datasets carried on pino-data media.
   pino.data.datasets = {
-    music-full = {
-      localPath = config.pino.profiles.musicFull.localDir;
-      scope = "shared";
-    };
-    photos = {
-      localPath = "/data/fast/photos";
-      scope = "shared";
-    };
-    file_archive = {
-      localPath = "/data/fast/file_archive";
-      scope = "host";
-    };
+    music-full = config.pino.profiles.musicFull.localDir;
+    photos = "/data/fast/photos";
+    file_archive = "/data/fast/file_archive";
   };
 
   pino.secrets.entries.ssh = {

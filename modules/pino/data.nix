@@ -9,12 +9,10 @@ let
     ${builtins.readFile ./data-merge.py}
   '';
   script = builtins.replaceStrings
-    [ "@datasetNames@" "@datasetPaths@" "@datasetScopes@" "@hostName@" "@mergeTool@" ]
+    [ "@datasetNames@" "@datasetPaths@" "@mergeTool@" ]
     [
       (shellArray names)
-      (shellArray (map (name: datasets.${name}.localPath) names))
-      (shellArray (map (name: datasets.${name}.scope) names))
-      (lib.escapeShellArg config.networking.hostName)
+      (shellArray (map (name: datasets.${name}) names))
       (lib.escapeShellArg mergeTool)
     ]
     (builtins.readFile ./data.sh);
@@ -22,27 +20,15 @@ in
 {
   options.pino.data.datasets = lib.mkOption {
     default = { };
-    description = "Plain, portable datasets mapped to host-specific local paths";
-    type = lib.types.attrsOf (lib.types.submodule {
-      options = {
-        localPath = lib.mkOption {
-          type = lib.types.str;
-          description = "Absolute path of this dataset on the current host";
-        };
-        scope = lib.mkOption {
-          type = lib.types.enum [ "shared" "host" ];
-          default = "host";
-          description = "Whether the medium copy is shared or specific to this host";
-        };
-      };
-    });
+    description = "Plain, portable datasets mapped to local paths";
+    type = lib.types.attrsOf lib.types.str;
   };
 
   config = {
-    assertions = lib.mapAttrsToList (name: dataset: {
-      assertion = lib.hasPrefix "/" dataset.localPath
-        && !builtins.elem dataset.localPath [ "/" "/nix" ];
-      message = "pino.data.datasets.${name}.localPath must be a safe absolute data path";
+    assertions = lib.mapAttrsToList (name: localPath: {
+      assertion = lib.hasPrefix "/" localPath
+        && !builtins.elem localPath [ "/" "/nix" ];
+      message = "pino.data.datasets.${name} must be a safe absolute data path";
     }) datasets;
 
     pino.subcommands.storage.commands.dataset = {

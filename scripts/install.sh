@@ -63,25 +63,21 @@ mount_data_backup() {
 
 restore_data_backup() {
   local requested="${PINO_RESTORE_DATA:-}"
-  local datasets_json name local_path scope medium_path answer
+  local datasets_json name local_path medium_path answer
   local -a available=() selected=()
   declare -A local_paths=() medium_paths=()
 
   datasets_json="$(nix "${NIX_STORE_ARGS[@]}" --extra-experimental-features 'nix-command flakes' eval --json \
     "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.data.datasets")"
-  while IFS=$'\t' read -r name local_path scope; do
+  while IFS=$'\t' read -r name local_path; do
     [ -n "$name" ] || continue
-    if [ "$scope" = shared ]; then
-      medium_path="$DATA_MOUNT/pino/datasets/shared/$name"
-    else
-      medium_path="$DATA_MOUNT/pino/datasets/hosts/$HOST/$name"
-    fi
+    medium_path="$DATA_MOUNT/pino/datasets/$name"
     if [ -d "$medium_path" ]; then
       available+=("$name")
       local_paths["$name"]="$local_path"
       medium_paths["$name"]="$medium_path"
     fi
-  done < <(printf '%s\n' "$datasets_json" | jq -r 'to_entries[] | [.key, .value.localPath, .value.scope] | @tsv')
+  done < <(printf '%s\n' "$datasets_json" | jq -r 'to_entries[] | [.key, .value] | @tsv')
 
   if [ "${#available[@]}" -eq 0 ]; then
     echo "No configured datasets for $HOST exist on the selected data medium; continuing." >&2
