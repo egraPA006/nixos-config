@@ -25,9 +25,12 @@ in
 
   services.caddy = {
     enable = true;
+    # Declarative changes restart Caddy instead of requiring its admin API.
+    enableReload = false;
     globalConfig = ''
       email ${safeEmail}
       ${lib.optionalString behindProxy "https_port ${toString cfg.web.internalHttpsPort}"}
+      admin off
     '';
     virtualHosts.${safeDomain}.extraConfig = ''
       handle /.well-known/acme-challenge/* {
@@ -44,12 +47,6 @@ in
       }
     '';
   };
-
-  # The currently deployed configuration has Caddy's admin endpoint disabled,
-  # so the first switch cannot reload it through that endpoint. Restart for
-  # declarative configuration changes; subsequent starts expose the admin API
-  # only on Caddy's loopback default.
-  systemd.services.caddy.reloadIfChanged = false;
 
   networking.firewall.allowedTCPPorts = [ 80 ]
     ++ lib.optional (!behindProxy) 443;

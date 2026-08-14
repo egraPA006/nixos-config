@@ -141,7 +141,9 @@ in
   };
 
   pino.secrets.entries."server/awg0.conf" = {
-    target = cfg.configFile;
+    target = if cfg.configFile == "${config.pino.secrets.provisionedDir}/server/awg0.conf"
+      then null
+      else cfg.configFile;
     restartUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
   };
 
