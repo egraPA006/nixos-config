@@ -288,9 +288,9 @@ pino <command> <subcommand> help help for a leaf command
 | `pino storage snap ls/rb/rm` | List / roll back / delete system snapshots |
 | `pino storage snap data <label>` | Snapshot configured data volumes when present |
 | `pino storage snap data help` | Show host-specific data snapshot operations |
-| `pino network vpn list/on/off/status` | Select and operate named AmneziaWG connections |
+| `pino desktop services vpn list/on/off/status` | Select and operate named AmneziaWG connections |
 | `pino bootstrap host vpn help` | Generate server VPN state and manage/export peers |
-| `pino network hotspot start/stop` | WiFi access point (re-1) |
+| `pino desktop services hotspot start/stop` | WiFi access point (re-1) |
 | `pino storage data list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
 | `pino secrets status/open/populate/sync` | Operate declarative Cryptomator secret scopes |
 | `pino backup run/list/restore/resume` | Manage current/previous encrypted backups on pino-data media |
@@ -526,10 +526,10 @@ connection. More servers use the same model through
 replacing configurations:
 
 ```bash
-pino network vpn list
-pino network vpn on mosk
-pino network vpn off mosk
-pino network vpn status
+pino desktop services vpn list
+pino desktop services vpn on mosk
+pino desktop services vpn off mosk
+pino desktop services vpn status
 ```
 
 Pino intentionally stops another active named connection before starting a
@@ -672,10 +672,10 @@ This is the complete first-deployment order. Mosk currently enables only
    Then, back on re-1:
 
    ```bash
-   pino network vpn list
-   pino network vpn on mosk
+   pino desktop services vpn list
+   pino desktop services vpn on mosk
    ping -c 3 10.77.0.1
-   pino network vpn status mosk
+   pino desktop services vpn status mosk
    ```
 
 10. Export the Android peer, transfer it locally, import it into AmneziaWG, and

@@ -77,7 +77,7 @@ in
     };
   };
 
-  pino.subcommands.network.commands.vpn = {
+  pino.subcommands.desktop.commands.services.commands.vpn = {
     description = "AmneziaWG VPN";
     commands = {
       list.description = "List installed named VPN connections";
@@ -95,15 +95,15 @@ in
       };
     };
     helpText = ''
-      pino network vpn — AmneziaWG VPN
-        pino network vpn list          List saved connections
-        pino network vpn on [name]     Select one connection and enable autostart
-        pino network vpn off [name]    Stop one connection (all when omitted)
-        pino network vpn status [name] Show service and peer status
+      pino desktop services vpn — AmneziaWG VPN
+        pino desktop services vpn list          List saved connections
+        pino desktop services vpn on [name]     Select one connection and enable autostart
+        pino desktop services vpn off [name]    Stop one connection (all when omitted)
+        pino desktop services vpn status [name] Show service and peer status
 
         Configs are provisioned from this host's encrypted secret projection.
         Pino selects one full-route connection at a time to avoid route conflicts.
     '';
-    script = builtins.readFile ../../pino/vpn.sh;
+    script = builtins.readFile ../../../pino/vpn.sh;
   };
 }

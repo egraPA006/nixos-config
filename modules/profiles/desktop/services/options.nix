@@ -1,7 +1,7 @@
 { lib, ... }:
 {
   options.pino.profiles.vpn.connections = lib.mkOption {
-    description = "Named AmneziaWG client configurations available on this host";
+    description = "Named AmneziaWG desktop connections available on this host";
     default = {
       awg0.source = "awg0.conf";
     };

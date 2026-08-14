@@ -7,23 +7,23 @@ let
 in
 {
   config = {
-    pino.subcommands.network.commands.hotspot = {
+    pino.subcommands.desktop.commands.services.commands.hotspot = {
       description = "WiFi access point";
       commands = {
         start.description = "Bring up the access point";
         stop.description = "Tear down the access point";
       };
       helpText = ''
-        pino network hotspot — WiFi access point  (SSID: ${ssid})
-          pino network hotspot start   Bring up AP, traffic routed via VPN
-          pino network hotspot stop    Tear down AP
+        pino desktop services hotspot — WiFi access point  (SSID: ${ssid})
+          pino desktop services hotspot start   Bring up AP, traffic routed via VPN
+          pino desktop services hotspot stop    Tear down AP
 
           Connection: provisioned from this host's encrypted secret projection.
       '';
       script = ''
         case "''${1:-}" in
           start|stop) hotspot "''${1:-}" ;;
-          *) echo "Usage: pino network hotspot start|stop" >&2; exit 1 ;;
+          *) echo "Usage: pino desktop services hotspot start|stop" >&2; exit 1 ;;
         esac
       '';
     };

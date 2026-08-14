@@ -13,15 +13,13 @@ let
       "music-lite" = ./desktop/music-lite.nix;
       "music-full" = ./desktop/music-full.nix;
       torrent = ./desktop/torrent.nix;
+      vpn = ./desktop/services/vpn.nix;
+      hotspot = ./desktop/services/hotspot.nix;
     };
     development = {
       codex = ./development/codex.nix;
       git = ./development/git.nix;
       "dev-cpp" = ./development/dev-cpp.nix;
-    };
-    network = {
-      vpn = ./network/vpn.nix;
-      hotspot = ./network/hotspot.nix;
     };
     server = {
       "server-web" = ./server/web.nix;
@@ -38,7 +36,6 @@ let
   };
   profileModules = lib.mergeAttrsList (builtins.attrValues profileGroups);
   desktopProfiles = builtins.attrNames profileGroups.desktop;
-  networkProfiles = builtins.attrNames profileGroups.network;
   storageProfiles = builtins.attrNames profileGroups.storage;
   serverProfiles = builtins.attrNames profileGroups.server;
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
@@ -57,7 +54,7 @@ in
 {
   imports = [
     ./desktop/options.nix
-    ./network/options.nix
+    ./desktop/services/options.nix
     ./server/options.nix
   ] ++ map (name: profileModules.${name}) (lib.filter (name: builtins.hasAttr name profileModules) activeProfiles);
 
@@ -68,10 +65,7 @@ in
 
   pino.subcommands.desktop = lib.mkIf (hasActiveProfile desktopProfiles) {
     description = "Desktop applications and services";
-  };
-
-  pino.subcommands.network = lib.mkIf (hasActiveProfile networkProfiles) {
-    description = "Network services";
+    commands.services.description = "Desktop network and background services";
   };
 
   pino.subcommands.storage = lib.mkIf (hasActiveProfile storageProfiles) {

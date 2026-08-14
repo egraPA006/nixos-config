@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pino network vpn — named AmneziaWG connections
+# pino desktop services vpn — named AmneziaWG connections
 set -euo pipefail
 
 config_dir=/etc/amneziawg
@@ -84,5 +84,5 @@ case "${1:-}" in
       sudo awg show
     fi
     ;;
-  *) echo "Run 'pino network vpn help' for usage." >&2; exit 1 ;;
+  *) echo "Run 'pino desktop services vpn help' for usage." >&2; exit 1 ;;
 esac
