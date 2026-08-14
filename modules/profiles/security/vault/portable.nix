@@ -350,7 +350,7 @@ in
 
         mount_disk() {
           local mode="$1" existing uid gid options
-          existing="$(${pkgs.util-linux}/bin/findmnt -rn -S "$DATA_DEVICE" -o TARGET | ${pkgs.coreutils}/bin/head -n 1)"
+          existing="$(${pkgs.util-linux}/bin/findmnt -rn -S "$DATA_DEVICE" -o TARGET | ${pkgs.coreutils}/bin/head -n 1 || true)"
           if [ -n "$existing" ]; then
             MOUNT_POINT="$existing"
             if [ "$mode" = rw ] && ! ${pkgs.util-linux}/bin/findmnt -rn -S "$DATA_DEVICE" -o OPTIONS | ${pkgs.gnugrep}/bin/grep -qw rw; then
@@ -359,7 +359,7 @@ in
             fi
             return
           fi
-          MOUNT_POINT="$(${pkgs.coreutils}/bin/mktemp -d /run/pino-portable-backup.XXXXXX)"
+          MOUNT_POINT="$(sudo ${pkgs.coreutils}/bin/mktemp -d /run/pino-portable-backup.XXXXXX)"
           uid="$(${pkgs.coreutils}/bin/id -u)"
           gid="$(${pkgs.coreutils}/bin/id -g)"
           options="$mode,nodev,nosuid,noexec,uid=$uid,gid=$gid,umask=0077"
