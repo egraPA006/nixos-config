@@ -281,7 +281,7 @@ pino <command> <subcommand> help help for a leaf command
 | `pino os rebuild/update` | Interactively rebuild or update the flake |
 | `pino os rollback [N]` | Select and activate a system generation |
 | `pino os gc` | Keep current + previous generation and collect the rest |
-| `pino profile list/status/enable/disable` | Manage NixOS profiles |
+| `pino profile list/enable/disable` | Manage NixOS profiles; `list --enabled` prints enabled names only |
 | `pino os package search/locate/install/remove` | Search files/packages and manage temporary user packages |
 | `pino desktop monitor list/status/switch/save/rm` | Manage display profiles |
 | `pino storage snap <label>` | Snapshot this host's configured system volumes |
@@ -392,8 +392,8 @@ Profiles are optional modules (gaming, music, dev tools, etc.) toggled via a CLI
 Disabling removes their declarative packages and services while preserving user data.
 
 ```bash
-pino profile list                   # show available profiles
-pino profile status                 # show what's active on this machine
+pino profile list                   # show all profiles with enabled markers
+pino profile list --enabled         # enabled names only, one per line
 pino profile enable  gaming-full    # enable + rebuild
 pino profile disable gaming-full    # disable + rebuild
 ```

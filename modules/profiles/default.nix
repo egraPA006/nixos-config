@@ -79,15 +79,17 @@ in
   pino.subcommands.profile = {
     description = "Manage optional NixOS profiles";
     commands = {
-      list.description = "List available profiles";
-      status.description = "Show active profiles";
+      list = {
+        description = "List profiles, optionally only enabled names";
+        usage = "[--enabled]";
+      };
       enable = { description = "Enable a profile and rebuild"; usage = "<profile>"; };
       disable = { description = "Disable a profile and rebuild"; usage = "<profile>"; };
     };
     helpText = ''
       pino profile — manage optional profiles
         pino profile list
-        pino profile status
+        pino profile list --enabled
         pino profile enable  <name>
         pino profile disable <name>
 
@@ -98,6 +100,8 @@ in
     fishCompletions = ''
       complete -c pino -f -n '__fish_pino_at_path profile enable; or __fish_pino_at_path profile disable' \
         -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
+      complete -c pino -f -n '__fish_pino_at_path profile list' \
+        -l enabled -d 'Print enabled profile names only'
     '';
   };
 }

@@ -10,8 +10,8 @@ usage() {
   echo "Commands:"
   echo "  enable <profile>   Enable a profile and rebuild"
   echo "  disable <profile>  Disable a profile and rebuild"
-  echo "  list               List available profiles"
-  echo "  status             Show active profiles"
+  echo "  list               List profiles with enabled markers"
+  echo "  list --enabled     Print enabled profile names only"
 }
 
 is_valid() {
@@ -40,30 +40,6 @@ list_profiles() {
         fi
       done
       printf '  [%s] %s\n' "$marker" "$profile"
-    done
-  done
-}
-
-list_active_profiles() {
-  local entry group members profile active_profile heading_printed
-  local -a group_profiles active_profiles
-  active_profiles=("$@")
-  for entry in "${PROFILE_GROUPS[@]}"; do
-    group="${entry%%:*}"
-    members="${entry#*:}"
-    heading_printed=false
-    IFS=',' read -r -a group_profiles <<< "$members"
-    for profile in "${group_profiles[@]}"; do
-      for active_profile in "${active_profiles[@]}"; do
-        if [ "$profile" = "$active_profile" ]; then
-          if [ "$heading_printed" = false ]; then
-            printf '%s:\n' "$group"
-            heading_printed=true
-          fi
-          printf '  %s\n' "$profile"
-          break
-        fi
-      done
     done
   done
 }
@@ -134,15 +110,14 @@ case "$command" in
     ;;
   list)
     mapfile -t active < <(get_active)
-    list_profiles "${active[@]}"
-    ;;
-  status)
-    mapfile -t active < <(get_active)
-    if [ "${#active[@]}" -eq 0 ]; then
-      echo "No active profiles on $HOSTNAME_VAL"
-    else
-      list_active_profiles "${active[@]}"
-    fi
+    [ "$#" -le 2 ] || { echo "Usage: pino profile list [--enabled]" >&2; exit 1; }
+    case "${2:-}" in
+      "") list_profiles "${active[@]}" ;;
+      --enabled)
+        [ "${#active[@]}" -eq 0 ] || printf '%s\n' "${active[@]}"
+        ;;
+      *) echo "Usage: pino profile list [--enabled]" >&2; exit 1 ;;
+    esac
     ;;
   *)
     usage
