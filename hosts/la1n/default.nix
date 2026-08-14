@@ -41,22 +41,17 @@
   pino.vault.sync.serverId =
     "DSIVLOL-YANNKJ6-7PMBSYF-X4HHLDU-O4NEKQR-EWQ4KVE-JMSM4AI-X2D5LQ7";
 
-  home-manager.users.${config.pino.user.name}.programs.ssh = {
-    enable = true;
-    enableDefaultConfig = false;
-    settings = {
-      "github.com" = {
-        IdentityFile = "${config.pino.user.home}/.ssh/github_ed25519";
-        IdentitiesOnly = true;
-      };
-      mosk = {
-        HostName = "vpn.egrapa.com";
-        User = "vincent";
-        IdentityFile = "${config.pino.user.home}/.ssh/mosk_ed25519";
-        IdentitiesOnly = true;
-      };
-    };
-  };
+  programs.ssh.extraConfig = ''
+    Host github.com
+      IdentityFile ${config.pino.user.home}/.ssh/github_ed25519
+      IdentitiesOnly yes
+
+    Host mosk
+      HostName vpn.egrapa.com
+      User vincent
+      IdentityFile ${config.pino.user.home}/.ssh/mosk_ed25519
+      IdentitiesOnly yes
+  '';
 
   system.stateVersion = "25.05";
 }

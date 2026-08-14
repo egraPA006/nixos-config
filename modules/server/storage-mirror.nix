@@ -69,6 +69,10 @@ in
     pino.secrets.entries."server/storage-webdav.env" = {
       source = "server/storage-webdav.env";
       target = "/var/lib/pino/secrets/server/storage-webdav.env";
+      restartUnits = [
+        "pino-storage-webdav.service"
+        "pino-share-webdav.service"
+      ];
     };
 
     systemd.services.pino-storage-webdav = {

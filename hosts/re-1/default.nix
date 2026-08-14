@@ -76,16 +76,19 @@
     AllowHybridSleep=no
   '';
 
-  home-manager.users.${config.pino.user.name} = {
-    programs.ssh = {
-      enable = true;
-      enableDefaultConfig = false;
-      settings."github.com" = {
-        IdentityFile = "${config.pino.user.home}/.ssh/github_ed25519";
-        IdentitiesOnly = true;
-      };
-    };
+  programs.ssh.extraConfig = ''
+    Host github.com
+      IdentityFile ${config.pino.user.home}/.ssh/github_ed25519
+      IdentitiesOnly yes
 
+    Host mosk
+      HostName vpn.egrapa.com
+      User vincent
+      IdentityFile ${config.pino.user.home}/.ssh/mosk_ed25519
+      IdentitiesOnly yes
+  '';
+
+  home-manager.users.${config.pino.user.name} = {
     systemd.user.services.monitor-default = {
       Unit.Description = "Apply default single-monitor profile";
       Unit.After = [ "graphical-session.target" ];

@@ -6,6 +6,16 @@ let
   deviceNames = builtins.attrNames cfg.devices;
   syncthingDevices = lib.mapAttrs (_: device: removeAttrs device [ "secretScopes" ]) cfg.devices;
   folderId = scope: "pino-secret-${lib.replaceStrings [ "/" ] [ "-" ] scope}";
+  pathPrefixes = components:
+    if components == [ ] then [ ] else
+    let
+      first = builtins.head components;
+    in
+    [ first ] ++ map (suffix: "${first}/${suffix}")
+      (pathPrefixes (builtins.tail components));
+  secretDirectories = lib.unique (lib.concatMap
+    (scope: pathPrefixes (lib.splitString "/" scope))
+    cfg.secretScopes);
   scopeDevices = scope: builtins.attrNames (lib.filterAttrs
     (_: device: device.secretScopes == null || builtins.elem scope device.secretScopes)
     cfg.devices);
@@ -66,7 +76,9 @@ in
     "d ${cfg.folder} 0700 syncthing syncthing -"
     "d /var/lib/syncthing/share 0700 syncthing syncthing -"
     "d ${cfg.encryptedRoot} 0700 syncthing syncthing -"
-  ] ++ map (scope: "d ${cfg.encryptedRoot}/${scope} 0700 syncthing syncthing -") cfg.secretScopes;
+  ] ++ map (directory:
+    "d ${cfg.encryptedRoot}/${directory} 0700 syncthing syncthing -"
+  ) secretDirectories;
 
   assertions = [
     {
