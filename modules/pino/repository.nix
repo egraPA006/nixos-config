@@ -41,6 +41,23 @@ in
   config = {
     environment.systemPackages = [ pkgs.git ];
 
+    # Keep repository transport independent of mutable files below ~/.ssh.
+    # The systemd proxy include is unused and OpenSSH rejects its Nix-store
+    # ownership on this installation before processing normal host aliases.
+    programs.ssh = {
+      systemd-ssh-proxy.enable = false;
+      knownHosts = {
+        github = {
+          hostNames = [ "github.com" ];
+          publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
+        };
+        mosk = {
+          hostNames = [ "vpn.egrapa.com" ];
+          publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw0tfFljIj9B01V+DobuszzUVprcVT0SmUux5AwtKuY";
+        };
+      };
+    };
+
     pino.subcommands.repo = {
       description = "Maintain GitHub, server, and offline configuration copies";
       commands = {
