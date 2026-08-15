@@ -11,124 +11,30 @@ let
         then map (host: "hosts/${host}") config.pino.secrets.knownHosts
         else [ "hosts/${config.networking.hostName}" ])
   );
-  cryptomatorScopes = effectiveScopes;
-  scopeId = scope: "pino-${builtins.substring 0 12 (builtins.hashString "sha256" scope)}";
-  syncFolderId = scope: "pino-secret-${lib.replaceStrings [ "/" ] [ "-" ] scope}";
-  cryptomatorEntry = scope: {
-    id = scopeId scope;
-    path = "${cfg.cipherRoot}/${scope}";
-    displayName = lib.last (lib.splitString "/" scope);
-    unlockAfterStartup = false;
-    revealAfterMount = false;
-    usesReadOnlyMode = false;
-    mountFlags = "";
-    maxCleartextFilenameLength = -1;
-    actionAfterUnlock = "ASK";
-    autoLockWhenIdle = true;
-    autoLockIdleSeconds = 1800;
-    mountPoint = "${cfg.mountRoot}/${scope}";
-    port = 42427;
-  };
-  declaredCryptomatorEntries = map cryptomatorEntry cryptomatorScopes;
-  collectCryptomatorEntries = lib.concatMapStringsSep "\n" (entry: ''
-    if [ -f ${lib.escapeShellArg "${entry.path}/vault.cryptomator"} ]; then
-      declared="$(${pkgs.jq}/bin/jq -c \
-        --argjson entry ${lib.escapeShellArg (builtins.toJSON entry)} \
-        '. + [$entry]' <<< "$declared")"
-    fi
-  '') declaredCryptomatorEntries;
-  cryptomatorSettings = "${home}/.config/Cryptomator/settings.json";
-  reconcileCryptomator = pkgs.writeShellScript "pino-cryptomator-reconcile" ''
-    set -euo pipefail
-    settings=${lib.escapeShellArg cryptomatorSettings}
-    settings_dir="$(${pkgs.coreutils}/bin/dirname "$settings")"
-    ${pkgs.coreutils}/bin/mkdir -p "$settings_dir"
-    ${pkgs.coreutils}/bin/chmod 0700 "$settings_dir"
-
-    if [ -s "$settings" ]; then
-      ${pkgs.jq}/bin/jq empty "$settings" || {
-        echo "Refusing to replace invalid Cryptomator settings: $settings" >&2
-        exit 1
-      }
-      source="$settings"
-    else
-      source="$(${pkgs.coreutils}/bin/mktemp "$settings_dir/settings.empty.XXXXXX")"
-      printf '{}\n' > "$source"
-    fi
-
-    temporary="$(${pkgs.coreutils}/bin/mktemp "$settings_dir/settings.new.XXXXXX")"
-    cleanup_reconcile() {
-      [ "$source" = "$settings" ] || ${pkgs.coreutils}/bin/rm -f "$source"
-      ${pkgs.coreutils}/bin/rm -f "$temporary"
-    }
-    trap cleanup_reconcile EXIT INT TERM
-    declared='[]'
-    ${collectCryptomatorEntries}
-    ${pkgs.jq}/bin/jq \
-      --argjson declared "$declared" \
-      --arg keychainProvider org.cryptomator.linux.keychain.GnomeKeyringKeychainAccess \
-      '
-        .directories = (
-          ((.directories // [])
-            | map(. as $existing
-              | select($declared
-                | any(.id == $existing.id or .path == $existing.path)
-                | not)))
-          + $declared
-        )
-        | .startHidden = true
-        | .useKeychain = true
-        | .keychainProvider = $keychainProvider
-      ' "$source" > "$temporary"
-    ${pkgs.coreutils}/bin/chmod 0600 "$temporary"
-    ${pkgs.coreutils}/bin/mv -f "$temporary" "$settings"
-    trap - EXIT INT TERM
-    [ "$source" = "$settings" ] || ${pkgs.coreutils}/bin/rm -f "$source"
-  '';
-  clientSyncDevices =
-    lib.optional (config.pino.vault.sync.serverId != null) config.pino.vault.sync.serverName
-    ++ builtins.attrNames config.pino.vault.sync.mirrors;
-  encryptedShareDevices = map (name: {
-    inherit name;
-    encryptionPasswordFile = cfg.sharePasswordFile;
-  }) clientSyncDevices;
-  secretSyncFolders = lib.listToAttrs (map (scope: {
-    name = syncFolderId scope;
-    value = {
-      label = "Pino encrypted ${scope}";
-      path = "${cfg.cipherRoot}/${scope}";
-      devices = clientSyncDevices;
-      versioning = {
-        type = "simple";
-        params.keep = "2";
-      };
-    };
-  }) effectiveScopes);
   scopeWords = lib.concatStringsSep " " (map lib.escapeShellArg effectiveScopes);
-  cryptomatorScopeWords = lib.concatStringsSep " " (map lib.escapeShellArg cryptomatorScopes);
 in
 {
   options.pino.portableVaults = {
     enable = lib.mkEnableOption "portable client-encrypted Pino vaults" // { default = true; };
     cipherRoot = lib.mkOption {
       type = lib.types.str;
+      default = "${home}/.local/share/pino/vaults";
+      description = "Local gocryptfs ciphertext root";
+    };
+    legacyCipherRoot = lib.mkOption {
+      type = lib.types.str;
       default = "${home}/.local/share/pino/encrypted";
-      description = "Local Cryptomator ciphertext root";
+      description = "Temporary read-only source for Cryptomator-to-gocryptfs migration";
     };
     mountRoot = lib.mkOption {
       type = lib.types.str;
       default = "${home}/Secrets";
-      description = "Parent directory for unlocked Cryptomator vaults";
+      description = "Parent directory for unlocked gocryptfs vaults";
     };
     shareRoot = lib.mkOption {
       type = lib.types.str;
       default = "${home}/Shared";
       description = "Plaintext disposable share on this trusted client";
-    };
-    sharePasswordFile = lib.mkOption {
-      type = lib.types.str;
-      default = "${home}/.local/state/pino/shared-encryption-password";
-      description = "Provisioned Syncthing password used to encrypt the share for untrusted mirrors";
     };
     scopes = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -181,22 +87,24 @@ in
         message = "pino.portableVaults.shareRoot must be inside the Pino user's home";
       }
       {
-        assertion = lib.hasPrefix "${home}/" cfg.sharePasswordFile;
-        message = "pino.portableVaults.sharePasswordFile must be inside the Pino user's home";
+        assertion = lib.hasPrefix "${home}/" cfg.cipherRoot
+          && lib.hasPrefix "${home}/" cfg.legacyCipherRoot
+          && lib.hasPrefix "${home}/" cfg.mountRoot;
+        message = "Pino vault roots must be inside the Pino user's home";
+      }
+      {
+        assertion = cfg.cipherRoot != cfg.legacyCipherRoot;
+        message = "The gocryptfs and legacy Cryptomator roots must differ during migration";
       }
     ];
 
     environment.systemPackages = [
+      pkgs.gocryptfs
       pkgs.cryptomator
       pkgs.fuse3
-      pkgs.jq
       pkgs.openssh
       pkgs.rsync
     ];
-
-    environment.etc."cryptomator/config.properties".text = ''
-      cryptomator.mountPointsDir=${cfg.mountRoot}
-    '';
 
     systemd.tmpfiles.rules = [
       "d ${home}/.local/share/pino 0700 ${user} users -"
@@ -209,102 +117,17 @@ in
     ] ++ lib.concatMap (scope: [
       "d ${cfg.cipherRoot}/${scope} 0700 ${user} users -"
       "d ${cfg.mountRoot}/${scope} 0700 ${user} users -"
-    ]) cryptomatorScopes;
+    ]) effectiveScopes;
 
-    services.syncthing.settings.folders = lib.mkIf
-      ((config.pino.vault.sync.serverId != null) || (config.pino.vault.sync.mirrors != { })) ({
-        share = {
-          label = "Pino disposable share";
-          path = cfg.shareRoot;
-          devices = encryptedShareDevices;
-        };
-      } // secretSyncFolders);
-
-    systemd.services.syncthing.unitConfig.ConditionPathExists = cfg.sharePasswordFile;
-    systemd.services.syncthing-init.unitConfig.ConditionPathExists = cfg.sharePasswordFile;
-
-    pino.secrets.entries."sync/shared-password" = {
-      target = cfg.sharePasswordFile;
-      owner = user;
-      group = "users";
-      mode = "0600";
-      directoryMode = "0700";
-      restartUnits = [ "syncthing.service" "syncthing-init.service" ];
-      startUnits = [ "syncthing.service" "syncthing-init.service" ];
-    };
-
-    home-manager.users.${user}.systemd.user.services.cryptomator = {
-      Unit = {
-        Description = "Cryptomator declarative vaults";
-        After = [ "keepassxc-identity.service" ];
-        Wants = [ "keepassxc-identity.service" ];
-        PartOf = [ "graphical-session.target" ];
-      };
+    # Temporary one-shot access to existing Cryptomator vaults during migration.
+    # It is deliberately not started with the graphical session.
+    home-manager.users.${user}.systemd.user.services.cryptomator-legacy = {
+      Unit.Description = "Legacy Cryptomator vault migration";
       Service = {
         Type = "simple";
-        ExecStartPre = reconcileCryptomator;
         ExecStart = "${pkgs.cryptomator}/bin/cryptomator";
         Restart = "no";
       };
-      Install.WantedBy = [ "graphical-session.target" ];
-    };
-
-    pino.subcommands.vault.commands.share = {
-      description = "Manage the disposable Syncthing file exchange";
-      commands = {
-        configure.description = "Store the untrusted-mirror password in this host vault";
-        status.description = "Show the local share and synchronization state";
-      };
-      helpText = ''
-        Share is plaintext on trusted clients and encrypted by Syncthing before
-        reaching an untrusted mirror. It has no versioned or external backup
-        policy. Generate one strong password in identity.kdbx, configure that same
-        password on every trusted client and in the phone's Syncthing folder,
-        and never give it to the mirror.
-      '';
-      script = ''
-        MOUNT_ROOT=${lib.escapeShellArg cfg.mountRoot}
-        SHARE_ROOT=${lib.escapeShellArg cfg.shareRoot}
-        PASSWORD_FILE=${lib.escapeShellArg cfg.sharePasswordFile}
-        HOST_SCOPE=${lib.escapeShellArg "hosts/${config.networking.hostName}"}
-        case "''${1:-}" in
-          configure)
-            source="$MOUNT_ROOT/$HOST_SCOPE/sync/shared-password"
-            ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$HOST_SCOPE" >/dev/null 2>&1 || {
-              echo "Unlock $HOST_SCOPE in Cryptomator first." >&2
-              exit 1
-            }
-            [ ! -e "$source" ] || {
-              echo "The shared-folder password is already configured for this host." >&2
-              echo "Coordinated password rotation is intentionally not automatic." >&2
-              exit 1
-            }
-            IFS= read -r -s -p "Shared-folder password from identity.kdbx: " password
-            echo
-            IFS= read -r -s -p "Repeat password: " confirmation
-            echo
-            [ -n "$password" ] || { echo "Password must not be empty." >&2; exit 1; }
-            [ "$password" = "$confirmation" ] || { echo "Passwords do not match." >&2; exit 1; }
-            [ "''${#password}" -ge 20 ] || { echo "Use at least 20 characters." >&2; exit 1; }
-            ${pkgs.coreutils}/bin/install -d -m 0700 "$(${pkgs.coreutils}/bin/dirname "$source")"
-            umask 077
-            ${pkgs.coreutils}/bin/printf '%s' "$password" > "$source"
-            unset password confirmation
-            /run/current-system/sw/bin/pino vault secrets populate
-            echo "Shared-folder encryption configured. Use the same password on every trusted peer."
-            ;;
-          status)
-            echo "Share: $SHARE_ROOT"
-            if [ -f "$PASSWORD_FILE" ]; then echo "Encryption password: provisioned"; else echo "Encryption password: missing"; fi
-            if ${pkgs.systemd}/bin/systemctl is-active --quiet syncthing.service; then
-              echo "Syncthing: active"
-            else
-              echo "Syncthing: inactive"
-            fi
-            ;;
-          *) echo "Run 'pino vault share help' for usage." >&2; exit 1 ;;
-        esac
-      '';
     };
 
     pino.subcommands.vault.commands.backup = {
@@ -313,15 +136,13 @@ in
         create = { description = "Write current and previous portable copies to a pino-data disk"; usage = "[disk-id]"; };
         list = { description = "List portable generations on a pino-data disk"; usage = "[disk-id]"; };
         restore = { description = "Replace local encrypted state from an offline generation"; usage = "[disk-id] <current|previous>"; };
-        resume.description = "Resume Syncthing after inspecting a restored generation";
       };
       helpText = ''
         The backup contains only ciphertext, the encrypted KeePass database,
         and a public Git bundle. The disposable plaintext share is excluded.
         The target keeps exactly current and previous generations.
 
-        Restore deliberately leaves Syncthing stopped. Inspect the restored
-        databases and vaults, then run `pino vault backup resume` to synchronize.
+        Restored data remains local until an explicit `pino vault push`.
       '';
       script = ''
         CIPHER_ROOT=${lib.escapeShellArg cfg.cipherRoot}
@@ -331,7 +152,6 @@ in
         MOUNTED=false
         MOUNT_POINT=
         DATA_DEVICE=
-        RESTART_SYNC=false
         BACKUP_SCOPES=( ${scopeWords} )
 
         cleanup_backup() {
@@ -339,10 +159,6 @@ in
             sudo ${pkgs.util-linux}/bin/umount "$MOUNT_POINT" || true
             sudo ${pkgs.coreutils}/bin/rmdir "$MOUNT_POINT" || true
             MOUNTED=false
-          fi
-          if [ "$RESTART_SYNC" = true ]; then
-            sudo ${pkgs.systemd}/bin/systemctl start syncthing.service || true
-            RESTART_SYNC=false
           fi
         }
         trap cleanup_backup EXIT INT TERM
@@ -355,7 +171,7 @@ in
           fi
           for scope in ${scopeWords}; do
             if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$scope" >/dev/null 2>&1; then
-              echo "$scope is unlocked; lock it in Cryptomator first." >&2
+              echo "$scope is unlocked; close it before copying ciphertext." >&2
               return 1
             fi
           done
@@ -411,19 +227,11 @@ in
           MOUNTED=true
         }
 
-        stop_sync() {
-          if ${pkgs.systemd}/bin/systemctl is-active --quiet syncthing.service; then
-            sudo ${pkgs.systemd}/bin/systemctl stop syncthing.service
-            RESTART_SYNC=true
-          fi
-        }
-
         backup_run() {
           local root incoming bundle_tmp scope
           require_closed
           select_disk "''${1:-}"
           mount_disk rw
-          stop_sync
           root="$MOUNT_POINT/pino/portable-backup"
           incoming="$root/incoming"
           sudo ${pkgs.coreutils}/bin/rm -rf "$incoming"
@@ -465,7 +273,7 @@ in
             [ -d "$root/$generation" ] || continue
             printf '%-10s %-20s %s\n' "$generation" \
               "$(${pkgs.findutils}/bin/find "$root/$generation/identity" -maxdepth 1 -type f -name '*.kdbx' 2>/dev/null | ${pkgs.coreutils}/bin/wc -l) KDBX" \
-              "$(${pkgs.findutils}/bin/find "$root/$generation/encrypted" -mindepth 1 -maxdepth 2 -name vault.cryptomator 2>/dev/null | ${pkgs.coreutils}/bin/wc -l) vaults"
+              "$(${pkgs.findutils}/bin/find "$root/$generation/encrypted" -mindepth 1 -name gocryptfs.conf 2>/dev/null | ${pkgs.coreutils}/bin/wc -l) vaults"
           done
         }
 
@@ -488,13 +296,12 @@ in
             return 1
           }
           echo "This replaces local encrypted identity and secret-vault ciphertext."
-          echo "Syncthing will remain stopped until 'pino vault backup resume'."
+          echo "A later push is required before this restored state reaches Mosk."
           read -r -p "Type 'restore $generation' to continue: " confirmation
           [ "$confirmation" = "restore $generation" ] || {
             echo "Restore cancelled."
             return 1
           }
-          stop_sync
           sudo ${pkgs.coreutils}/bin/install -d -m 0700 -o "$PINO_USER" -g users \
             "$IDENTITY_ROOT" "$CIPHER_ROOT"
           sudo ${pkgs.rsync}/bin/rsync -rt --delete --chown="$PINO_USER:users" \
@@ -503,8 +310,7 @@ in
           sudo ${pkgs.rsync}/bin/rsync -rt --delete --chown="$PINO_USER:users" \
             --chmod=D0700,F0600 \
             "$source/encrypted/" "$CIPHER_ROOT/"
-          RESTART_SYNC=false
-          echo "Restored $generation. Inspect locally before running: pino vault backup resume"
+          echo "Restored $generation. Inspect locally, then pull before any later push."
           if [ -f "$source/nixos-config.bundle" ]; then
             echo "Configuration bundle retained on the disk; the working checkout was not overwritten."
           fi
@@ -514,7 +320,6 @@ in
           create) backup_run "''${2:-}" ;;
           list) backup_list "''${2:-}" ;;
           restore) backup_restore "$@" ;;
-          resume) sudo ${pkgs.systemd}/bin/systemctl start syncthing.service ;;
           *) echo "Run 'pino vault backup help' for usage." >&2; exit 1 ;;
         esac
       '';
@@ -523,23 +328,28 @@ in
     pino.subcommands.vault.commands.secrets = {
       description = "Open and stage client-encrypted secret vaults";
       commands = {
-        status.description = "Show declared vault and Syncthing state";
-        init = { description = "Prepare a scope and open Cryptomator to create it"; usage = "<scope>"; };
-        open = { description = "Open Cryptomator for the configured secret vaults"; usage = "[scope]"; };
-        reconcile.description = "Reconcile existing vaults into Cryptomator settings";
+        status.description = "Show gocryptfs, legacy, and mount state";
+        init = { description = "Initialize a new gocryptfs scope"; usage = "<scope>"; };
+        open = { description = "Unlock and mount one gocryptfs scope"; usage = "<scope>"; };
+        close = { description = "Unmount one or every gocryptfs scope"; usage = "<scope|all>"; };
+        legacy-open = { description = "Temporarily open Cryptomator for migration"; usage = "[scope]"; };
+        migrate = { description = "Verified copy from an unlocked legacy vault"; usage = "<scope>"; };
         populate.description = "Stage only this host's unlocked runtime secrets";
         storage-init = { description = "Generate WebDAV credentials inside a host vault"; usage = "<server-host>"; };
       };
       helpText = ''
-        Secret scopes are Cryptomator vaults. Syncthing transports ciphertext
-        only; the server never receives a vault password. Do not edit the same
-        secret scope concurrently on two clients.
+        Secret scopes are gocryptfs vaults mounted by Pino without a GUI. Keep a
+        separate password per scope in infra.kdbx. DroidFS opens the same format
+        on Android. `migrate` copies and verifies plaintext from an unlocked
+        Cryptomator vault but never removes its legacy ciphertext.
 
         `shared_sec` is for documents and recovery material. Runtime system
         configuration is accepted only from `hosts/<hostname>`.
       '';
       script = ''
+        set -euo pipefail
         CIPHER_ROOT=${lib.escapeShellArg cfg.cipherRoot}
+        LEGACY_ROOT=${lib.escapeShellArg cfg.legacyCipherRoot}
         MOUNT_ROOT=${lib.escapeShellArg cfg.mountRoot}
         CONFIGURED_SCOPES=( ${scopeWords} )
 
@@ -554,7 +364,7 @@ in
           local requested="''${1:-all}"
           local configured
           if [ "$requested" = shared ]; then
-            echo "shared is a plaintext Syncthing folder, not a Cryptomator secret scope." >&2
+            echo "shared is a plaintext transport folder, not a protected secret scope." >&2
             return 1
           fi
           if [ "$requested" = all ]; then
@@ -575,55 +385,156 @@ in
           return 1
         }
 
+        is_mounted() {
+          ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$1" >/dev/null 2>&1
+        }
+
+        close_scope() {
+          local scope="$1"
+          if ! is_mounted "$scope"; then
+            echo "$scope is already closed."
+            return
+          fi
+          ${pkgs.fuse3}/bin/fusermount3 -u "$MOUNT_ROOT/$scope"
+          echo "Closed $scope."
+        }
+
         case "''${1:-}" in
           status)
-            printf '%-24s %-12s %-12s\n' SCOPE CIPHERTEXT MOUNT
+            printf '%-24s %-12s %-12s %-12s\n' SCOPE FORMAT LEGACY MOUNT
             for scope in "''${CONFIGURED_SCOPES[@]}"; do
-              if [ -f "$CIPHER_ROOT/$scope/vault.cryptomator" ]; then cipher=ready; else cipher=missing; fi
-              if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$scope" >/dev/null 2>&1; then mount=unlocked; else mount=locked; fi
-              printf '%-24s %-12s %-12s\n' "$scope" "$cipher" "$mount"
+              if [ -f "$CIPHER_ROOT/$scope/gocryptfs.conf" ]; then format=gocryptfs; else format=missing; fi
+              if [ -f "$LEGACY_ROOT/$scope/vault.cryptomator" ]; then legacy=cryptomator; else legacy=none; fi
+              if is_mounted "$scope"; then mount=unlocked; else mount=locked; fi
+              printf '%-24s %-12s %-12s %-12s\n' "$scope" "$format" "$legacy" "$mount"
             done
             ;;
           init)
             scope="''${2:-}"
             selected_scopes "$scope" >/dev/null
-            ${pkgs.coreutils}/bin/mkdir -p "$CIPHER_ROOT/$scope" "$MOUNT_ROOT/$scope"
-            echo "Create the Cryptomator vault at: $CIPHER_ROOT/$scope"
-            echo "Its declared mount point is: $MOUNT_ROOT/$scope"
-            ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
+            cipher="$CIPHER_ROOT/$scope"
+            [ ! -f "$cipher/gocryptfs.conf" ] || {
+              echo "$scope is already initialized." >&2
+              exit 1
+            }
+            if ${pkgs.findutils}/bin/find "$cipher" -mindepth 1 -print -quit | ${pkgs.gnugrep}/bin/grep -q .; then
+              echo "Refusing to initialize non-empty ciphertext directory: $cipher" >&2
+              exit 1
+            fi
+            echo "Create the gocryptfs password for $scope. Keep it in infra.kdbx."
+            ${pkgs.gocryptfs}/bin/gocryptfs -init -- "$cipher"
+            echo "Initialized $scope. Open it with: pino vault secrets open $scope"
             ;;
           open)
-            if [ -n "''${2:-}" ]; then
-              selected_scopes "$2" >/dev/null
-              [ -f "$CIPHER_ROOT/$2/vault.cryptomator" ] || {
-                echo "The $2 vault has not been created yet." >&2
-                echo "Run: pino vault secrets init $2" >&2
+            scope="''${2:-}"
+            selected_scopes "$scope" >/dev/null
+            [ -f "$CIPHER_ROOT/$scope/gocryptfs.conf" ] || {
+              echo "$scope is not a gocryptfs vault yet." >&2
+              if [ -f "$LEGACY_ROOT/$scope/vault.cryptomator" ]; then
+                echo "Migrate it first; run 'pino vault secrets help' for the sequence." >&2
+              else
+                echo "Run: pino vault secrets init $scope" >&2
+              fi
+              exit 1
+            }
+            if is_mounted "$scope"; then
+              echo "$scope is already open at $MOUNT_ROOT/$scope"
+              exit 0
+            fi
+            if ${pkgs.findutils}/bin/find "$MOUNT_ROOT/$scope" -mindepth 1 -print -quit | ${pkgs.gnugrep}/bin/grep -q .; then
+              echo "Refusing to mount over non-empty directory: $MOUNT_ROOT/$scope" >&2
+              exit 1
+            fi
+            ${pkgs.gocryptfs}/bin/gocryptfs -q -idle 30m -- \
+              "$CIPHER_ROOT/$scope" "$MOUNT_ROOT/$scope"
+            is_mounted "$scope" || { echo "gocryptfs did not mount $scope." >&2; exit 1; }
+            echo "Opened $scope at $MOUNT_ROOT/$scope; idle timeout is 30 minutes."
+            ;;
+          close)
+            mapfile -t scopes < <(selected_scopes "''${2:-}")
+            for scope in "''${scopes[@]}"; do close_scope "$scope"; done
+            ;;
+          legacy-open)
+            scope="''${2:-}"
+            if [ -n "$scope" ]; then
+              selected_scopes "$scope" >/dev/null
+              [ -f "$LEGACY_ROOT/$scope/vault.cryptomator" ] || {
+                echo "No legacy Cryptomator vault exists for $scope." >&2
                 exit 1
               }
-              echo "Unlock $2 in Cryptomator; it mounts at $MOUNT_ROOT/$2"
+              echo "Unlock $scope in Cryptomator at $MOUNT_ROOT/$scope."
             fi
-            ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
+            if ${pkgs.systemd}/bin/systemctl --user is-active --quiet cryptomator-legacy.service \
+              || ${pkgs.systemd}/bin/systemctl --user is-active --quiet cryptomator.service; then
+              echo "Cryptomator is already running."
+            else
+              ${pkgs.systemd}/bin/systemctl --user start cryptomator-legacy.service
+            fi
             ;;
-          reconcile)
-            if ${pkgs.systemd}/bin/systemctl --user is-active --quiet cryptomator.service; then
-              for scope in ${cryptomatorScopeWords}; do
-                if ${pkgs.util-linux}/bin/findmnt --mountpoint "$MOUNT_ROOT/$scope" >/dev/null 2>&1; then
-                  echo "$scope is unlocked; lock it before reconciling settings." >&2
-                  exit 1
-                fi
-              done
-              ${pkgs.systemd}/bin/systemctl --user stop cryptomator.service
+          migrate)
+            scope="''${2:-}"
+            selected_scopes "$scope" >/dev/null
+            legacy="$LEGACY_ROOT/$scope"
+            source="$MOUNT_ROOT/$scope"
+            cipher="$CIPHER_ROOT/$scope"
+            [ -f "$legacy/vault.cryptomator" ] || {
+              echo "No legacy Cryptomator ciphertext exists for $scope." >&2
+              exit 1
+            }
+            is_mounted "$scope" || {
+              echo "Unlock the legacy $scope vault at $source first." >&2
+              echo "Run: pino vault secrets legacy-open $scope" >&2
+              exit 1
+            }
+            mount_type="$(${pkgs.util-linux}/bin/findmnt -rn -T "$source" -o FSTYPE)"
+            case "$mount_type" in
+              *gocryptfs*) echo "$scope is already mounted as gocryptfs, not legacy Cryptomator." >&2; exit 1 ;;
+            esac
+            echo "This copies the unlocked legacy $scope contents into gocryptfs."
+            echo "The old Cryptomator ciphertext remains untouched at $legacy."
+            read -r -p "Type 'migrate $scope' to continue: " confirmation
+            [ "$confirmation" = "migrate $scope" ] || { echo "Migration cancelled."; exit 0; }
+            if [ ! -f "$cipher/gocryptfs.conf" ]; then
+              if ${pkgs.findutils}/bin/find "$cipher" -mindepth 1 -print -quit | ${pkgs.gnugrep}/bin/grep -q .; then
+                echo "New ciphertext directory is non-empty but uninitialized: $cipher" >&2
+                exit 1
+              fi
+              echo "Create the replacement gocryptfs password for $scope."
+              ${pkgs.gocryptfs}/bin/gocryptfs -init -- "$cipher"
             fi
-            ${reconcileCryptomator}
-            ${pkgs.systemd}/bin/systemctl --user start cryptomator.service
-            echo "Cryptomator settings reconciled and reloaded."
+            migration_mount="$(${pkgs.coreutils}/bin/mktemp -d \
+              "''${XDG_RUNTIME_DIR:-/run/user/$UID}/pino-gocryptfs-migrate.XXXXXX")"
+            verification="$(${pkgs.coreutils}/bin/mktemp \
+              "''${XDG_RUNTIME_DIR:-/run/user/$UID}/pino-gocryptfs-verify.XXXXXX")"
+            cleanup_migration() {
+              if ${pkgs.util-linux}/bin/findmnt --mountpoint "$migration_mount" >/dev/null 2>&1; then
+                ${pkgs.fuse3}/bin/fusermount3 -u "$migration_mount" || true
+              fi
+              ${pkgs.coreutils}/bin/rm -rf "$migration_mount"
+              ${pkgs.coreutils}/bin/rm -f "$verification"
+            }
+            trap cleanup_migration EXIT INT TERM
+            echo "Unlock the replacement gocryptfs vault."
+            ${pkgs.gocryptfs}/bin/gocryptfs -q -- "$cipher" "$migration_mount"
+            ${pkgs.rsync}/bin/rsync -a --delete "$source/" "$migration_mount/"
+            ${pkgs.rsync}/bin/rsync -rcl --delete --dry-run --itemize-changes \
+              "$source/" "$migration_mount/" > "$verification"
+            [ ! -s "$verification" ] || {
+              echo "Migration verification failed; legacy ciphertext was not modified." >&2
+              exit 1
+            }
+            file_count="$(${pkgs.findutils}/bin/find "$source" -type f | ${pkgs.coreutils}/bin/wc -l)"
+            cleanup_migration
+            trap - EXIT INT TERM
+            echo "Migrated and verified $file_count files for $scope."
+            echo "Lock the legacy vault, then run: pino vault push $scope"
             ;;
           populate)
             host_scope="hosts/${config.networking.hostName}"
             source="$MOUNT_ROOT/$host_scope"
             target=${lib.escapeShellArg config.pino.secrets.provisionedDir}
             ${pkgs.util-linux}/bin/findmnt --mountpoint "$source" >/dev/null 2>&1 || {
-              echo "Unlock $host_scope in Cryptomator at $source first." >&2
+              echo "Open $host_scope at $source first." >&2
               exit 1
             }
             staging="$(${pkgs.coreutils}/bin/mktemp -d "''${XDG_RUNTIME_DIR:-/run/user/$UID}/pino-populate.XXXXXX")"
@@ -649,7 +560,7 @@ in
             }
             host_root="$MOUNT_ROOT/hosts/$server_host"
             ${pkgs.util-linux}/bin/findmnt --mountpoint "$host_root" >/dev/null 2>&1 || {
-              echo "Unlock hosts/$server_host in Cryptomator at $host_root first." >&2
+              echo "Open hosts/$server_host at $host_root first." >&2
               exit 1
             }
             credential="$host_root/server/storage-webdav.env"

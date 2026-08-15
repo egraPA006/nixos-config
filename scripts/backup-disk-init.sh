@@ -39,7 +39,7 @@ ROOT_DISK="$(lsblk -nrpo NAME,PKNAME | awk -v root="$ROOT_SOURCE" '$1 == root { 
 [ "$DEVICE" != "$ROOT_DISK" ] || { echo "Refusing to erase the disk containing /." >&2; exit 1; }
 
 echo "This permanently erases $DEVICE and creates one full-size exFAT partition labelled $DATA_LABEL."
-echo "Passwords and host vaults remain encrypted inside KeePass/Cryptomator; the disk adds no second password."
+echo "Passwords and host vaults remain encrypted inside KeePass/gocryptfs; the disk adds no second password."
 lsblk -d -o NAME,PATH,VENDOR,MODEL,SERIAL,SIZE,TRAN "$DEVICE"
 read -r -p "Type the full device path ($DEVICE) to continue: " confirmation
 [ "$confirmation" = "$DEVICE" ] || { echo "Cancelled."; exit 1; }

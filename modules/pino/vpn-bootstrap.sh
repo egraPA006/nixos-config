@@ -41,7 +41,7 @@ is_nixos_host() {
 target_config_path() {
   local name="$1"
   "$FINDMNT" --mountpoint "$PINO_SECRET_ROOT/$name" >/dev/null 2>&1 || {
-    echo "Unlock hosts/$name in Cryptomator before changing its VPN configuration." >&2
+    echo "Open hosts/$name before changing its VPN configuration." >&2
     return 1
   }
   printf '%s/%s/vpn/%s.conf\n' "$PINO_SECRET_ROOT" "$name" "$host"

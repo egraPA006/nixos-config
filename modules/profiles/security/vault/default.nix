@@ -6,17 +6,6 @@ let
   databaseDir = "${home}/.local/share/pino/identity";
   databaseFile = "${databaseDir}/identity.kdbx";
   infrastructureDatabaseFile = "${databaseDir}/infra.kdbx";
-  sync = config.pino.vault.sync;
-  syncDevices = lib.optionalAttrs (sync.serverId != null) {
-    ${sync.serverName} = {
-      id = sync.serverId;
-      addresses = [ sync.serverAddress ];
-    };
-  } // lib.mapAttrs (_: mirror: {
-    id = mirror.id;
-    addresses = [ mirror.address ];
-  }) sync.mirrors;
-  syncDeviceNames = builtins.attrNames syncDevices;
   keepassxcIdentity = pkgs.writeShellScript "keepassxc-identity" ''
     if [ -f ${lib.escapeShellArg databaseFile} ]; then
       exec ${pkgs.keepassxc}/bin/keepassxc ${lib.escapeShellArg databaseFile}
@@ -32,44 +21,10 @@ let
   '';
 in
 {
-  imports = [ ./options.nix ./portable.nix ];
+  imports = [ ./portable.nix ./manual.nix ];
 
-  # KeePassXC is the single Secret Service provider used by Cryptomator.
+  # KeePassXC is the single Secret Service provider for desktop applications.
   services.gnome.gnome-keyring.enable = lib.mkForce false;
-
-  services.syncthing = {
-    enable = true;
-    inherit user;
-    group = "users";
-    dataDir = "${home}/.local/share/syncthing";
-    configDir = "${home}/.config/syncthing";
-    guiAddress = "127.0.0.1:8384";
-    openDefaultPorts = false;
-    overrideDevices = true;
-    overrideFolders = true;
-    settings = {
-      devices = syncDevices;
-      folders = lib.optionalAttrs (syncDeviceNames != [ ]) {
-        keepass = {
-          label = "KeePass identity databases";
-          path = databaseDir;
-          devices = syncDeviceNames;
-          versioning = {
-            type = "simple";
-            params.keep = "2";
-          };
-        };
-      };
-      options = {
-        listenAddresses = [ ];
-        localAnnounceEnabled = false;
-        globalAnnounceEnabled = false;
-        relaysEnabled = false;
-        natEnabled = false;
-        urAccepted = -1;
-      };
-    };
-  };
 
   systemd.tmpfiles.rules = [
     "d ${home}/.local/share/pino 0700 ${user} users -"
@@ -131,7 +86,7 @@ in
   };
 
   pino.subcommands.vault = {
-    description = "Manage synchronized encrypted identity and secret data";
+    description = "Manage portable encrypted identity and secret data";
     commands = {
       identity = {
         description = "Open and inspect synchronized KeePass databases";
@@ -154,26 +109,6 @@ in
                 -maxdepth 1 -type f -name '*.kdbx' -printf '%f\n' | ${pkgs.coreutils}/bin/sort
               ;;
             *) echo "Run 'pino vault identity help' for usage." >&2; exit 1 ;;
-          esac
-        '';
-      };
-      sync = {
-        description = "Inspect or restart encrypted-data synchronization";
-        commands = {
-          status.description = "Show Syncthing service status";
-          restart.description = "Restart synchronization after local inspection";
-          id.description = "Print this client's public Syncthing device ID";
-        };
-        script = ''
-          case "''${1:-}" in
-            status) ${pkgs.systemd}/bin/systemctl status syncthing.service --no-pager ;;
-            restart) sudo ${pkgs.systemd}/bin/systemctl restart syncthing.service ;;
-            id)
-              sudo -u ${lib.escapeShellArg user} ${pkgs.syncthing}/bin/syncthing cli \
-                --home=${lib.escapeShellArg "${home}/.config/syncthing"} \
-                show system | ${pkgs.jq}/bin/jq -r .myID
-              ;;
-            *) echo "Run 'pino vault sync help' for usage." >&2; exit 1 ;;
           esac
         '';
       };

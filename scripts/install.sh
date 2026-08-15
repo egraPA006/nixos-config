@@ -112,27 +112,33 @@ restore_data_backup() {
 }
 
 restore_portable_backup() {
-  local portable="$DATA_MOUNT/pino/portable-backup/current"
+  local portable="$DATA_MOUNT/pino/portable-backup/current" ciphertext_target
   if [ ! -d "$portable" ]; then
     echo "No portable Pino backup exists on the selected data medium; continuing." >&2
     return
   fi
   echo "Restoring encrypted identity and portable vault backing data..."
+  ciphertext_target="$PINO_CIPHER_ROOT"
+  if [ -d "$portable/encrypted" ] \
+    && find "$portable/encrypted" -name vault.cryptomator -print -quit | grep -q .; then
+    ciphertext_target="$PINO_LEGACY_CIPHER_ROOT"
+    echo "Legacy Cryptomator backup detected; restoring it for explicit migration."
+  fi
   sudo mkdir -p \
     "/mnt$PINO_HOME/.local/share/pino/identity" \
-    "/mnt$PINO_HOME/.local/share/pino/encrypted"
+    "/mnt$ciphertext_target"
   if [ -d "$portable/identity" ]; then
     sudo rsync -rt --delete \
       "$portable/identity/" "/mnt$PINO_HOME/.local/share/pino/identity/"
   fi
   if [ -d "$portable/encrypted" ]; then
     sudo rsync -rt --delete \
-      "$portable/encrypted/" "/mnt$PINO_HOME/.local/share/pino/encrypted/"
+      "$portable/encrypted/" "/mnt$ciphertext_target/"
   fi
   sudo find "/mnt$PINO_HOME/.local/share/pino/identity" \
-    "/mnt$PINO_HOME/.local/share/pino/encrypted" -type d -exec chmod 0700 {} +
+    "/mnt$ciphertext_target" -type d -exec chmod 0700 {} +
   sudo find "/mnt$PINO_HOME/.local/share/pino/identity" \
-    "/mnt$PINO_HOME/.local/share/pino/encrypted" -type f -exec chmod 0600 {} +
+    "/mnt$ciphertext_target" -type f -exec chmod 0600 {} +
   DATA_RESTORED=true
 }
 
@@ -143,6 +149,8 @@ fi
 
 PINO_USER="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.user.name")"
 PINO_HOME="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.user.home")"
+PINO_CIPHER_ROOT="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.portableVaults.cipherRoot")"
+PINO_LEGACY_CIPHER_ROOT="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.portableVaults.legacyCipherRoot")"
 PINO_CONFIG_DIR="$("${NIX_EVAL[@]}" "path:$REPO_DIR#nixosConfigurations.${HOST}.config.pino.configDir")"
 INSTALL_CONFIG_DIR="/mnt$PINO_CONFIG_DIR"
 
@@ -172,7 +180,7 @@ sudo chown -R "$installed_user_uid:$installed_user_gid" "/mnt$PINO_HOME"
 
 if [ -z "$BOOTSTRAP_SSH_KEY" ] && [ -t 0 ]; then
   echo "A public SSH key lets a trusted Pino client send this host's first secret projection."
-  read -r -p "Bootstrap SSH public key (leave empty for local Cryptomator population): " BOOTSTRAP_SSH_KEY
+  read -r -p "Bootstrap SSH public key (leave empty for local vault population): " BOOTSTRAP_SSH_KEY
 fi
 if [ -n "$BOOTSTRAP_SSH_KEY" ]; then
   case "$BOOTSTRAP_SSH_KEY" in

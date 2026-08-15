@@ -25,7 +25,6 @@ let
       "server-web" = ./server/web.nix;
       "server-proxy" = ./server/proxy.nix;
       "server-vpn" = ./server/vpn.nix;
-      "server-sync" = ./server/sync.nix;
       "server-mail" = ./server/mail.nix;
     };
     storage = {

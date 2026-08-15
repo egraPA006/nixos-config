@@ -44,7 +44,7 @@ in
         };
       };
       helpText = ''
-        The source is the unlocked Cryptomator scope `hosts/<host>`. apply asks
+        The source is the unlocked protected scope `hosts/<host>`. apply asks
         for the one-time code printed by the installer; sync works only after
         a successful apply. The receiver stages only the projection declared
         by that host's Nix configuration.

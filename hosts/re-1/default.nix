@@ -97,6 +97,5 @@
       };
     };
   };
-  pino.vault.sync.serverId = "DSIVLOL-YANNKJ6-7PMBSYF-X4HHLDU-O4NEKQR-EWQ4KVE-JMSM4AI-X2D5LQ7";
   system.stateVersion = "25.05";
 }

@@ -60,7 +60,7 @@ pino bootstrap host apply <hostname> <new-host-address>
 
 For a restored desktop, the alternative is to unlock its own host vault
 locally and run `pino vault secrets populate`. The root-only cache then
-supports offline boots and rebuilds while Cryptomator is locked.
+supports offline boots and rebuilds while gocryptfs is closed.
 
 ---
 
@@ -73,33 +73,31 @@ The portable layout separates ciphertext transport from local decryption:
 ├── identity/
 │   ├── identity.kdbx             # everyday accounts
 │   └── infra.kdbx                # infrastructure credentials
-└── encrypted/                    # Syncthing sees only this representation
-    ├── shared_sec/               # recovery documents
-    └── hosts/<host>/             # runtime configuration for one host
+├── vaults/                       # gocryptfs ciphertext used after migration
+│   ├── shared_sec/               # recovery documents
+│   └── hosts/<host>/             # runtime configuration for one host
+└── encrypted/                    # temporary legacy Cryptomator ciphertext
 
-~/Secrets/                        # Cryptomator plaintext mounts; never synced
+~/Secrets/                        # gocryptfs plaintext mounts; never transported
 ├── shared_sec/
 └── hosts/<host>/
 
 ~/Shared/                         # disposable plaintext on trusted clients
 ```
 
-Syncthing transports the encrypted KDBX files and independent Cryptomator
-ciphertext folders. Cryptomator alone exposes `~/Secrets`; passwords remain in
-KeePassXC. The disposable share is plaintext only on trusted clients and uses
-Syncthing's untrusted-device encryption before reaching Mosk. Mosk cannot
-decrypt any of these representations.
+`pino vault pull` and `pino vault push` transport these scopes through an
+rclone `crypt` remote. File contents, names, and directory names are encrypted
+on the client before reaching Mosk. Pino mounts gocryptfs at `~/Secrets`;
+passwords remain in KeePassXC. The disposable share is plaintext locally but
+rclone-encrypted remotely, so Mosk cannot decrypt any representation.
 
 `shared_sec` is never a runtime system-configuration source. NixOS stages
-configuration only from `hosts/<hostname>`. re-1 and la1n are trusted and
-receive every declared host ciphertext folder. A phone can be restricted with
-`sync.devices.<name>.secretScopes = [ "shared_sec" ];`.
-Add a future machine once to `pino.secrets.knownHosts`; trusted clients and the
-server derive their matching Syncthing scopes from that list.
+configuration only from `hosts/<hostname>`. re-1 and la1n are trusted and may
+pull every declared host ciphertext folder. Add a future machine once to
+`pino.secrets.knownHosts`; trusted clients derive their matching transfer
+scopes from that list.
 
-Prepare Cryptomator vaults. Use a different random password for each vault.
-Ciphertext paths and mount points are declared by Nix; the GUI is needed only
-to create each encrypted vault initially:
+For a new scope, use a different random password stored in `infra.kdbx`:
 
 ```bash
 pino vault secrets init shared_sec
@@ -108,14 +106,36 @@ pino vault secrets init hosts/la1n
 pino vault secrets init hosts/mosk
 ```
 
-After creating or editing them, close every vault and let Syncthing seed its
-ciphertext folders:
+Pino prompts in the terminal, mounts with a 30-minute idle timeout, and never
+stores the gocryptfs password:
 
 ```bash
-pino vault secrets reconcile
-pino vault sync restart
+pino vault secrets open shared_sec
 pino vault secrets status
+pino vault secrets close shared_sec
+pino vault push shared_sec
 ```
+
+### Cryptomator migration
+
+Migrate one scope at a time. If its Cryptomator ciphertext was already pushed,
+first refresh the legacy directory and record the required remote fingerprint:
+
+```bash
+pino vault pull --legacy shared_sec
+pino vault secrets legacy-open shared_sec
+# unlock shared_sec in Cryptomator at ~/Secrets/shared_sec
+pino vault secrets migrate shared_sec
+# lock shared_sec in Cryptomator
+pino vault push shared_sec
+pino vault pull shared_sec
+```
+
+`migrate` initializes gocryptfs when necessary, copies the unlocked plaintext,
+and performs a checksum comparison without printing filenames. It never removes
+`~/.local/share/pino/encrypted/<scope>`. For a scope that never existed remotely,
+skip `pull --legacy`; its first normal push seeds it. Keep the legacy directory
+until the new scope has been opened, inspected, pushed, pulled, and backed up.
 
 The KeePass database moves independently to:
 
@@ -124,18 +144,17 @@ The KeePass database moves independently to:
 ~/.local/share/pino/identity/infra.kdbx
 ```
 
-Both files use the same automatic ciphertext synchronization and external
-backup path. Only `identity.kdbx` opens automatically. Open the infrastructure
+Both files use the same explicit encrypted transport and external backup path.
+Only `identity.kdbx` opens automatically. Open the infrastructure
 database explicitly when managing host-vault passwords:
 
 ```bash
 pino vault identity open
 pino vault identity infra
 pino vault identity files
-pino vault sync status
 ```
 
-KeePass and Syncthing do not depend on a mounted system-secret filesystem.
+KeePass does not depend on a mounted system-secret filesystem.
 
 ### KeePassXC Secret Service
 
@@ -143,21 +162,37 @@ The configuration disables GNOME Keyring's Secret Service provider and enables
 KeePassXC's provider with access confirmation. One encrypted database choice
 cannot be stored in Nix: in `identity.kdbx`, create a group such as `Desktop
 Secret Service`, then select it under **Database Settings → Secret Service
-Integration**. Keep Cryptomator and infrastructure credentials outside that
+Integration**. Keep gocryptfs and infrastructure credentials outside that
 group. `shared_sec` and every host vault remain manual and auto-lock after 30
 minutes.
 
-### Secret editing protocol
+### Manual transfer protocol
 
-Syncthing is automatic. Let it reach an idle state before opening a sensitive
-scope, and do not edit the same scope concurrently on two computers:
+Configure a trusted client once. Pino copies the WebDAV credential directly
+from the primary server's host vault; it is not retyped or duplicated in a
+KeePass database. Save the independent rclone crypt password and salt in
+`identity.kdbx` so Android can recreate the same remote:
 
 ```bash
-pino vault sync status
-pino vault secrets open hosts/re-1
-# edit through the mounted Cryptomator filesystem
-# lock the vault in Cryptomator
+pino vault secrets open hosts/$(hostname)
+pino vault secrets open hosts/mosk
+pino vault remote configure
 ```
+
+The mandatory workflow is pull, edit, lock/close, push:
+
+```bash
+pino vault pull hosts/re-1
+pino vault secrets open hosts/re-1
+# edit through the mounted gocryptfs filesystem
+pino vault secrets close hosts/re-1
+pino vault push hosts/re-1
+```
+
+`push` records and checks the remote fingerprint from the preceding `pull`. It
+refuses if another device changed the remote. The first push is allowed only
+when that remote scope does not yet exist. Each push copies the old `current`
+scope to `previous` before replacement.
 
 Before rebuilding, Pino offers to stage secrets from the current host vault:
 
@@ -178,66 +213,66 @@ The disposable share is an ordinary folder on trusted clients:
 ~/Shared
 ```
 
-Generate one strong random folder password in `identity.kdbx`. Unlock the current
-host vault and provision the same password independently on re-1 and la1n:
+The share uses the same explicit workflow:
 
 ```bash
-pino vault secrets open hosts/$(hostname)
-pino vault share configure
-pino vault share status
+pino vault pull shared
+# edit ~/Shared
+pino vault push shared
 ```
 
-Mosk stores the folder as Syncthing `Receive Encrypted` data and never receives
-the password. On Android, install
-[Syncthing-Fork by nel0x](https://play.google.com/store/apps/details?id=com.github.catfriend1.syncthingandroid)
-from Google Play. Add the phone's device ID to Mosk before rebuilding it:
+On Android, S3Drive from Google Play can configure the same WebDAV endpoint and
+rclone-compatible crypt password. Export its complete custom-provider config
+without displaying credentials, transfer it directly to the phone, and import
+it as an INI:
 
-```nix
-pino.server.sync.devices.phone = {
-  id = "PHONE-DEVICE-ID";
-  secretScopes = [ "shared_sec" "hosts/phone" ];
-};
+```bash
+pino vault remote export
 ```
 
-In Syncthing-Fork, add Mosk at `tcp://10.77.0.1:22000` over the VPN, accept
-folder ID `share` into a normal local directory, and set the same encryption
-password for the Mosk device. The phone can then edit the files with normal
-Android apps. The app is community-maintained rather than an official
-Syncthing release.
+The default file is `~/Downloads/pino-vault.ini`. It contains reversible
+rclone-obscured credentials: delete every copy immediately after importing.
+Create separate manual remote-to-local pull and local-to-remote push jobs.
+Always pull before editing and pushing.
+
+S3Drive's account browser is the live remote view: changes there immediately
+modify Mosk's `current` generation and bypass Pino's local workflow. Use it as
+a transport instead. Pull `current/identity` to a stable local directory used
+by KeePassDX. Pull `current/shared_sec` and `current/hosts/phone` as gocryptfs
+ciphertext into stable local directories used by DroidFS. Never synchronize a
+DroidFS plaintext export. Before pushing on Android, copy remote `current` to
+`previous`, then copy the closed local representation to `current`.
+
+KeePassDX opens the local `identity.kdbx`; its KDBX master password and optional
+Android biometric unlock are independent from rclone and gocryptfs. DroidFS is
+installed from F-Droid or its signed upstream release and uses each scope's
+gocryptfs password. The phone does not receive passwords for desktop/server
+host scopes.
 
 Pino deliberately provides no versioning or external-backup policy for this
-approximately 5 GB transfer area. The read-only secret archive remains exposed
-at `https://storage.egrapa.com/shared_sec`; free Cryptomator for Android is
-sufficient for reading recovery documents.
-
-To migrate the previous Cryptomator share, unlock it before removing its old
-Cryptomator entry and copy its cleartext contents into `~/Shared`. The old
-ciphertext directory is not reused by the new protocol.
+approximately 5 GB transfer area beyond the remote `current` and `previous`
+copies.
 
 ### Offline SSD backup
 
-An occasionally connected `pino-data-*` SSD is an offline backup, not a
-Syncthing device. KeePassXC must be closed and sensitive Cryptomator vaults must
-be locked:
+An occasionally connected `pino-data-*` SSD is an offline backup. KeePassXC
+and every gocryptfs scope must be closed:
 
 ```bash
 pino vault backup create 1
 pino vault backup list 1
 pino vault backup restore 1 previous
-# inspect the restored databases and vaults
-pino vault backup resume
+# inspect locally, then pull before a later push
 ```
 
 The exFAT disk keeps exactly `current` and `previous` under
 `pino/portable-backup/`. Each generation contains encrypted KDBX files,
-Cryptomator secret ciphertext, and a public Git bundle. The disposable
-plaintext share is excluded. Restore replaces local encrypted state but
-deliberately leaves Syncthing stopped until `pino vault backup resume`.
+gocryptfs ciphertext, and a public Git bundle. The disposable plaintext share
+is excluded. Restore changes only local encrypted state.
 
 ### Adding a ciphertext mirror
 
-Add the VPS as a normal NixOS server, enable `server-sync`, and add its
-public Syncthing device identity. Create the read-only WebDAV credential inside
+Add the VPS as a normal NixOS server and create its WebDAV credential inside
 its unlocked host vault:
 
 ```bash
@@ -247,8 +282,9 @@ pino bootstrap host sync <server-host> <address>
 pino repo push
 ```
 
-Syncthing then seeds every permitted encrypted scope. No server receives a
-Cryptomator, KeePass, or disposable-share password.
+The server exposes a writable authenticated object tree, but rclone encrypts
+all content and names before upload. No server receives a gocryptfs, KeePass,
+or rclone-crypt password.
 
 DNS requires `storage.<domain>` and `git.<domain>` A records
 pointing at the active server. Caddy obtains and renews their TLS certificates.
@@ -313,17 +349,16 @@ pino <command> <subcommand> help help for a leaf command
 | `pino bootstrap host vpn help` | Generate server VPN state and manage/export peers |
 | `pino desktop services hotspot start/stop` | WiFi access point (re-1) |
 | `pino storage dataset list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
-| `pino vault secrets status/open/populate` | Operate declarative Cryptomator secret scopes |
-| `pino vault sync status/restart/id` | Operate encrypted-data synchronization |
-| `pino vault backup create/list/restore/resume` | Manage current/previous encrypted backups on pino-data media |
+| `pino vault secrets status/init/open/close/migrate/populate` | Operate CLI-mounted gocryptfs scopes |
+| `pino vault pull/push` | Explicitly transfer encrypted current/previous generations |
+| `pino vault backup create/list/restore` | Manage current/previous encrypted backups on pino-data media |
 | `pino desktop music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
 | `pino desktop music-lite set-latency/set-volume` | Adjust PipeWire latency and output level |
 | `pino server status/connections/disk/logs` | Inspect the server without a dashboard |
-| `pino server web/proxy/vpn/sync/mail help` | Operate an enabled server capability |
-| `pino server sync status/files` | Inspect synchronized ciphertext |
+| `pino server web/proxy/vpn/mail help` | Operate an enabled server capability |
 | `pino server repo status` | Inspect the NixOS Git mirror |
 
-> Runtime-secret source files live only in the Cryptomator scope
+> Runtime-secret source files live only in the gocryptfs scope
 > `hosts/<hostname>`. `pino vault secrets populate` refreshes root-only
 > `/var/lib/pino/secrets`; Nix declares filenames, destinations, permissions,
 > recursion, and restart units without importing secret contents into the store.
@@ -341,7 +376,7 @@ sudo scripts/backup-disk-init.sh /dev/sdX 1
 ```
 
 This erases the selected whole disk and creates one full-size exFAT partition
-named `pino-data-1`. KeePass and Cryptomator already encrypt their contents, so
+named `pino-data-1`. KeePass and gocryptfs already encrypt their contents, so
 the medium needs no second filesystem password. `pino vault backup create`
 retains only `current` and `previous` encrypted generations.
 
@@ -359,12 +394,12 @@ retains only `current` and `previous` encrypted generations.
 ### Host runtime secrets
 
 The desktop secret stack is part of the desktop configuration, not an optional
-profile. Each host has one independent Cryptomator scope:
+profile. Each host has one independent gocryptfs scope:
 
 ```text
-~/.local/share/pino/encrypted/hosts/<hostname>/  # synchronized ciphertext
-~/Secrets/hosts/<hostname>/                      # unlocked plaintext
-/var/lib/pino/secrets/                           # root-only deployed cache
+~/.local/share/pino/vaults/hosts/<hostname>/  # gocryptfs ciphertext
+~/Secrets/hosts/<hostname>/                   # unlocked plaintext
+/var/lib/pino/secrets/                        # root-only deployed cache
 ```
 
 Provision locally with `pino vault secrets populate`, or remotely with
@@ -442,7 +477,6 @@ The file is safe to commit — it tracks the intended state of each machine sepa
 | `server-web` | Caddy, ACME, and a small static website |
 | `server-proxy` | VLESS Reality over TCP 443 with switchable Internet egress |
 | `server-vpn` | AmneziaWG private access with optional Internet egress |
-| `server-sync` | KeePass and Cryptomator ciphertext synchronization over the private VPN |
 | `server-mail` | Postfix, Dovecot, Rspamd, DKIM, and ACME mail certificates |
 
 Profiles can overlap freely when their packages and services are compatible.
@@ -464,7 +498,6 @@ A minimal service selection looks like:
   "server-web"
   "server-proxy"
   "server-vpn"
-  "server-sync"
   "server-mail"
 ]
 
@@ -474,7 +507,6 @@ pino.server = {
   acmeEmail = "admin@example.com";
   proxy.users.vincent = { };
   vpn.externalInterface = "ens3";
-  sync.devices.re-1.id = "SYNCTHING-DEVICE-ID";
   mail.accounts."vincent@example.com".aliases = [ "postmaster@example.com" ];
 };
 ```
@@ -576,7 +608,7 @@ This is the complete first-deployment order. Mosk currently enables only
    ```
 
    Review the diff, commit all intended tracked and new files, then `git push`.
-   Never add unlocked Cryptomator data or an exported client config.
+   Never add unlocked secret data or an exported client config.
 
 2. Create a dedicated administrator key. Keep its passphrase; only its `.pub`
    file is pasted into the installer:
@@ -738,36 +770,12 @@ The public DNS prerequisites are an `A`/`AAAA` record for the website and
 `mail` host, an `MX` record, SPF, DKIM, and DMARC. Ask the VPS provider for
 matching reverse DNS and verify that SMTP port 25 is permitted. Public ports
 are HTTP 80, proxy HTTPS 443/TCP, AmneziaWG 585/UDP, and the standard mail
-ports opened by the mail profile. Syncthing and its GUI are not public:
-synchronization is reachable only through the trusted VPN interface and the
-GUI binds to localhost.
+ports opened by the mail profile. The authenticated storage WebDAV endpoint is
+public over TLS, but clients encrypt every filename and byte before upload.
 
-The default mail quota is 5 GiB per account, journals are capped at 256 MiB,
-and only two previous synchronized versions are retained. Those defaults are intended
-to fit a 10–20 GiB server, but mail usage still needs monitoring with
-`pino server disk`.
-
-#### Pair a trusted client with Mosk
-
-The desktop client belongs to the existing `vault` profile. It synchronizes
-the KeePass directory plus separate Cryptomator ciphertext folders; plaintext
-mounts are never Syncthing folders. Discovery, relays, NAT traversal, incoming
-listening, and the public GUI are disabled; clients connect directly to Mosk at
-`10.77.0.1:22000` over AmneziaWG.
-
-Pair both ends once:
-
-1. On the client, run `pino vault sync id`. Put that ID in
-   Mosk as `pino.server.sync.devices.re-1.id`.
-2. On Mosk, run `pino server sync id`. Put that ID on re-1 as
-   `pino.vault.sync.serverId`.
-3. Rebuild both machines and connect the client to the VPN. Syncthing starts
-   independently of KeePassXC and Cryptomator because it handles ciphertext
-   only.
-
-Override `pino.vault.sync.serverAddress` only if Mosk uses a different VPN
-address. Syncthing remains unconfigured until `serverId` is set, so no fake or
-placeholder device identity is necessary.
+The default mail quota is 5 GiB per account and journals are capped at 256 MiB.
+Those defaults are intended to fit a 10–20 GiB server, but mail and encrypted
+storage usage still need monitoring with `pino server disk`.
 
 ---
 
@@ -808,7 +816,7 @@ modules/
     development/             # development tools currently integrated through NixOS
     network/                 # VPN and hotspot capabilities
     security/                # vault and identity capabilities
-    server/                  # web, proxy, VPN, KeePass sync, and mail capabilities
+    server/                  # web, proxy, VPN, encrypted storage, and mail capabilities
 scripts/                     # installation helpers (run once, not part of the built system)
   hardware.sh                # generate hardware.nix for a new host
   disko.sh                   # partition disks
