@@ -2,15 +2,33 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo $0 [install|repair] <host>" >&2
+  echo "Usage: sudo $0 [install|repair] <host> [--ssh-key-file <public-key>] [--keep-hardware]" >&2
 }
 
 [ "$(id -u)" -eq 0 ] || { echo "Run this script as root." >&2; exit 1; }
 case "${1:-}" in
-  install|repair) operation="$1"; host="${2:-}" ;;
-  *) operation=install; host="${1:-}" ;;
+  install|repair) operation="$1"; shift ;;
+  *) operation=install ;;
 esac
+host="${1:-}"
 [ -n "$host" ] || { usage; exit 1; }
+shift || true
+ssh_key_file=""
+keep_hardware=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --ssh-key-file)
+      [ "$#" -ge 2 ] || { usage; exit 1; }
+      ssh_key_file="$2"
+      shift 2
+      ;;
+    --keep-hardware)
+      keep_hardware=true
+      shift
+      ;;
+    *) usage; exit 1 ;;
+  esac
+done
 
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 host_dir="$repo_dir/hosts/$host"
@@ -20,7 +38,7 @@ findmnt --mountpoint /mnt >/dev/null || {
   exit 1
 }
 
-if [ "$operation" = install ]; then
+if [ "$operation" = install ] && [ "$keep_hardware" = false ]; then
   echo "Generating $host_dir/hardware.nix from the mounted target..."
   hardware_owner="$(stat -c '%u:%g' "$host_dir/hardware.nix")"
   hardware_tmp="$(mktemp "$host_dir/hardware.nix.XXXXXX")"
@@ -38,7 +56,13 @@ config_dir="$(nix --extra-experimental-features 'nix-command flakes' eval --raw 
 
 ssh_key=""
 if [ "$operation" = install ]; then
-  read -r -p "SSH public key for $pino_user (empty to skip): " ssh_key
+  if [ -n "$ssh_key_file" ]; then
+    [ -f "$ssh_key_file" ] || { echo "SSH public key file not found: $ssh_key_file" >&2; exit 1; }
+    ssh_key="$(tr -d '\r' < "$ssh_key_file")"
+    [[ "$ssh_key" != *$'\n'* ]] || { echo "SSH public key file must contain exactly one key." >&2; exit 1; }
+  else
+    read -r -p "SSH public key for $pino_user (empty to skip): " ssh_key
+  fi
   if [[ "$host" = mosk || "$host" = halos ]] && [ -z "$ssh_key" ]; then
     echo "An SSH public key is required for a passwordless server." >&2
     exit 1
@@ -51,6 +75,11 @@ fi
 
 echo "Installing $host from $repo_dir..."
 nixos-install --flake "path:$repo_dir#$host" --no-root-passwd
+
+if [[ "$host" = mosk || "$host" = halos ]]; then
+  install -d -m 0755 /mnt/etc/ssh
+  ssh-keygen -A -f /mnt
+fi
 
 echo "Copying the Git checkout to /mnt$config_dir..."
 install -d "/mnt$pino_home" "/mnt$config_dir"
@@ -70,8 +99,10 @@ if [ "$operation" = install ]; then
     chown "$uid:$gid" "/mnt$pino_home/.ssh/authorized_keys"
     chmod 0600 "/mnt$pino_home/.ssh/authorized_keys"
   fi
-  echo "Set the local password for $pino_user:"
-  nixos-enter --root /mnt -c "passwd $pino_user"
+  if [[ "$host" != mosk && "$host" != halos ]]; then
+    echo "Set the local password for $pino_user:"
+    nixos-enter --root /mnt -c "passwd $pino_user"
+  fi
 fi
 
 echo "$host $operation complete. The bootloader was installed from the current configuration."

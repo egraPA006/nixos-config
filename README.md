@@ -14,6 +14,47 @@ material only. Offline disks store folder snapshots.
 
 ## Fresh installation
 
+### Remote servers
+
+The normal VPS flow starts from the temporary Ubuntu or Debian image supplied
+by the provider. Create Bitwarden SSH Key items named `pino-ssh-server-mosk`
+and `pino-ssh-server-halos`. Give the provider only the public half of the
+matching item. Save that same public key locally as a selector, for example
+`~/.ssh/mosk.pub`; its private half stays in Bitwarden SSH Agent.
+
+Unlock Bitwarden CLI, make sure this checkout is clean and pushed to
+`origin/main`, then run:
+
+```bash
+export BW_SESSION="$(bw unlock --raw)"
+pino bootstrap install mosk ubuntu@203.0.113.10 ~/.ssh/mosk.pub
+```
+
+`install` requires an x86_64 Linux VPS with passwordless root or `sudo`, enough
+RAM for the pinned NixOS kexec installer, working DHCP, and Secure Boot disabled.
+It boots the installer in RAM, so no provider console is needed in the normal
+case.
+
+If the provider has already booted a NixOS installer or rescue image, skip
+kexec:
+
+```bash
+pino bootstrap rescue halos root@203.0.113.11 ~/.ssh/halos.pub
+```
+
+Both commands verify the required Bitwarden Secure Notes, generate the public
+`hardware.nix`, commit and push it if it changed, clone that exact GitHub state
+in the installer, and stop for the final disk-erasure confirmation. They then
+install `/dev/vda`, reboot, provision the server runtime files from Bitwarden,
+and show service status. The private SSH key and secret contents are never
+copied into Git or onto the installer.
+
+The first SSH connection uses the normal interactive host-fingerprint prompt.
+Check it against the provider console. If kexec is unsupported or networking
+does not return, use the rescue flow instead.
+
+### Installer console
+
 Boot a NixOS installer, clone the repository, inspect the disks, then run the
 host-specific partition command:
 
@@ -49,7 +90,8 @@ sudo scripts/install.sh <host>
 
 The installer generates `hosts/<host>/hardware.nix` from the mounted target,
 installs the bootloader, copies the Git checkout, optionally installs one SSH
-public key, and asks for the local user password.
+public key, and asks for the local user password on desktops. Servers require
+the public key and intentionally have no local password.
 
 To reinstall the declared system and bootloader without repartitioning or
 regenerating hardware configuration:

@@ -12,6 +12,7 @@
     ../pino/system.nix
     ../pino/repository.nix
     ../pino/bitwarden.nix
+    ../pino/bootstrap.nix
     ../pino/secrets.nix
     ../pino/env.nix
     ../pino/backup.nix

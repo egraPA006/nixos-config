@@ -7,9 +7,10 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixos-images.url = "github:nix-community/nixos-images";
   };
 
-  outputs = { self, nixpkgs, home-manager, ... }:
+  outputs = { self, nixpkgs, home-manager, nixos-images, ... }:
   let
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
 
@@ -39,6 +40,9 @@
       { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
     ];
   in {
+    packages.x86_64-linux.kexec-installer =
+      nixos-images.packages.x86_64-linux.kexec-installer-nixos-unstable-noninteractive;
+
     devShells.x86_64-linux.cpp = pkgs.mkShell {
       packages = with pkgs; [
         gcc

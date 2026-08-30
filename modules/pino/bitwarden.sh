@@ -63,7 +63,16 @@ if [ "$operation" = send ]; then
     remote_restart=' && sudo systemctl restart'
     for unit in "$@"; do printf -v remote_restart '%s %q' "$remote_restart" "$unit"; done
   fi
-  printf '%s\n' "$payload" | ssh "$host" "$remote_install$remote_restart"
+  ssh_args=()
+  if [ -n "${PINO_SSH_IDENTITY_FILE:-}" ]; then
+    [ -f "$PINO_SSH_IDENTITY_FILE" ] || { echo "SSH identity selector not found." >&2; exit 1; }
+    ssh_args+=(-i "$PINO_SSH_IDENTITY_FILE" -o IdentitiesOnly=yes)
+  fi
+  if [ -n "${PINO_SSH_KNOWN_HOSTS_FILE:-}" ]; then
+    [ -f "$PINO_SSH_KNOWN_HOSTS_FILE" ] || { echo "SSH known_hosts file not found." >&2; exit 1; }
+    ssh_args+=(-o "UserKnownHostsFile=$PINO_SSH_KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes)
+  fi
+  printf '%s\n' "$payload" | ssh "${ssh_args[@]}" "$host" "$remote_install$remote_restart"
 else
   printf '%s\n' "$payload" | sudo install -D -o root -g root -m 0600 /dev/stdin "$target"
   if [ "$#" -gt 0 ]; then sudo systemctl restart "$@"; fi
