@@ -10,9 +10,11 @@
     ./user.nix
     ../pino/package.nix
     ../pino/system.nix
-    ../pino/bootstrap.nix
-    ../pino/secrets.nix
-    ../pino/bootstrap-receiver.nix
     ../pino/repository.nix
+    ../pino/bitwarden.nix
+    ../pino/secrets.nix
+    ../pino/env.nix
+    ../pino/backup.nix
+    ../pino/top.nix
   ];
 }

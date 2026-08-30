@@ -20,28 +20,17 @@ in
         type = lib.types.nullOr lib.types.str;
         default = cfg.domain;
       };
-      internalHttpsPort = lib.mkOption {
-        type = lib.types.port;
-        default = 8443;
-      };
     };
-    proxy = {
-      port = lib.mkOption {
+    galene = {
+      domain = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = if cfg.domain == null then null else "meet.${cfg.domain}";
+        description = "Public Galene domain";
+      };
+      turnPort = lib.mkOption {
         type = lib.types.port;
-        default = 443;
-      };
-      secretDir = lib.mkOption {
-        type = lib.types.str;
-        default = "/var/lib/pino/secrets/server/sing-box";
-      };
-      users = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-          options.uuidFile = lib.mkOption {
-            type = lib.types.str;
-            default = "${cfg.proxy.secretDir}/users/${name}.uuid";
-          };
-        }));
-        default = { };
+        default = 1194;
+        description = "Built-in Galene TURN TCP/UDP port";
       };
     };
     vpn = {
@@ -64,28 +53,7 @@ in
       };
       configFile = lib.mkOption {
         type = lib.types.str;
-        default = "/var/lib/pino/secrets/server/awg0.conf";
-      };
-    };
-    mail = {
-      fqdn = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = if cfg.domain == null then null else "mail.${cfg.domain}";
-      };
-      accounts = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule {
-          options = {
-            aliases = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [ ];
-            };
-            quota = lib.mkOption {
-              type = lib.types.str;
-              default = "5G";
-            };
-          };
-        });
-        default = { };
+        default = "/etc/pino/vpn/awg0.conf";
       };
     };
   };

@@ -1,6 +1,6 @@
 # Guitar amp sim via NAM (Neural Amp Modeler).
 
-# Requires PipeWire (already in base).
+# PipeWire and low-latency settings come from the shared music base.
 { config, pkgs, ... }:
 let
   cfg        = config.pino.profiles.musicLite;
@@ -45,11 +45,14 @@ in
       '';
       script = ''
         AMPS_DIR="${ampsDir}"
-        PID_FILE="/tmp/pino-music-lite.pid"
-        HOLDER_PID_FILE="/tmp/pino-music-lite-holder.pid"
-        CTRL_PIPE="/tmp/pino-music-lite-ctrl"
-        STATE_DIR="/tmp/pino-music-lite-state"
-        LOG_FILE="/tmp/pino-music-lite.log"
+        RUNTIME_ROOT="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pino/music-lite"
+        mkdir -p "$RUNTIME_ROOT"
+        chmod 0700 "$RUNTIME_ROOT"
+        PID_FILE="$RUNTIME_ROOT/jalv.pid"
+        HOLDER_PID_FILE="$RUNTIME_ROOT/holder.pid"
+        CTRL_PIPE="$RUNTIME_ROOT/control"
+        STATE_DIR="$RUNTIME_ROOT/state"
+        LOG_FILE="$RUNTIME_ROOT/jalv.log"
 
         case "''${1:-}" in
           list)
@@ -64,6 +67,7 @@ in
           start)
             name="''${2:-}"
             [ -z "$name" ] && { echo "Usage: pino desktop music-lite start <model>"; echo "Run 'pino desktop music-lite list'"; exit 1; }
+            [[ "$name" =~ ^[A-Za-z0-9._\ -]+$ ]] || { echo "Invalid model name: $name" >&2; exit 1; }
             model="$AMPS_DIR/''${name}.nam"
             [ -f "$model" ] || { echo "Not found: $model"; echo "Run 'pino desktop music-lite list'"; exit 1; }
 
@@ -142,6 +146,7 @@ EOF
           set-latency)
             quantum="''${2:-}"
             [ -z "$quantum" ] && { echo "Usage: pino desktop music-lite set-latency <samples>"; echo "Common: 32 64 128 256"; exit 1; }
+            case "$quantum" in 32|64|128|256|512|1024) ;; *) echo "Latency must be one of: 32 64 128 256 512 1024" >&2; exit 1 ;; esac
             pw-metadata -n settings 0 clock.force-quantum "$quantum"
             echo "Quantum set to $quantum samples"
             ;;
@@ -149,8 +154,10 @@ EOF
           set-volume)
             volume="''${2:-}"
             [ -z "$volume" ] && { echo "Usage: pino desktop music-lite set-volume <percent>"; echo "100 = default (0 dB), 200 = +6 dB, 50 = -6 dB"; exit 1; }
+            [[ "$volume" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "Volume must be a number" >&2; exit 1; }
+            awk -v volume="$volume" 'BEGIN { exit !(volume > 0 && volume <= 400) }' || { echo "Volume must be greater than 0 and at most 400" >&2; exit 1; }
             [ ! -p "$CTRL_PIPE" ] && { echo "NAM not running"; exit 1; }
-            db=$(awk "BEGIN { printf \"%.2f\", 20 * log($volume / 100) / log(10) }")
+            db=$(awk -v volume="$volume" 'BEGIN { printf "%.2f", 20 * log(volume / 100) / log(10) }')
             echo "output_level = $db" > "$CTRL_PIPE"
             echo "Volume: $volume% → output_level $db dB"
             ;;

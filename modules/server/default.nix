@@ -1,10 +1,17 @@
 { config, lib, pkgs, ... }:
 {
-  imports = [ ./storage-mirror.nix ./git-mirror.nix ];
-
   # Server administration is authenticated by the user's SSH key. The server
   # user intentionally has no local password, so wheel must not prompt for one.
   security.sudo.wheelNeedsPassword = false;
+
+  services.openssh = {
+    enable = true;
+    settings = {
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
+      PermitRootLogin = "no";
+    };
+  };
 
   environment.systemPackages = [ pkgs.git ];
 
@@ -36,7 +43,7 @@
           echo
           echo "Active Pino server services:"
           systemctl list-units --type=service --state=active --no-pager \
-            | grep -E 'caddy|sing-box|amneziawg|pino-storage|postfix|dovecot|rspamd' || true
+            | grep -E 'caddy|jitsi|amneziawg' || true
           ;;
         connections)
           ${pkgs.iproute2}/bin/ss -H -tupn state established

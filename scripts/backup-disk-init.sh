@@ -1,66 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-report_error() {
-  local status="$1" line="$2" command="$3"
-  echo "Failed at line $line (exit $status): $command" >&2
-  exit "$status"
+device="${1:-}"
+[ "$(id -u)" -eq 0 ] || { echo "Run this script as root." >&2; exit 1; }
+[ -b "$device" ] && [ "$(lsblk -dnro TYPE "$device")" = disk ] || {
+  echo "Usage: sudo $0 <whole-disk-device>" >&2
+  exit 1
 }
-trap 'report_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
-
-DEVICE="${1:-}"
-DISK_ID="${2:-1}"
-DATA_LABEL="pino-data-$DISK_ID"
-
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Run this script as root." >&2
-  exit 1
-fi
-if [ -z "$DEVICE" ] || [ "$(lsblk -dnro TYPE "$DEVICE" 2>/dev/null || true)" != disk ]; then
-  echo "Usage: sudo $0 <whole-disk-device> [disk-id]" >&2
-  echo "Example: sudo $0 /dev/sdb 1" >&2
-  exit 1
-fi
-if [[ ! "$DISK_ID" =~ ^[1-9][0-9]*$ ]]; then
-  echo "Disk ID must be a positive integer." >&2
-  exit 1
-fi
-for command in fdisk mkfs.exfat lsblk findmnt umount; do
-  command -v "$command" >/dev/null 2>&1 || {
-    echo "Missing command: $command" >&2
-    exit 1
-  }
+for command in sgdisk wipefs partprobe udevadm mkfs.ext4 lsblk findmnt; do
+  command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }
 done
 
-ROOT_SOURCE="$(findmnt -nro SOURCE /)"
-ROOT_SOURCE="${ROOT_SOURCE%%\[*}"
-ROOT_DISK="$(lsblk -nrpo NAME,PKNAME | awk -v root="$ROOT_SOURCE" '$1 == root { print $2; exit }')"
-[ -n "$ROOT_DISK" ] || { echo "Unable to identify the disk containing /." >&2; exit 1; }
-[ "$DEVICE" != "$ROOT_DISK" ] || { echo "Refusing to erase the disk containing /." >&2; exit 1; }
+root_source="$(findmnt -nro SOURCE /)"
+root_disk="$(lsblk -s -nro NAME,TYPE "$root_source" | awk '$2 == "disk" { print "/dev/" $1; exit }')"
+[ -z "$root_disk" ] || [ "$(readlink -f "$device")" != "$(readlink -f "$root_disk")" ] || {
+  echo "Refusing to erase the disk containing /." >&2
+  exit 1
+}
+if lsblk -nrpo NAME "$device" | tail -n +2 | while read -r part; do findmnt -rn -S "$part"; done | grep -q .; then
+  echo "A partition on $device is mounted." >&2
+  exit 1
+fi
 
-echo "This permanently erases $DEVICE and creates one full-size exFAT partition labelled $DATA_LABEL."
-echo "Passwords and host vaults remain encrypted inside KeePass/gocryptfs; the disk adds no second password."
-lsblk -d -o NAME,PATH,VENDOR,MODEL,SERIAL,SIZE,TRAN "$DEVICE"
-read -r -p "Type the full device path ($DEVICE) to continue: " confirmation
-[ "$confirmation" = "$DEVICE" ] || { echo "Cancelled."; exit 1; }
+echo "This permanently erases $device and creates one ext4 backup partition."
+lsblk -d -o NAME,PATH,SIZE,MODEL,SERIAL "$device"
+read -r -p "Type the full device path '$device' to continue: " answer
+[ "$answer" = "$device" ] || { echo "Cancelled."; exit 0; }
 
-while read -r partition; do
-  if findmnt -rn -S "$partition" >/dev/null 2>&1; then
-    umount "$partition"
-  fi
-done < <(lsblk -nrpo NAME "$DEVICE" | tail -n +2)
-
-MICROSOFT_BASIC_DATA="EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
-printf 'g\nn\n1\n\n\nt\n%s\nw\n' "$MICROSOFT_BASIC_DATA" | fdisk "$DEVICE"
-
-DATA_PARTITION=""
-for _ in {1..20}; do
-  DATA_PARTITION="$(lsblk -nrpo NAME,TYPE "$DEVICE" | awk '$2 == "part" { print $1; exit }')"
-  [ -z "$DATA_PARTITION" ] || break
-  sleep 0.25
-done
-[ -n "$DATA_PARTITION" ] || { echo "Failed to discover the new partition." >&2; exit 1; }
-mkfs.exfat -n "$DATA_LABEL" "$DATA_PARTITION"
-
-echo "Portable backup disk initialized:"
-lsblk -o NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,PARTLABEL,UUID,MOUNTPOINTS "$DEVICE"
+wipefs --all --force "$device"
+sgdisk --zap-all "$device"
+sgdisk -n 1:1MiB:0 -t 1:8300 -c 1:pino-backup "$device"
+partprobe "$device"
+udevadm settle
+partition="$(lsblk -nrpo NAME,PARTLABEL "$device" | awk '$2 == "pino-backup" { print $1; exit }')"
+[ -n "$partition" ] || { echo "Unable to find the new partition." >&2; exit 1; }
+mkfs.ext4 -F -L pino-backup "$partition"
+mountpoint="$(mktemp -d /tmp/pino-backup-init.XXXXXX)"
+trap 'umount "$mountpoint" 2>/dev/null || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
+mount "$partition" "$mountpoint"
+install -d -m 0777 "$mountpoint/.pino-backup/datasets"
+printf '1\n' > "$mountpoint/.pino-backup/version"
+chmod 0644 "$mountpoint/.pino-backup/version"
+sync
+umount "$mountpoint"
+rmdir "$mountpoint"
+trap - EXIT
+echo "Initialized $partition. Reconnect or mount it, then use pino backup."

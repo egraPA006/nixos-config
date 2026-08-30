@@ -1,4 +1,0 @@
-{ ... }:
-{
-  imports = [ ../../pino/top.nix ];
-}

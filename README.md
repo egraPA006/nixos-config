@@ -1,866 +1,278 @@
-# nixos-config
+# Pino NixOS config
 
-Personal NixOS flake for `re-1` (PC), `la1n` (laptop), and the staged `mosk`
-server.
+One small flake for four machines:
 
----
+- `re-1`: desktop, ext4 root plus `/data/fast` and `/data/slow`;
+- `la1n`: laptop, LUKS2-encrypted ext4 root;
+- `mosk`: VPN exit, static website, and data disk;
+- `halos`: VPN only.
 
-## Fresh install
+There is no Disko, Btrfs, mail server, or Git mirror. GitHub stores only the
+public configuration. Bitwarden stores passwords, SSH keys, and runtime
+configuration. A local LUKS2 container mounted at `~/secrets` stores recovery
+material only. Offline disks store folder snapshots.
 
-### 1. Boot the NixOS installer
+## Fresh installation
 
-Download from [nixos.org](https://nixos.org/download). Use the minimal ISO.
-
-### 2. Clone this repo
+Boot a NixOS installer, clone the repository, inspect the disks, then run the
+host-specific partition command:
 
 ```bash
 nix-shell -p git
-git clone https://github.com/egraPA006/nixos-config.git /tmp/nixos-config
-cd /tmp/nixos-config
+git clone https://github.com/egraPA006/nixos-config.git
+cd nixos-config
+lsblk -o NAME,PATH,SIZE,MODEL,SERIAL,FSTYPE,MOUNTPOINTS
 ```
-
-### 3. Generate hardware config
-
-Do this before disko so `/mnt` is still empty and btrfs probing can't interfere:
 
 ```bash
-bash scripts/hardware.sh <hostname>
+# Desktop: EFI + ext4 root, then two ext4 data disks
+sudo scripts/partition.sh re-1 /dev/system /dev/fast /dev/slow
+
+# Laptop: EFI + LUKS2 container + ext4 root
+sudo scripts/partition.sh la1n /dev/nvme0n1
+
+# Mosk: BIOS boot + 64 GiB ext4 root + ext4 /data
+sudo scripts/partition.sh mosk /dev/vda
+
+# Halos: BIOS boot + ext4 root
+sudo scripts/partition.sh halos /dev/vda
 ```
 
-### 4. Partition disks
+The server configurations currently target the provider's `/dev/vda`. Change
+both the host storage file and this safety check before using another device.
 
-> Double-check device names with `lsblk` before proceeding — this wipes disks.
+Install after the script mounts everything below `/mnt`:
 
 ```bash
-bash scripts/disko.sh <hostname>
+sudo scripts/install.sh <host>
 ```
 
-The wrapper does not pre-evaluate the full host. Disko partitions and mounts
-the target first; the installation step then uses `/mnt` as its Nix store root
-for both flake resolution and building, instead of filling the live ISO's
-writable store.
+The installer generates `hosts/<host>/hardware.nix` from the mounted target,
+installs the bootloader, copies the Git checkout, optionally installs one SSH
+public key, and asks for the local user password.
 
-### 5. Install
+To reinstall the declared system and bootloader without repartitioning or
+regenerating hardware configuration:
 
 ```bash
-bash scripts/install.sh <hostname>
+sudo scripts/install.sh repair <host>
 ```
 
-The installer asks for a local password. It may also restore encrypted portable
-state from one connected `pino-data-*` disk. It never opens a secret vault.
-
-For remote first provisioning, paste a public SSH key when prompted. The
-installer prints a one-hour code. After first boot, unlock `hosts/<hostname>` on
-an existing trusted client and run:
+For a new Mosk or Halos VPS, the short combined command is:
 
 ```bash
-pino bootstrap host check <hostname>
-pino bootstrap host apply <hostname> <new-host-address>
+sudo scripts/server-stage.sh mosk /dev/vda
 ```
 
-For a restored desktop, the alternative is to unlock its own host vault
-locally and run `pino vault secrets populate`. The root-only cache then
-supports offline boots and rebuilds while gocryptfs is closed.
+All partition commands are destructive and require typing a host-specific
+confirmation. `repair` is not destructive to filesystems.
 
----
+## Profiles
 
-## Portable encrypted storage
-
-The portable layout separates ciphertext transport from local decryption:
-
-```text
-~/.local/share/pino/
-├── identity/
-│   ├── identity.kdbx             # everyday accounts
-│   └── infra.kdbx                # infrastructure credentials
-├── vaults/                       # gocryptfs ciphertext used after migration
-│   ├── shared_sec/               # recovery documents
-│   └── hosts/<host>/             # runtime configuration for one host
-└── encrypted/                    # temporary legacy Cryptomator ciphertext
-
-~/Secrets/                        # gocryptfs plaintext mounts; never transported
-├── shared_sec/
-└── hosts/<host>/
-
-~/Shared/                         # disposable plaintext on trusted clients
-```
-
-`pino vault pull` and `pino vault push` transport these scopes through an
-rclone `crypt` remote. File contents, names, and directory names are encrypted
-on the client before reaching Mosk. Pino mounts gocryptfs at `~/Secrets`;
-passwords remain in KeePassXC. The disposable share is plaintext locally but
-rclone-encrypted remotely, so Mosk cannot decrypt any representation.
-
-`shared_sec` is never a runtime system-configuration source. NixOS stages
-configuration only from `hosts/<hostname>`. re-1 and la1n are trusted and may
-pull every declared host ciphertext folder. Add a future machine once to
-`pino.secrets.knownHosts`; trusted clients derive their matching transfer
-scopes from that list.
-
-For a new scope, use a different random password stored in `infra.kdbx`:
+Enabled profiles are plain lists in `hosts/<host>/active-profiles.nix`.
 
 ```bash
-pino vault secrets init shared_sec
-pino vault secrets init hosts/re-1
-pino vault secrets init hosts/la1n
-pino vault secrets init hosts/mosk
+pino profile list
+pino profile enable server-web
+pino profile disable torrent
 ```
 
-Pino prompts in the terminal, mounts with a 30-minute idle timeout, and never
-stores the gocryptfs password:
+The profile catalog in `modules/profiles/default.nix` exposes user-facing roles;
+small implementation modules are composed inside them. `pino profile list`
+shows their purpose.
+
+Desktop profiles are:
+
+- `workstation`: desktop applications, audio, and Bluetooth;
+- `gnome`: GNOME desktop environment;
+- `development`: Git, Codex, and VS Code;
+- `vpn-client`: named AmneziaWG connections and explicit WiFi sharing;
+- `gaming-lite` / `gaming-full`;
+- `music-lite` / `music-full`;
+- `torrent`.
+
+The current host assignments are:
+
+- `la1n`: workstation, GNOME, development, VPN client, light gaming, and light music;
+- `re-1`: workstation, GNOME, development, VPN client, full gaming, and torrent;
+- `mosk`: VPN server, static website, and Galene;
+- `halos`: VPN server only.
+
+`music-full` is kept as an on-demand `re-1` profile. Its installers live under
+`/data/fast/music-full/installers`; `pino desktop music-full install` prepares
+Wine automatically and `pino desktop music-full sync` runs yabridge.
+
+Server profiles are:
+
+- `server-vpn`: AmneziaWG server;
+- `server-web`: static Caddy site;
+- `server-galene`: lightweight calls, screen sharing, and streams.
+
+Galene is enabled on Mosk at `https://meet.egrapa.com/group/main/`. Store the
+complete group definition in a Bitwarden Secure Note named
+`pino-galene-mosk-main`, then provision it without exposing its contents:
 
 ```bash
-pino vault secrets open shared_sec
-pino vault secrets status
-pino vault secrets close shared_sec
-pino vault push shared_sec
+pino provision send pino-galene-mosk-main mosk \
+  /etc/pino/galene/main.json galene.service
 ```
 
-### Cryptomator migration
+Galene stays stopped until that file exists. Generate a bcrypt password object
+with `pino server galene hash-password`, then place its output in that JSON
+instead of storing a plaintext password:
 
-Migrate one scope at a time. If its Cryptomator ciphertext was already pushed,
-first refresh the legacy directory and record the required remote fingerprint:
+```json
+{
+  "users": {
+    "admin": {
+      "password": {
+        "type": "bcrypt",
+        "key": "$2a$12$replace-with-generated-hash"
+      },
+      "permissions": "op"
+    }
+  }
+}
+```
+
+## Local secrets, Bitwarden, and SSH
+
+On `re-1` and `la1n`, `~/secrets` is an ext4 filesystem inside a LUKS2
+container file on the normal root filesystem. It is not a partition and is not
+mounted at boot. It contains recovery codes, encrypted authenticator exports,
+and other emergency material only. The first unlock creates the container and
+asks for a new LUKS passphrase:
 
 ```bash
-pino vault pull --legacy shared_sec
-pino vault secrets legacy-open shared_sec
-# unlock shared_sec in Cryptomator at ~/Secrets/shared_sec
-pino vault secrets migrate shared_sec
-# lock shared_sec in Cryptomator
-pino vault push shared_sec
-pino vault pull shared_sec
+pino secret unlock
+pino secret lock
 ```
 
-`migrate` initializes gocryptfs when necessary, copies the unlocked plaintext,
-and performs a checksum comparison without printing filenames. It never removes
-`~/.local/share/pino/encrypted/<scope>`. For a scope that never existed remotely,
-skip `pull --legacy`; its first normal push seeds it. Keep the legacy directory
-until the new scope has been opened, inspected, pushed, pulled, and backed up.
+The encrypted file is `~/.local/share/pino/secrets.luks`. Back up that file as
+a whole; external-disk synchronization will be added to `pino backup` later.
+For safety, `pino backup` refuses a source or restore target containing an
+unlocked `~/secrets`; lock it first.
+Do not keep live VPN or server configuration there, and do not add
+`~/secrets` or the container to Git.
 
-The KeePass database moves independently to:
-
-```text
-~/.local/share/pino/identity/identity.kdbx
-~/.local/share/pino/identity/infra.kdbx
-```
-
-Both files use the same explicit encrypted transport and external backup path.
-Only `identity.kdbx` opens automatically. Open the infrastructure
-database explicitly when managing host-vault passwords:
+All working secrets live in Bitwarden. Log in once, then unlock its CLI in each
+trusted shell where provisioning is needed:
 
 ```bash
-pino vault identity open
-pino vault identity infra
-pino vault identity files
+bw login
+export BW_SESSION="$(bw unlock --raw)"
 ```
 
-KeePass does not depend on a mounted system-secret filesystem.
+Store every complete runtime file in a uniquely named Secure Note. Names use
+`pino-<type>-<source>-<destination>` where applicable:
 
-### KeePassXC Secret Service
+- `pino-vpn-client-re-1-mosk` and `pino-vpn-client-re-1-halos`;
+- `pino-vpn-client-la1n-mosk` and `pino-vpn-client-la1n-halos`;
+- `pino-vpn-server-mosk` and `pino-vpn-server-halos`;
+- `pino-hotspot-re-1` and `pino-hotspot-la1n`;
+- `pino-galene-mosk-main`.
 
-The configuration disables GNOME Keyring's Secret Service provider and enables
-KeePassXC's provider with access confirmation. One encrypted database choice
-cannot be stored in Nix: in `identity.kdbx`, create a group such as `Desktop
-Secret Service`, then select it under **Database Settings → Secret Service
-Integration**. Keep gocryptfs and infrastructure credentials outside that
-group. `shared_sec` and every host vault remain manual and auto-lock after 30
-minutes.
-
-### Manual transfer protocol
-
-Configure a trusted client once. Pino copies the WebDAV credential directly
-from the primary server's host vault; it is not retyped or duplicated in a
-KeePass database. Save the independent rclone crypt password and salt in
-`identity.kdbx` so Android can recreate the same remote:
+Install one locally without printing it or creating a plaintext temporary file:
 
 ```bash
-pino vault secrets open hosts/$(hostname)
-pino vault secrets open hosts/mosk
-pino vault remote configure
+pino provision install pino-vpn-client-re-1-mosk /etc/amneziawg/mosk.conf
 ```
 
-The mandatory workflow is pull, edit, lock/close, push:
+Or send it directly from Bitwarden to a server over SSH:
 
 ```bash
-pino vault pull hosts/re-1
-pino vault secrets open hosts/re-1
-# edit through the mounted gocryptfs filesystem
-pino vault secrets close hosts/re-1
-pino vault push hosts/re-1
+pino provision send pino-vpn-server-mosk mosk \
+  /etc/pino/vpn/awg0.conf \
+  amneziawg-server.service pino-vpn-mode.service
 ```
 
-`push` records and checks the remote fingerprint from the preceding `pull`. It
-refuses if another device changed the remote. The first push is allowed only
-when that remote scope does not yet exist. Each push copies the old `current`
-scope to `previous` before replacement.
+Pino synchronizes Bitwarden first. The destination is root-owned and mode
+`0600`. The server does not need a Bitwarden session when `send` is run from a
+trusted desktop.
 
-Before rebuilding, Pino offers to stage secrets from the current host vault:
+Desktop systems install Bitwarden Desktop and point `SSH_AUTH_SOCK` at its
+native Linux agent socket. Enable the SSH agent once in Bitwarden settings and
+test it with `ssh-add -L`. The repository remote then uses the key from
+Bitwarden. See the [Bitwarden SSH agent guide](https://bitwarden.com/help/ssh-agent/).
+
+## VPN modes
+
+Mosk and Halos start in `private` mode. The selected mode survives reboots:
 
 ```bash
-pino vault secrets open hosts/$(hostname)
-pino vault secrets populate
-pino os rebuild
+pino server vpn mode status
+pino server vpn mode set private  # server and VPN peers, no Internet exit
+pino server vpn mode set egress   # Internet exit only
+pino server vpn mode set full     # Internet exit, server, and VPN peers
 ```
 
-Only `hosts/$(hostname)` is staged. Existing provisioned secrets remain usable
-for offline rebuilds and normal boots while portable vaults are locked.
+The AmneziaWG configuration lives at `/etc/pino/vpn/awg0.conf` and is normally
+provisioned from a uniquely named Bitwarden Secure Note.
 
-### Temporary shared files
+## Offline backups
 
-The disposable share is an ordinary folder on trusted clients:
-
-```text
-~/Shared
-```
-
-The share uses the same explicit workflow:
+Initialize a whole backup disk once. This erases it and creates one ext4
+partition labelled `pino-backup`:
 
 ```bash
-pino vault pull shared
-# edit ~/Shared
-pino vault push shared
+sudo scripts/backup-disk-init.sh /dev/sdX
 ```
 
-On Android, S3Drive from Google Play can configure the same WebDAV endpoint and
-rclone-compatible crypt password. Export its complete custom-provider config
-without displaying credentials, transfer it directly to the phone, and import
-it as an INI:
+Reconnect or mount it, then use its mount path or mounted block device:
 
 ```bash
-pino vault remote export
+pino backup /run/media/$USER/pino-backup ~/Pictures photos
+pino backup push /run/media/$USER/pino-backup ~/Projects projects
+pino backup status /run/media/$USER/pino-backup
+pino backup pull /run/media/$USER/pino-backup ~/Pictures photos
 ```
 
-The default file is `~/Downloads/pino-vault.ini`. It contains reversible
-rclone-obscured credentials: delete every copy immediately after importing.
-Create separate manual remote-to-local pull and local-to-remote push jobs.
-Always pull before editing and pushing.
+Each push creates an immutable, hard-linked snapshot. Pull requires typing an
+explicit confirmation because it makes the target folder exactly match the
+snapshot. Push stops with a conflict if the disk changed since this machine's
+last push or pull.
 
-S3Drive's account browser is the live remote view: changes there immediately
-modify Mosk's `current` generation and bypass Pino's local workflow. Use it as
-a transport instead. Pull `current/identity` to a stable local directory used
-by KeePassDX. Pull `current/shared_sec` and `current/hosts/phone` as gocryptfs
-ciphertext into stable local directories used by DroidFS. Never synchronize a
-DroidFS plaintext export. Before pushing on Android, copy remote `current` to
-`previous`, then copy the closed local representation to `current`.
+## Development environments and packages
 
-KeePassDX opens the local `identity.kdbx`; its KDBX master password and optional
-Android biometric unlock are independent from rclone and gocryptfs. DroidFS is
-installed from F-Droid or its signed upstream release and uses each scope's
-gocryptfs password. The phone does not receive passwords for desktop/server
-host scopes.
-
-Pino deliberately provides no versioning or external-backup policy for this
-approximately 5 GB transfer area beyond the remote `current` and `previous`
-copies.
-
-### Offline SSD backup
-
-An occasionally connected `pino-data-*` SSD is an offline backup. KeePassXC
-and every gocryptfs scope must be closed:
+Create a normal project-local development flake:
 
 ```bash
-pino vault backup create 1
-pino vault backup list 1
-pino vault backup restore 1 previous
-# inspect locally, then pull before a later push
+pino env init cpp ./my-project
+pino env enter ./my-project
 ```
 
-The exFAT disk keeps exactly `current` and `previous` under
-`pino/portable-backup/`. Each generation contains encrypted KDBX files,
-gocryptfs ciphertext, and a public Git bundle. The disposable plaintext share
-is excluded. Restore changes only local encrypted state.
-
-### Adding a ciphertext mirror
-
-Add the VPS as a normal NixOS server and create its WebDAV credential inside
-its unlocked host vault:
+Without a path, the environment is personal and lives below
+`~/.config/pino/envs`:
 
 ```bash
-pino vault secrets storage-init <server-host>
-pino vault secrets populate
-pino bootstrap host sync <server-host> <address>
-pino repo push
+pino env init python
+pino env list
+pino env enter python
 ```
 
-The server exposes a writable authenticated object tree, but rclone encrypts
-all content and names before upload. No server receives a gocryptfs, KeePass,
-or rclone-crypt password.
-
-DNS requires `storage.<domain>` and `git.<domain>` A records
-pointing at the active server. Caddy obtains and renews their TLS certificates.
-
-## GitHub-independent configuration copies
-
-Configure and update GitHub plus every Pino server mirror:
+Available presets are `cpp`, `python`, and `verilog`. One-off user packages do
+not require a system rebuild:
 
 ```bash
-pino repo remote configure
+pino os package search ripgrep
+pino os package install ripgrep
+pino os package list
+pino os package remove ripgrep
+```
+
+## Git and system updates
+
+GitHub is the only remote:
+
+```bash
 pino repo status
 pino repo pull
 pino repo push
+pino repo inputs update
 ```
 
-Update flake inputs separately with `pino repo inputs update`, inspect and
-commit the resulting lock-file change, then deploy it with `pino os rebuild`.
-
-Create an external-drive installation copy with:
+Rebuild the current host with:
 
 ```bash
-pino repo bundle create /path/on/external/disk/nixos-config.bundle
-```
-
-On a live ISO, use the fallback-aware clone helper before the normal hardware,
-Disko, and installation scripts:
-
-```bash
-nix-shell -p git
-curl -O https://raw.githubusercontent.com/egraPA006/nixos-config/main/scripts/clone.sh
-bash clone.sh /tmp/nixos-config
-cd /tmp/nixos-config
-```
-
-If GitHub is unavailable, `clone.sh` tries `https://git.egrapa.com` and then an
-external `nixos-config.bundle`. The helper itself can also be kept beside the
-bundle so installation does not depend on GitHub at all.
-
-## Day-to-day
-
-Everything is under one CLI: **`pino`**.
-
-```
-pino help                        show all commands
-pino <command> help              help for any command level
-pino <command> <subcommand> help help for a leaf command
-```
-
-| Command | What it does |
-|---|---|
-| `pino os info/top` | System information and live monitoring |
-| `pino os generation list` | List NixOS system generations |
-| `pino repo pull` | Fast-forward the configuration checkout as the Pino user |
-| `pino os rebuild` | Interactively rebuild and activate the current flake |
-| `pino repo inputs update` | Update `flake.lock` without rebuilding |
-| `pino os generation switch [N]` | Select and activate a system generation |
-| `pino os generation clean` | Keep current + previous generation and collect the rest |
-| `pino profile list/enable/disable` | Manage NixOS profiles; `list --enabled` prints enabled names only |
-| `pino os package search/locate/install/remove` | Search files/packages and manage ad-hoc user packages |
-| `pino desktop monitor list/status/switch/save/delete` | Manage display profiles |
-| `pino desktop services vpn list/connect/disconnect/status` | Select and operate named AmneziaWG connections |
-| `pino bootstrap host vpn help` | Generate server VPN state and manage/export peers |
-| `pino desktop services hotspot start/stop` | WiFi access point (re-1) |
-| `pino storage dataset list/disks/backup/restore/merge` | Manage plain non-secret datasets on an external medium |
-| `pino vault secrets status/init/open/close/migrate/populate` | Operate CLI-mounted gocryptfs scopes |
-| `pino vault pull/push` | Explicitly transfer encrypted current/previous generations |
-| `pino vault backup create/list/restore` | Manage current/previous encrypted backups on pino-data media |
-| `pino desktop music-lite start/stop/status/log` | NAM guitar amp sim in PipeWire (re-1) |
-| `pino desktop music-lite set-latency/set-volume` | Adjust PipeWire latency and output level |
-| `pino server status/connections/disk/logs` | Inspect the server without a dashboard |
-| `pino server web/proxy/vpn/mail help` | Operate an enabled server capability |
-| `pino server repo status` | Inspect the NixOS Git mirror |
-
-> Runtime-secret source files live only in the gocryptfs scope
-> `hosts/<hostname>`. `pino vault secrets populate` refreshes root-only
-> `/var/lib/pino/secrets`; Nix declares filenames, destinations, permissions,
-> recursion, and restart units without importing secret contents into the store.
-
-> On desktops, `pino os rebuild` asks whether to populate before evaluating
-> the new system. Answering yes
-> requires the local vault to be open and refreshes the provisioned cache;
-> answering no rebuilds using its existing root-only copies. Rebuilds never
-> unlock the vault automatically.
-
-Create a portable backup disk:
-
-```bash
-sudo scripts/backup-disk-init.sh /dev/sdX 1
-```
-
-This erases the selected whole disk and creates one full-size exFAT partition
-named `pino-data-1`. KeePass and gocryptfs already encrypt their contents, so
-the medium needs no second filesystem password. `pino vault backup create`
-retains only `current` and `previous` encrypted generations.
-
-> Hosts map logical datasets to local paths with `pino.data.datasets`. Datasets
-> live under `pino-data-*/pino/datasets/<name>/` as ordinary exFAT
-> files accessible from Windows. Use a host-specific dataset name when a dataset
-> should not be shared between machines. `backup` makes the medium exactly match
-> local, `restore` makes
-> local exactly match the medium, and `merge` interactively incorporates medium
-> changes locally without changing the medium. Installation can restore selected
-> datasets using `PINO_RESTORE_DATA=all` or a comma-separated list.
-> `pino storage dataset backup all` backs up every configured dataset while
-> retaining the normal preview and per-dataset confirmation.
-
-### Host runtime secrets
-
-The desktop secret stack is part of the desktop configuration, not an optional
-profile. Each host has one independent gocryptfs scope:
-
-```text
-~/.local/share/pino/vaults/hosts/<hostname>/  # gocryptfs ciphertext
-~/Secrets/hosts/<hostname>/                   # unlocked plaintext
-/var/lib/pino/secrets/                        # root-only deployed cache
-```
-
-Provision locally with `pino vault secrets populate`, or remotely with
-`pino bootstrap host apply/sync`. A host never accepts `shared_sec` as runtime
-configuration.
-
-A module declares a secret without reading it into the Nix store:
-
-```nix
-pino.secrets.entries.proxy-config = {
-  source = "proxy.conf";
-  target = "/etc/example-proxy/config.conf";
-  mode = "0600";
-  restartUnits = [ "example-proxy.service" ];
-};
-```
-
-Set `recursive = true` to copy every regular file below `source` into a target
-directory. Recursive secrets preserve their relative layout, ignore symlinks,
-and do not delete unrelated files already present in the target.
-
-For `re-1`, every regular file below `hosts/re-1/ssh/` is installed into
-the user-owned `~/.ssh/` tree; Home Manager selects `github_ed25519` for
-`github.com`.
-
-The installer consumes no plaintext secret medium. Its temporary key plus
-one-time code only authorizes the first constrained host projection.
-
-> Monitor profiles are stored as JSON in `~/.config/monitor-profiles/`. Two defaults are seeded on first activation for re-1: `single` (DP-3 only) and `dual` (DP-3 + TV). Set a layout in GNOME Settings → Displays, then `pino desktop monitor save <name>` to capture it.
-
-### Roll back NixOS generation
-
-Run `pino os generation switch` to list and select a generation interactively,
-or pass its number directly with `pino os generation switch <N>`. The
-systemd-boot menu remains available when the system cannot boot normally.
-
----
-
-## Profile system
-
-Profiles are optional modules (gaming, music, dev tools, etc.) toggled via a CLI tool.
-Disabling removes their declarative packages and services while preserving user data.
-
-```bash
-pino profile list                   # show all profiles with enabled markers
-pino profile list --enabled         # enabled names only, one per line
-pino profile enable  gaming-full    # enable + rebuild
-pino profile disable gaming-full    # disable + rebuild
-```
-
-Active profiles are stored per-host in `hosts/<hostname>/active-profiles.nix`.
-The file is safe to commit — it tracks the intended state of each machine separately.
-
-### Available profiles
-
-| Profile | Purpose |
-|---|---|
-| `desktop-apps` | Shared daily desktop applications such as Chromium and Telegram |
-| `desktop-audio` | PipeWire desktop audio, PulseAudio/JACK compatibility, and qpwgraph |
-| `desktop-bluetooth` | Bluetooth support and Blueman |
-| `gaming-lite` | Steam + gamemode (laptop) |
-| `gaming-full` | Steam + Lutris + Wine + Proton GE (PC) |
-| `music-lite` | NAM guitar amp sim + low-latency PipeWire |
-| `music-full` | Reaper + yabridge + Wine VST support |
-| `dev-cpp` | GCC, Clang, CMake, Meson, Ninja, GDB + VSCode clangd/meson extensions |
-| `torrent` | On-demand Transmission daemon and storage |
-| `gnome` | GNOME session, extensions, portals, and display tooling |
-| `vscode` | VS Code, Nix language support, and shared editor settings |
-| `codex` | Codex CLI and user configuration |
-| `git` | Git identity and defaults |
-| `vpn` | AmneziaWG client and Pino controls |
-| `hotspot` | NetworkManager access point routed through the VPN |
-| `datasets` | Portable non-secret dataset backup and restore commands |
-| `system-monitor` | Live temperatures, CPU, GPU, RAM, and process monitoring |
-| `server-web` | Caddy, ACME, and a small static website |
-| `server-proxy` | VLESS Reality over TCP 443 with switchable Internet egress |
-| `server-vpn` | AmneziaWG private access with optional Internet egress |
-| `server-mail` | Postfix, Dovecot, Rspamd, DKIM, and ACME mail certificates |
-
-Profiles can overlap freely when their packages and services are compatible.
-
-Dev environments are handled per-project via `nix develop` / `devShell` in each project's `flake.nix`.
-
-### Mosk server scaffold
-
-The canonical Ergo Proxy city spelling is **Mosk**. Its host is `hosts/mosk`,
-with local user `vincent`. It is a valid flake output, but its committed disk
-path is an intentionally unusable placeholder. The staging script replaces it
-only after interactive whole-disk confirmation and generates `hardware.nix`.
-
-A minimal service selection looks like:
-
-```nix
-# hosts/mosk/active-profiles.nix
-[
-  "server-web"
-  "server-proxy"
-  "server-vpn"
-  "server-mail"
-]
-
-# hosts/mosk/default.nix
-pino.server = {
-  domain = "example.com";
-  acmeEmail = "admin@example.com";
-  proxy.users.vincent = { };
-  vpn.externalInterface = "ens3";
-  mail.accounts."vincent@example.com".aliases = [ "postmaster@example.com" ];
-};
-```
-
-Keep the referenced secret files outside Git. The local vault source exactly
-mirrors their server-relative paths:
-
-```text
-~/Secrets/hosts/mosk/
-└── server/
-    ├── awg0.conf
-    ├── sing-box/
-    │   ├── reality-private-key
-    │   ├── reality-short-id
-    │   └── users/vincent.uuid
-    └── mail/accounts/vincent@example.com.hash
-```
-
-The deployable files are also the authoritative VPN state. Every managed or
-unmanaged client gets its own host scope; only the target host's scope is ever
-populated or uploaded:
-
-```text
-~/Secrets/
-├── hosts/mosk/server/awg0.conf
-├── hosts/re-1/vpn/mosk.conf
-└── hosts/phone/vpn/mosk.conf
-```
-
-After receiving the VPS public IP, initialize it locally. With no peer names,
-the defaults are `re-1` and `phone`:
-
-```bash
-pino vault secrets open hosts/mosk
-pino bootstrap host vpn init mosk 203.0.113.10
-pino bootstrap host vpn peer list mosk
-```
-
-The generator creates independent keys and preshared keys, assigns Mosk
-`10.77.0.1` and peers from `.2`, and generates common AmneziaWG masking
-parameters. It writes each peer directly to its canonical host path and refuses
-to overwrite initialized state.
-
-Peer lifecycle does not rotate unaffected clients:
-
-```bash
-pino bootstrap host vpn peer add mosk laptop
-pino bootstrap host vpn peer remove mosk phone
-pino bootstrap host vpn endpoint set mosk vpn.example.com
-```
-
-After a peer change, run `pino bootstrap host sync mosk <address>` to deploy
-the updated server peer list. Export never prints key material. It copies an
-existing canonical configuration to a user-owned `0600` file suitable for
-Android import:
-
-```bash
-pino bootstrap host vpn peer export mosk phone ~/Downloads/mosk-phone.conf
-```
-
-Adding the `re-1` peer writes `hosts/re-1/vpn/mosk.conf` immediately.
-re-1 declares `mosk` as a named connection alongside the legacy `awg0`
-connection. More servers use the same model through
-`pino.profiles.vpn.connections.<name>` and can then be selected without
-replacing configurations:
-
-```bash
-pino desktop services vpn list
-pino desktop services vpn connect mosk
-pino desktop services vpn disconnect mosk
-pino desktop services vpn status
-```
-
-Pino intentionally stops another active named connection before starting a
-full-route VPN, avoiding conflicting default routes. Configurations remain
-saved and independently selectable.
-
-Each server profile contributes its required files to
-`pino.secrets.entries`; there is no second shell-script manifest to maintain.
-Check the vault before installing:
-
-```bash
-pino vault secrets open hosts/mosk
-pino bootstrap host check mosk
-```
-
-#### Install and bootstrap Mosk
-
-This is the complete first-deployment order. Mosk currently enables only
-`server-vpn`, so a domain is not required.
-
-1. On re-1, validate the exact revision that the live ISO will clone:
-
-   ```bash
-   cd ~/nixos-config
-   git status
-   git diff --check
-   nix flake check --no-build
-   ```
-
-   Review the diff, commit all intended tracked and new files, then `git push`.
-   Never add unlocked secret data or an exported client config.
-
-2. Create a dedicated administrator key. Keep its passphrase; only its `.pub`
-   file is pasted into the installer:
-
-   ```bash
-   ssh-keygen -t ed25519 -a 100 -f ~/.ssh/mosk_ed25519 -C "vincent@mosk"
-   ssh-add ~/.ssh/mosk_ed25519
-   cat ~/.ssh/mosk_ed25519.pub
-   pino os package install dotool
-   pino os package install wl-clipboard
-   ```
-
-   Back up the private key in the encrypted vault before relying on it as the
-   only remote access method.
-
-3. Once the provider has assigned the public IP, prepare all initial VPN
-   artifacts on re-1. `init` is one-time; use `list` instead if state exists:
-
-   ```bash
-   pino os rebuild
-   pino vault secrets open hosts/mosk
-   # Initialize the VPN once; use list when it already exists.
-   pino bootstrap host vpn init mosk 203.0.113.10
-   pino bootstrap host vpn peer list mosk
-   pino bootstrap host check mosk
-   ```
-
-   The final check must show `server/awg0.conf` as `OK`.
-
-4. On the NixOS live ISO, verify networking and identify the whole installation
-   disk. The selected disk will be erased:
-
-   ```bash
-   ip -br address
-   ip route
-   ping -c 3 cache.nixos.org
-   lsblk -d -o NAME,PATH,SIZE,MODEL,SERIAL
-   ```
-
-5. Clone the pushed configuration and confirm the VPN-only profile:
-
-   ```bash
-   nix-shell -p git
-   git clone https://github.com/egraPA006/nixos-config.git
-   cd nixos-config
-   cat hosts/mosk/active-profiles.nix
-   ```
-
-6. Stage the server, replacing `/dev/vda` with the verified whole disk. The
-   optional third argument selects `direct` or `disko`; when omitted, the
-   script asks and defaults to `direct`. Both create Mosk's GPT BIOS boot
-   partition and a single ext4 root filesystem. Direct mode uses installer-ISO
-   tools and the target-backed Nix store, while Disko remains available when
-   the live store has enough space:
-
-   ```bash
-   sudo scripts/server-stage.sh mosk /dev/vda direct
-   ```
-
-   Paste the contents of `~/.ssh/mosk_ed25519.pub` when asked. If the provider's
-   web console does not support normal clipboard paste, copy the public key,
-   run this on re-1, and focus the console during the five-second delay:
-
-   ```bash
-   sleep 5; printf 'type %s\n' "$(wl-paste --no-newline)" | dotool
-   ```
-
-   This uses the current Wayland clipboard. The script shows all disks, requires
-   the exact selected path as confirmation, generates hardware configuration,
-   partitions and installs the server, and prints its SSH fingerprint plus a
-   one-time bootstrap code. No private key or vault secret is entered on the
-   server console.
-
-7. Save the `SHA256:...` SSH fingerprint and bootstrap code, then reboot and
-   detach the ISO. The code expires one hour after staging:
-
-   ```bash
-   reboot
-   ```
-
-   If needed, reproduce the fingerprint through the trusted provider console:
-
-   ```bash
-   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
-   pino bootstrap receiver code
-   ```
-
-   If the one-hour code was lost or expired before initial provisioning, issue
-   a replacement from the root console with `pino bootstrap receiver renew`.
-
-8. From re-1, provision the manifest-listed server file. Compare the fingerprint
-   printed by Pino with the one shown on the trusted server console, type `yes`
-   if they match exactly, then enter the one-time code when prompted:
-
-   ```bash
-   ssh-add ~/.ssh/mosk_ed25519
-   pino bootstrap host apply mosk 203.0.113.10
-   ```
-
-9. Verify the installed server and private VPN:
-
-   ```bash
-   ssh -i ~/.ssh/mosk_ed25519 vincent@203.0.113.10
-   pino server status
-   pino server disk
-   pino server vpn status
-   ```
-
-   Then, back on re-1:
-
-   ```bash
-   pino desktop services vpn list
-   pino desktop services vpn connect mosk
-   ping -c 3 10.77.0.1
-   pino desktop services vpn status mosk
-   ```
-
-10. Export the Android peer, transfer it locally, import it into AmneziaWG, and
-    remove the temporary exported copy afterward:
-
-    ```bash
-    pino bootstrap host vpn peer export mosk phone ~/Downloads/mosk-phone.conf
-    ```
-
-11. The staging checkout now contains generated, non-secret Mosk hardware and
-    disk files. The installer preserves its Git metadata and changes Mosk's
-    GitHub origin to public HTTPS, so the server can pull without a GitHub key.
-    Copy the generated files back to re-1, review, commit, and push them before
-    pulling or reinstalling so future rebuilds reproduce the installed machine:
-
-    ```bash
-    cd ~/nixos-config
-    scp -i ~/.ssh/mosk_ed25519 \
-      vincent@203.0.113.10:~/nixos-config/hosts/mosk/hardware.nix \
-      vincent@203.0.113.10:~/nixos-config/hosts/mosk/disko.nix \
-      hosts/mosk/
-    git diff -- hosts/mosk
-    ```
-
-The receiver accepts only regular files/directories declared by the evaluated
-manifest, first caches them below `/var/lib/pino/secrets`, and then deploys only
-the targets declared by Nix. It rejects extra files,
-symlinks, missing files, wrong bootstrap codes, expired codes, and a mismatched
-hostname. It never performs a root rebuild from the user-owned checkout.
-Successful initial provisioning consumes the code and restarts only declared
-units. Later secret changes use the same constrained receiver without reopening
-initial bootstrap access:
-
-```bash
-pino bootstrap host check mosk
-pino bootstrap host sync mosk 203.0.113.10
-```
-
-Both remote operations scan the ED25519 host key and require typing the
-fingerprint visible through the trusted server console. Secret contents are
-transferred directly over SSH and are never printed or placed in the Nix store.
-
-The public DNS prerequisites are an `A`/`AAAA` record for the website and
-`mail` host, an `MX` record, SPF, DKIM, and DMARC. Ask the VPS provider for
-matching reverse DNS and verify that SMTP port 25 is permitted. Public ports
-are HTTP 80, proxy HTTPS 443/TCP, AmneziaWG 585/UDP, and the standard mail
-ports opened by the mail profile. The authenticated storage WebDAV endpoint is
-public over TLS, but clients encrypt every filename and byte before upload.
-
-The default mail quota is 5 GiB per account and journals are capped at 256 MiB.
-Those defaults are intended to fit a 10–20 GiB server, but mail and encrypted
-storage usage still need monitoring with `pino server disk`.
-
----
-
-## Structure
-
-```
-flake.nix                    # inputs: nixpkgs, home-manager, disko
-configurations/
-  desktop/                   # full NixOS desktop entry point used by re-1 and la1n
-  server/                    # headless NixOS entry point
-  nix/                       # future standalone Home Manager entry point for Ubuntu
-hosts/
-  re-1/
-    default.nix              # host-specific imports and settings
-    hardware.nix             # generated hardware config (placeholder → replace)
-    disko.nix                # declarative disk layout
-    active-profiles.nix      # managed by pino profile CLI
-  la1n/  (same layout)
-  mosk/                      # server identity; staging replaces hardware/disk placeholders
-modules/
-  pino.nix                   # pino CLI framework — defines pino.subcommands option
-  pino/
-    bootstrap.nix            # local-vault to constrained remote-server provisioning
-    system.nix               # NixOS generation and system-information commands
-    profile.sh               # profile state CLI
-    pino-art.sh              # system-info art
-    pino-info.sh             # system-info layout
-  core/                      # minimal shared NixOS, user, shell, and Pino foundation
-    options.nix              # pino.user and pino.configDir machine identity
-  boot/                      # selectable boot-loader policy
-  desktop/                   # desktop networking and user integration
-  server/                    # SSH, bounded logs, constrained bootstrap receiver, Pino operations
-  hardware/
-    nvidia.nix               # RTX 4060, proprietary driver, Wayland vars
-    intel-laptop.nix         # Ice Lake iGPU, thermald
-  profiles/                  # NixOS profile registry and domain option schemas
-    desktop/                 # graphical desktop, gaming, music, and desktop services
-    development/             # development tools currently integrated through NixOS
-    network/                 # VPN and hotspot capabilities
-    security/                # vault and identity capabilities
-    server/                  # web, proxy, VPN, encrypted storage, and mail capabilities
-scripts/                     # installation helpers (run once, not part of the built system)
-  hardware.sh                # generate hardware.nix for a new host
-  disko.sh                   # partition disks
-  install.sh                 # run nixos-install
-  server-stage.sh            # confirm disk, install server, and issue one-time bootstrap code
-  backup-disk-init.sh        # create a full-size pino-data exFAT backup disk
-  monitor.py                 # built into monitor binary
-```
-
----
-
-## Home Manager
-
-Home Manager is embedded in the NixOS configuration, so there is no separate
-`home-manager switch`. User-facing configuration lives beside the capability
-that owns it—for example, the Codex and GNOME profiles configure their own Home
-Manager options. Only the basic user and shell setup is always enabled.
-
-Each real host declares `pino.user.name`, `pino.user.home`, and
-`pino.configDir`. Shared modules and the installer consume those values instead
-of embedding a username or checkout path.
-
-The profile groups separate desktop-specific modules from capabilities that can
-later be reused by server hosts. A future standalone Home Manager entry point
-for Ubuntu should import portable user modules directly rather than importing
-the NixOS profile registry.
-
----
-
-## NixOS quick reference
-
-```bash
-# Search packages
-nix search nixpkgs <name>
-
-# Try a package without installing
-nix shell nixpkgs#<name>
-
-# Check what a config change would do (no apply)
-sudo nixos-rebuild dry-activate --flake .#re-1
-
-# List generations
-sudo nix-env --list-generations --profile /nix/var/nix/profiles/system
-
-# Open a dev shell (if you add devShells to flake.nix)
-nix develop
+pino os rebuild
 ```

@@ -7,17 +7,9 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    disko = {
-      url = "github:nix-community/disko";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    nixos-mailserver = {
-      url = "gitlab:simple-nixos-mailserver/nixos-mailserver";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { nixpkgs, home-manager, disko, nixos-mailserver, ... }:
+  outputs = { self, nixpkgs, home-manager, ... }:
   let
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
 
@@ -38,12 +30,8 @@
 
     mkHost = name: extraModules: nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
-      specialArgs = {
-        activeProfiles = import (./hosts + "/${name}/active-profiles.nix");
-        inherit nixos-mailserver;
-      };
+      specialArgs.activeProfiles = import (./hosts + "/${name}/active-profiles.nix");
       modules = [
-        disko.nixosModules.disko
         home-manager.nixosModules.home-manager
       ] ++ extraModules ++ [ (./hosts + "/${name}") ];
     };
@@ -70,8 +58,14 @@
         { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
       ];
       mosk = mkHost "mosk" [ ];
+      halos = mkHost "halos" [ ];
     };
 
-    checks.x86_64-linux.re-1 = re1.config.system.build.toplevel;
+    checks.x86_64-linux = {
+      re-1 = re1.config.system.build.toplevel;
+      la1n = self.nixosConfigurations.la1n.config.system.build.toplevel;
+      mosk = self.nixosConfigurations.mosk.config.system.build.toplevel;
+      halos = self.nixosConfigurations.halos.config.system.build.toplevel;
+    };
   };
 }

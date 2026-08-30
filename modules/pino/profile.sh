@@ -2,6 +2,7 @@ HOSTNAME_VAL=$(hostname)
 CONFIG_DIR="${NIXOS_CONFIG_DIR:-@configDir@}"
 PROFILES_FILE="${CONFIG_DIR}/hosts/${HOSTNAME_VAL}/active-profiles.nix"
 VALID_PROFILES=(@validProfiles@)
+PROFILE_DESCRIPTIONS=(@profileDescriptions@)
 PROFILE_GROUPS=(@profileGroups@)
 
 usage() {
@@ -22,8 +23,18 @@ is_valid() {
   return 1
 }
 
+profile_description() {
+  local requested="$1" index
+  for index in "${!VALID_PROFILES[@]}"; do
+    [ "${VALID_PROFILES[$index]}" = "$requested" ] && {
+      printf '%s\n' "${PROFILE_DESCRIPTIONS[$index]}"
+      return
+    }
+  done
+}
+
 list_profiles() {
-  local entry group members profile active_profile marker
+  local entry group members profile active_profile marker description
   local -a group_profiles active_profiles
   active_profiles=("$@")
   for entry in "${PROFILE_GROUPS[@]}"; do
@@ -39,7 +50,8 @@ list_profiles() {
           break
         fi
       done
-      printf '  [%s] %s\n' "$marker" "$profile"
+      description="$(profile_description "$profile")"
+      printf '  [%s] %-20s %s\n' "$marker" "$profile" "$description"
     done
   done
 }

@@ -98,17 +98,17 @@
     };
 
     "org/gnome/desktop/session" = {
-      idle-delay = lib.hm.gvariant.mkUint32 0;
+      idle-delay = lib.hm.gvariant.mkUint32 (if hostname == "la1n" then 600 else 0);
     };
 
     "org/gnome/desktop/screensaver" = {
-      lock-enabled = false;  # Never auto-lock; only manual lock (Super+L) works
+      lock-enabled = hostname == "la1n";
     };
 
     "org/gnome/settings-daemon/plugins/power" = {
       idle-dim = false;
       sleep-inactive-ac-type = "nothing";
-      sleep-inactive-battery-type = "nothing";
+      sleep-inactive-battery-type = if hostname == "la1n" then "suspend" else "nothing";
     };
 
     "org/gnome/desktop/interface" = {

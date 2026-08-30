@@ -1,12 +1,11 @@
 { config, lib, pkgs, ... }:
 let
   osScript = builtins.replaceStrings
-    [ "@configDir@" "@pinoUser@" "@runuser@" "@vaultEnabled@" ]
+    [ "@configDir@" "@pinoUser@" "@runuser@" ]
     [
       (lib.escapeShellArg config.pino.configDir)
       (lib.escapeShellArg config.pino.user.name)
       "${pkgs.util-linux}/bin/runuser"
-      (if config.pino ? portableVaults && config.pino.portableVaults.enable then "true" else "false")
     ]
     (builtins.readFile ./os.sh);
 in

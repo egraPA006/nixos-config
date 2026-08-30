@@ -1,29 +1,15 @@
 { lib, ... }:
 {
-  options.pino.profiles.vpn.connections = lib.mkOption {
-    description = "Named AmneziaWG desktop connections available on this host";
-    default = {
-      awg0.source = "awg0.conf";
-    };
-    type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-      options.source = lib.mkOption {
-        type = lib.types.str;
-        default = "vpn/${name}.conf";
-        description = "Path relative to this host's merged vault secret tree";
-      };
-    }));
-  };
-
-  options.pino.profiles.hotspot = {
+  options.pino.profiles.vpn.share = {
     wifiInterface = lib.mkOption {
-      type = lib.types.str;
-      default = "wlp8s0";
-      description = "WiFi interface used by the hotspot profile";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "WiFi interface used for VPN sharing; null detects it with NetworkManager";
     };
-    vpnInterface = lib.mkOption {
+    connection = lib.mkOption {
       type = lib.types.str;
-      default = "awg0";
-      description = "VPN interface used for hotspot NAT";
+      default = "pino-vpn-share";
+      description = "Dedicated NetworkManager hotspot connection used only by Pino VPN sharing";
     };
   };
 }

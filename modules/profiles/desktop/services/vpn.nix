@@ -7,28 +7,54 @@
 
 let
   awgQuick = "${pkgs.amneziawg-tools}/bin/awg-quick";
-  connections = config.pino.profiles.vpn.connections;
-  connectionNames = builtins.attrNames connections;
+  share = config.pino.profiles.vpn.share;
+  vpnGuard = pkgs.writeShellScript "pino-vpn-guard" ''
+    set -euo pipefail
+    table=pino_vpn_guard
+
+    clear() {
+      ${pkgs.nftables}/bin/nft delete table inet "$table" 2>/dev/null || true
+    }
+
+    apply() {
+      local interface="$1"
+      [[ "$interface" =~ ^[A-Za-z0-9_.-]{1,15}$ ]] || {
+        echo "Invalid VPN interface: $interface" >&2
+        return 1
+      }
+      clear
+      ${pkgs.nftables}/bin/nft -f - <<EOF
+table inet $table {
+  chain forward {
+    type filter hook forward priority -15; policy accept;
+    oifname "$interface" drop
+  }
+}
+EOF
+    }
+
+    case "''${1:-}" in
+      apply) apply "''${2:-}" ;;
+      apply-marker)
+        marker=/var/lib/amneziawg/autostart
+        if [ -s "$marker" ]; then
+          interface="$(${pkgs.coreutils}/bin/cat "$marker")"
+          if ${pkgs.systemd}/bin/systemctl is-active --quiet "amneziawg@$interface.service"; then
+            apply "$interface"
+          else
+            clear
+          fi
+        else
+          clear
+        fi
+        ;;
+      clear) clear ;;
+      *) echo "Usage: $0 <apply INTERFACE|apply-marker|clear>" >&2; exit 1 ;;
+    esac
+  '';
 in
 {
   programs.amnezia-vpn.enable = true;
-
-  assertions = map (name: {
-    assertion = builtins.match "[A-Za-z0-9][A-Za-z0-9_-]{0,14}" name != null;
-    message = "AmneziaWG connection name '${name}' must be 1-15 safe interface characters";
-  }) connectionNames;
-
-  pino.secrets.entries =
-    lib.mapAttrs' (
-      name: connection:
-      lib.nameValuePair "vpn-${name}-config" {
-        source = connection.source;
-        target = "/etc/amneziawg/${name}.conf";
-        directoryMode = "0755";
-        restartUnits = [ "amneziawg@${name}.service" ];
-      }
-    ) connections
-  ;
 
   systemd.tmpfiles.rules = [
     "d /etc/amneziawg 0755 root root -"
@@ -36,9 +62,12 @@ in
 
   boot.extraModulePackages = [ config.boot.kernelPackages.amneziawg ];
   boot.kernelModules = [ "amneziawg" ];
+  networking.nftables.enable = true;
 
   environment.systemPackages = with pkgs; [
     amneziawg-tools
+    nftables
+    procps
   ];
 
   systemd.services."amneziawg@" = {
@@ -52,6 +81,7 @@ in
       ExecStart = "${awgQuick} up /etc/amneziawg/%i.conf";
       ExecStop = "${awgQuick} down /etc/amneziawg/%i.conf";
     };
+    unitConfig.ConditionPathExists = "/etc/amneziawg/%i.conf";
   };
 
   systemd.services.amneziawg-autostart = {
@@ -77,7 +107,20 @@ in
     };
   };
 
-  pino.subcommands.desktop.commands.services.commands.vpn = {
+  systemd.services.pino-vpn-client-guard = {
+    description = "Keep ordinary hotspot traffic out of the active VPN";
+    after = [ "amneziawg-autostart.service" "firewall.service" ];
+    partOf = [ "firewall.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${vpnGuard} apply-marker";
+      ExecStop = "${vpnGuard} clear";
+    };
+  };
+
+  pino.subcommands.vpn = {
     description = "AmneziaWG VPN";
     commands = {
       list.description = "List installed named VPN connections";
@@ -93,11 +136,29 @@ in
         description = "Show active VPN connections and peers";
         usage = "[name]";
       };
+      share = {
+        description = "Explicitly share the active VPN over a dedicated WiFi hotspot";
+        commands = {
+          start.description = "Start the VPN-only hotspot";
+          stop.description = "Stop the VPN-only hotspot";
+          status.description = "Show VPN sharing state";
+        };
+      };
     };
     helpText = ''
-      Configs are provisioned from this host's encrypted secret projection.
+      Store complete configs as uniquely named Bitwarden Secure Notes, then run:
+      `pino provision install pino-vpn-client-re-1-mosk /etc/amneziawg/mosk.conf`.
       Pino selects one full-route connection at a time to avoid route conflicts.
+      `share` only affects the dedicated `${share.connection}` connection. A hotspot
+      created normally in GNOME keeps NetworkManager's normal routing behaviour.
+      Provision the `${share.connection}.nmconnection` Secure Note into
+      `/etc/NetworkManager/system-connections/`, then run `sudo nmcli connection reload`.
     '';
-    script = builtins.readFile ../../../pino/vpn.sh;
+    script = ''
+      VPN_SHARE_WIFI=${lib.escapeShellArg (if share.wifiInterface == null then "" else share.wifiInterface)}
+      VPN_SHARE_CONNECTION=${lib.escapeShellArg share.connection}
+      VPN_GUARD=${vpnGuard}
+      ${builtins.readFile ../../../pino/vpn.sh}
+    '';
   };
 }

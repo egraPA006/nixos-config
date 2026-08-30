@@ -2,7 +2,7 @@
 {
   imports = [
     ./hardware.nix
-    ./disko.nix
+    ./storage.nix
     ../../configurations/desktop
     ../../modules/hardware/intel-laptop.nix
   ];
@@ -17,21 +17,6 @@
 
   pino.profiles = {
     musicLite.localDir = "${config.pino.user.home}/music-lite";
-    vpn.connections.mosk = { };
-  };
-
-  pino.portableVaults.trustedClient = true;
-
-  pino.data.datasets.music-lite = config.pino.profiles.musicLite.localDir;
-
-  pino.secrets.entries.ssh = {
-    source = "ssh";
-    target = "${config.pino.user.home}/.ssh";
-    owner = config.pino.user.name;
-    group = "users";
-    mode = "0600";
-    directoryMode = "0700";
-    recursive = true;
   };
 
   programs.ssh.extraConfig = ''

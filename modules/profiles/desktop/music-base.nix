@@ -2,6 +2,8 @@
 
 { config, ... }:
 {
+  imports = [ ./audio.nix ];
+
   services.pipewire.extraConfig.pipewire."10-realtime" = {
     "context.properties" = {
       "default.clock.rate"        = 48000;

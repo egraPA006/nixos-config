@@ -2,7 +2,7 @@
 {
   imports = [
     ./hardware.nix
-    ./disko.nix
+    ./storage.nix
     ../../configurations/desktop
     ../../modules/hardware/nvidia.nix
   ];
@@ -14,39 +14,16 @@
   pino.configDir = "${config.pino.user.home}/nixos-config";
 
   pino.profiles = {
-    vpn.connections = {
-      awg0.source = "vpn/awg0.conf";
-      mosk = { };
-    };
+    vpn.share.wifiInterface = "wlp8s0";
     musicLite.localDir = "/data/fast/music-lite";
     musicFull = {
       localDir = "/data/fast/music-full";
       winePrefix = "/data/fast/music-full/wine-prefix";
     };
     torrent.localDir = "/data/fast/torrent";
-    hotspot.wifiInterface = "wlp8s0";
-  };
-
-  # Local paths for datasets carried on pino-data media.
-  pino.data.datasets = {
-    music-full = config.pino.profiles.musicFull.localDir;
-    photos = "/data/fast/photos";
-    file_archive = "/data/fast/file_archive";
-  };
-
-  pino.secrets.entries.ssh = {
-    source = "ssh";
-    target = "${config.pino.user.home}/.ssh";
-    owner = config.pino.user.name;
-    group = "users";
-    mode = "0600";
-    directoryMode = "0700";
-    recursive = true;
   };
 
   networking.hostName = "re-1";
-
-  pino.portableVaults.trustedClient = true;
 
   systemd.tmpfiles.rules = [
     "z /data/fast 0755 ${config.pino.user.name} users -"

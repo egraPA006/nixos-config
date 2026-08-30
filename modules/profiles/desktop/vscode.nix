@@ -18,7 +18,6 @@
         "workbench.colorTheme" = "Default Dark+";
         "nix.enableLanguageServer" = true;
         "nix.serverPath" = "nil";
-        "claude-code.executablePath" = "/etc/profiles/per-user/${config.pino.user.name}/bin/claude";
       };
     };
 

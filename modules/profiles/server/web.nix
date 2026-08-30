@@ -1,8 +1,7 @@
-{ activeProfiles, config, lib, pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
   cfg = config.pino.server;
-  behindProxy = builtins.elem "server-proxy" activeProfiles;
   domain = cfg.web.domain;
   safeDomain = if domain == null then "invalid.local" else domain;
   safeEmail = if cfg.acmeEmail == null then "unset@example.invalid" else cfg.acmeEmail;
@@ -29,14 +28,9 @@ in
     enableReload = false;
     globalConfig = ''
       email ${safeEmail}
-      ${lib.optionalString behindProxy "https_port ${toString cfg.web.internalHttpsPort}"}
       admin off
     '';
     virtualHosts.${safeDomain}.extraConfig = ''
-      handle /.well-known/acme-challenge/* {
-        root * /var/lib/acme/acme-challenge
-        file_server
-      }
       root * ${site}
       encode zstd gzip
       file_server
@@ -48,8 +42,7 @@ in
     '';
   };
 
-  networking.firewall.allowedTCPPorts = [ 80 ]
-    ++ lib.optional (!behindProxy) 443;
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
 
   pino.subcommands.server.commands.web = {
     description = "Inspect the Caddy website and certificates";

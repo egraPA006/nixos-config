@@ -34,30 +34,30 @@ let
     apply_mode() {
       local mode="$1" external
       case "$mode" in
-        private)
-          ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
-          ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
-          ;;
-        egress)
+        private|egress|full)
           external="$(external_interface)"
-          [ -n "$external" ] || {
+          if [ "$mode" != private ] && [ -z "$external" ]; then
             echo "Cannot determine the default IPv4 interface; set pino.server.vpn.externalInterface." >&2
             return 1
-          }
-          ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
+          fi
           ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
           ${pkgs.nftables}/bin/nft -f - <<EOF
     table inet ${table} {
+      chain input {
+        type filter hook input priority -10; policy accept;
+        $(if [ "$mode" = egress ]; then printf 'iifname "%s" drop' "${cfg.interface}"; fi)
+      }
       chain forward {
-        type filter hook forward priority 10; policy accept;
-        iifname "${cfg.interface}" oifname "$external" ip saddr ${cfg.clientSubnet} accept
-        iifname "$external" oifname "${cfg.interface}" ip daddr ${cfg.clientSubnet} ct state established,related accept
-        iifname "${cfg.interface}" oifname "$external" drop
-        iifname "$external" oifname "${cfg.interface}" drop
+        type filter hook forward priority -10; policy accept;
+        $(if [ "$mode" != egress ]; then printf 'iifname "%s" oifname "%s" ip saddr %s accept' "${cfg.interface}" "${cfg.interface}" "${cfg.clientSubnet}"; fi)
+        $(if [ "$mode" != private ]; then printf 'iifname "%s" oifname "%s" ip saddr %s accept' "${cfg.interface}" "$external" "${cfg.clientSubnet}"; fi)
+        $(if [ "$mode" != private ]; then printf 'iifname "%s" oifname "%s" ip daddr %s ct state established,related accept' "$external" "${cfg.interface}" "${cfg.clientSubnet}"; fi)
+        iifname "${cfg.interface}" drop
+        oifname "${cfg.interface}" drop
       }
       chain postrouting {
         type nat hook postrouting priority srcnat; policy accept;
-        ip saddr ${cfg.clientSubnet} oifname "$external" masquerade
+        $(if [ "$mode" != private ]; then printf 'ip saddr %s oifname "%s" masquerade' "${cfg.clientSubnet}" "$external"; fi)
       }
     }
     EOF
@@ -65,6 +65,11 @@ let
           ;;
         *) echo "Invalid VPN mode in $mode_file: $mode" >&2; return 1 ;;
       esac
+    }
+
+    cleanup_rules() {
+      ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
+      ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
     }
 
     write_mode() {
@@ -86,7 +91,7 @@ let
         echo "VPN mode: $mode"
         ;;
       set)
-        case "$requested" in private|egress) ;; *) echo "Usage: $0 set <private|egress>" >&2; exit 1 ;; esac
+        case "$requested" in private|egress|full) ;; *) echo "Usage: $0 set <private|egress|full>" >&2; exit 1 ;; esac
         apply_mode "$requested"
         write_mode "$requested"
         echo "VPN mode: $requested"
@@ -100,7 +105,11 @@ let
         ${pkgs.procps}/bin/sysctl -n net.ipv4.ip_forward
         ${pkgs.nftables}/bin/nft list table inet ${table} 2>/dev/null || echo "NAT: disabled"
         ;;
-      *) echo "Usage: $0 <apply|set MODE|status>" >&2; exit 1 ;;
+      cleanup)
+        cleanup_rules
+        echo "VPN forwarding disabled"
+        ;;
+      *) echo "Usage: $0 <apply|set MODE|status|cleanup>" >&2; exit 1 ;;
     esac
   '';
 in
@@ -130,22 +139,15 @@ in
     description = "Apply the persisted Pino VPN forwarding mode";
     after = [ "amneziawg-server.service" "firewall.service" ];
     requires = [ "amneziawg-server.service" ];
-    partOf = [ "firewall.service" ];
+    partOf = [ "amneziawg-server.service" "firewall.service" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = "${vpnMode} apply";
+      ExecStop = "${vpnMode} cleanup";
     };
     unitConfig.ConditionPathExists = cfg.configFile;
-  };
-
-  pino.secrets.entries."server/awg0.conf" = {
-    target = if cfg.configFile == "${config.pino.secrets.provisionedDir}/server/awg0.conf"
-      then null
-      else cfg.configFile;
-    restartUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
-    startUnits = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
   };
 
   boot.kernel.sysctl."net.ipv4.ip_forward" = 0;
@@ -162,27 +164,27 @@ in
         description = "Control client Internet forwarding";
         commands = {
           status.description = "Show forwarding and NAT state";
-          set = { description = "Select the persistent forwarding mode"; usage = "<private|egress>"; };
+          set = { description = "Select the persistent forwarding mode"; usage = "<private|egress|full>"; };
         };
       };
     };
     helpText = ''
-      private keeps server/VPN access but disables forwarded Internet traffic.
-      egress enables IPv4 forwarding and NAT through the configured external
-      interface. The selected mode persists across rebuilds and reboots; the
-      initial mode is private.
+      private allows the server and VPN peers only. egress exposes only the
+      Internet exit and blocks the server and other peers. full enables both
+      peer communication and Internet NAT. The mode persists across reboots;
+      the initial mode is private.
     '';
     script = ''
       case "''${1:-}" in
-        start) sudo systemctl start amneziawg-server ;;
-        stop) sudo systemctl stop amneziawg-server ;;
+        start) sudo systemctl start amneziawg-server pino-vpn-mode ;;
+        stop) sudo systemctl stop pino-vpn-mode amneziawg-server ;;
         status)
-          sudo test -f ${cfg.configFile} || {
+          sudo test -f ${lib.escapeShellArg cfg.configFile} || {
             echo "VPN config is missing: ${cfg.configFile}" >&2
             exit 1
           }
           sudo ${pkgs.coreutils}/bin/stat \
-            --format='Config: %n (%U:%G %a)' ${cfg.configFile}
+            --format='Config: %n (%U:%G %a)' ${lib.escapeShellArg cfg.configFile}
           echo "Interface: ${cfg.interface}"
           echo "UDP port:  ${toString cfg.port}"
           echo
@@ -198,8 +200,8 @@ in
             status) sudo ${vpnMode} status ;;
             set)
               case "''${3:-}" in
-                private|egress) sudo ${vpnMode} set "''${3}" ;;
-                *) echo "Usage: pino server vpn mode set <private|egress>" >&2; exit 1 ;;
+                private|egress|full) sudo ${vpnMode} set "''${3}" ;;
+                *) echo "Usage: pino server vpn mode set <private|egress|full>" >&2; exit 1 ;;
               esac
               ;;
             *) echo "Run 'pino server vpn mode help' for usage." >&2; exit 1 ;;

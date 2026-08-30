@@ -3,45 +3,35 @@
 let
   profileGroups = {
     desktop = {
-      "desktop-apps" = ./desktop/apps.nix;
-      "desktop-audio" = ./desktop/audio.nix;
-      "desktop-bluetooth" = ./desktop/bluetooth.nix;
-      gnome = ./desktop/gnome;
-      vscode = ./desktop/vscode.nix;
-      "gaming-lite" = ./desktop/gaming-lite.nix;
-      "gaming-full" = ./desktop/gaming-full.nix;
-      "music-lite" = ./desktop/music-lite.nix;
-      "music-full" = ./desktop/music-full.nix;
-      torrent = ./desktop/torrent.nix;
-      vpn = ./desktop/services/vpn.nix;
-      hotspot = ./desktop/services/hotspot.nix;
+      workstation = { module = ./desktop/workstation.nix; description = "Desktop applications, audio and Bluetooth"; };
+      gnome = { module = ./desktop/gnome; description = "GNOME desktop environment"; };
+      "gaming-lite" = { module = ./desktop/gaming-lite.nix; description = "Basic gaming tools"; };
+      "gaming-full" = { module = ./desktop/gaming-full.nix; description = "Full gaming stack"; };
+      "music-lite" = { module = ./desktop/music-lite.nix; description = "Light music workstation"; };
+      "music-full" = { module = ./desktop/music-full.nix; description = "Full music workstation"; };
+      torrent = { module = ./desktop/torrent.nix; description = "Torrent client"; };
+      "vpn-client" = { module = ./desktop/services/vpn.nix; description = "AmneziaWG client and explicit WiFi sharing"; };
     };
     development = {
-      codex = ./development/codex.nix;
-      git = ./development/git.nix;
-      "dev-cpp" = ./development/dev-cpp.nix;
+      development = { module = ./development; description = "Git, Codex and Visual Studio Code"; };
     };
     server = {
-      "server-web" = ./server/web.nix;
-      "server-proxy" = ./server/proxy.nix;
-      "server-vpn" = ./server/vpn.nix;
-      "server-mail" = ./server/mail.nix;
+      "server-web" = { module = ./server/web.nix; description = "Static Caddy website"; };
+      "server-vpn" = { module = ./server/vpn.nix; description = "AmneziaWG VPN server"; };
+      "server-galene" = { module = ./server/galene.nix; description = "Lightweight video calls and streams"; };
     };
-    storage = {
-      datasets = ./storage/datasets.nix;
-    };
-    system."system-monitor" = ./system/monitor.nix;
   };
-  profileModules = lib.mergeAttrsList (builtins.attrValues profileGroups);
+  profileCatalog = lib.mergeAttrsList (builtins.attrValues profileGroups);
+  profileModules = lib.mapAttrs (_: profile: profile.module) profileCatalog;
   desktopProfiles = builtins.attrNames profileGroups.desktop;
-  storageProfiles = builtins.attrNames profileGroups.storage;
   serverProfiles = builtins.attrNames profileGroups.server;
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
   profileScript = builtins.replaceStrings
-    [ "@validProfiles@" "@profileGroups@" "@configDir@" ]
+    [ "@validProfiles@" "@profileDescriptions@" "@profileGroups@" "@configDir@" ]
     [
       (lib.concatStringsSep " " validProfiles)
+      (lib.concatStringsSep " " (map (name: lib.escapeShellArg profileCatalog.${name}.description) validProfiles))
       (lib.concatStringsSep " " (lib.mapAttrsToList
         (group: profiles: "'${group}:${lib.concatStringsSep "," (builtins.attrNames profiles)}'")
         profileGroups))
@@ -59,15 +49,19 @@ in
   assertions = map (name: {
     assertion = builtins.hasAttr name profileModules;
     message = "Unknown profile '${name}'. Valid: ${lib.concatStringsSep ", " validProfiles}";
-  }) activeProfiles;
+  }) activeProfiles ++ [
+    {
+      assertion = !(builtins.elem "gaming-lite" activeProfiles && builtins.elem "gaming-full" activeProfiles);
+      message = "gaming-lite and gaming-full are alternatives; enable only one";
+    }
+    {
+      assertion = !(builtins.elem "music-lite" activeProfiles && builtins.elem "music-full" activeProfiles);
+      message = "music-lite and music-full are alternatives; enable only one";
+    }
+  ];
 
   pino.subcommands.desktop = lib.mkIf (hasActiveProfile desktopProfiles) {
     description = "Desktop applications and services";
-    commands.services.description = "Desktop network and background services";
-  };
-
-  pino.subcommands.storage = lib.mkIf (hasActiveProfile storageProfiles) {
-    description = "Local and removable storage";
   };
 
   pino.subcommands.server = lib.mkIf (hasActiveProfile serverProfiles) {

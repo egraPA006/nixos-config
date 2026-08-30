@@ -1,22 +1,21 @@
 { pkgs, ... }:
 
 {
+  imports = [ ./gaming-lite.nix ];
+
   services.udev.extraRules = ''
     # Moza (Gudsen) ttyACM devices — uaccess so any logged-in user can reach them
-    SUBSYSTEM=="tty", KERNEL=="ttyACM*", ATTRS{idVendor}=="346e", ACTION=="add", MODE="0666", TAG+="uaccess"
+    SUBSYSTEM=="tty", KERNEL=="ttyACM*", ATTRS{idVendor}=="346e", ACTION=="add", TAG+="uaccess"
     # uinput — needed to create virtual joysticks
     SUBSYSTEM=="misc", KERNEL=="uinput", OPTIONS+="static_node=uinput", TAG+="uaccess"
   '';
   programs.gamescope = {
-    enable = true;
     capSysNice = true;
   };
 
   programs.steam = {
-    enable = true;
     remotePlay.openFirewall = true;
     gamescopeSession = {
-      enable = true;
       args = [
         "--force-grab-cursor"
       ];
@@ -30,12 +29,10 @@
   };
 
   programs.gamemode = {
-    enable = true;
     enableRenice = true;
   };
 
   environment.systemPackages = with pkgs; [
-    mangohud
     gamescope-wsi
     lutris
     r2modman

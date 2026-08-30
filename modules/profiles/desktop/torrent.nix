@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
   cfg          = config.pino.profiles.torrent;
@@ -8,16 +8,11 @@ let
 in
 {
   config = {
-    system.activationScripts.torrent-dirs.text = ''
-      parent="$(dirname "${cfg.localDir}")"
-      if [ -d "$parent" ]; then
-        mkdir -p "${downloadsDir}"
-        mkdir -p "${incompleteDir}"
-        chown -R ${lib.escapeShellArg config.pino.user.name}:users "${cfg.localDir}"
-      else
-        echo "torrent-dirs: $parent not available, skipping" >&2
-      fi
-    '';
+    systemd.tmpfiles.rules = [
+      "d ${cfg.localDir} 0755 ${config.pino.user.name} users -"
+      "d ${downloadsDir} 0755 ${config.pino.user.name} users -"
+      "d ${incompleteDir} 0755 ${config.pino.user.name} users -"
+    ];
 
     services.transmission = {
       enable        = true;
