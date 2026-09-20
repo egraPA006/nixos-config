@@ -1,14 +1,25 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
   imports = [ ./gaming-lite.nix ];
 
-  services.udev.extraRules = ''
-    # Moza (Gudsen) ttyACM devices — uaccess so any logged-in user can reach them
-    SUBSYSTEM=="tty", KERNEL=="ttyACM*", ATTRS{idVendor}=="346e", ACTION=="add", TAG+="uaccess"
-    # uinput — needed to create virtual joysticks
-    SUBSYSTEM=="misc", KERNEL=="uinput", OPTIONS+="static_node=uinput", TAG+="uaccess"
-  '';
+  services.udev.packages = [ pkgs.boxflat ];
+
+  home-manager.users.${config.pino.user.name} = { lib, ... }: {
+    home.activation.boxflatRulesVersion = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      settings="$HOME/.config/boxflat/settings.yml"
+      ${pkgs.coreutils}/bin/mkdir -p -m 0700 "$HOME/.config/boxflat"
+      if [ -f "$settings" ]; then
+        if ${pkgs.gnugrep}/bin/grep -q '^rules-version:' "$settings"; then
+          ${pkgs.gnused}/bin/sed -i 's/^rules-version:.*/rules-version: 2/' "$settings"
+        else
+          printf '\nrules-version: 2\n' >> "$settings"
+        fi
+      else
+        printf 'rules-version: 2\n' | ${pkgs.coreutils}/bin/install -m 0600 /dev/stdin "$settings"
+      fi
+    '';
+  };
   programs.gamescope = {
     capSysNice = true;
   };
