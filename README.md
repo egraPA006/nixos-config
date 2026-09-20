@@ -20,8 +20,10 @@ and merged manually; Pino has no automatic backup or dataset layer.
 The normal VPS flow starts from the temporary Ubuntu or Debian image supplied
 by the provider. Create Bitwarden SSH Key items named `pino-ssh-server-mosk`
 and `pino-ssh-server-halos`. Give the provider only the public half of the
-matching item. Save that same public key locally as a selector, for example
-`~/.ssh/mosk.pub`; its private half stays in Bitwarden SSH Agent.
+matching item. Before initial bootstrap, save that public key locally as a
+selector, for example `~/.ssh/mosk.pub`; its private half stays in Bitwarden
+SSH Agent. On an installed desktop, `pino provision install` updates these
+public selectors automatically.
 
 Log the Bitwarden CLI in once, make sure this checkout is clean and pushed to
 `origin/main`, then run:
@@ -98,8 +100,8 @@ the public key and intentionally have no local password.
 
 A desktop or laptop installation performs no secret provisioning. After the
 first boot, use the copied checkout (or a normal HTTPS `git clone` on an
-already installed host), log in to Bitwarden, and explicitly install only the
-runtime secrets that host needs.
+already installed host), then run `pino provision install` to log in to
+Bitwarden and install the runtime files declared by active profiles.
 
 To reinstall the declared system and bootloader without repartitioning or
 regenerating hardware configuration:
@@ -125,6 +127,7 @@ Enabled profiles are plain lists in `hosts/<host>/active-profiles.nix`.
 pino profile list
 pino profile enable server-web
 pino profile disable torrent
+pino provision install
 ```
 
 The profile catalog in `modules/profiles/default.nix` exposes user-facing roles;
@@ -208,14 +211,14 @@ manual folder comparison while both the local container and external disk are
 unlocked. Do not keep live VPN or server configuration there, and never add
 `~/Secrets`, a LUKS container, or a Bitwarden export to Git.
 
-All working secrets live in Bitwarden. Log its CLI in once on a new host:
+All working secrets live in Bitwarden. On a new host, run:
 
 ```bash
-bw login
+pino provision install
 ```
 
-After that, `pino provision` prompts Bitwarden to unlock when needed. There is
-no shell-session setup command to remember.
+Pino prompts for CLI login on the first run and unlocks the vault on later
+runs. There is no shell-session setup command to remember.
 
 Store every complete runtime file in a uniquely named Secure Note. Names use
 `pino-<type>-<source>-<destination>` where applicable:
@@ -225,6 +228,28 @@ Store every complete runtime file in a uniquely named Secure Note. Names use
 - `pino-vpn-server-mosk` and `pino-vpn-server-halos`;
 - `pino-hotspot-re-1` and `pino-hotspot-la1n`;
 - `pino-galene-mosk-main`.
+
+For desktop SSH selectors, use a device-specific Bitwarden SSH Key item named
+`pino-ssh-<host>-github` (for example, `pino-ssh-re-1-github`), plus
+`pino-ssh-server-mosk` and `pino-ssh-server-halos`. Provision extracts only
+their public keys into `~/.ssh/github.pub`, `mosk.pub`, and `halos.pub`; private
+keys remain in the Bitwarden SSH Agent.
+
+Install every file declared by active profiles on the current host:
+
+```bash
+pino provision install
+```
+
+Each profile declares its Bitwarden item name and destination in its Nix module.
+The VPN client profile declares both VPN connections and the dedicated hotspot
+connection. The workstation profile declares public SSH key selectors. After
+installing the hotspot file, run
+`sudo nmcli connection reload`. Server VPN and Galene profiles declare their
+service restarts. Missing or invalid Bitwarden items are reported at the end;
+other items still install, and the command exits with an error after the full
+run. Rebuild after changing the active profile list so the command uses the new
+declarations.
 
 Install one locally without printing it or creating a plaintext temporary file:
 
@@ -253,10 +278,24 @@ Pino synchronizes Bitwarden first. The destination is root-owned and mode
 `0600`. The server does not need a Bitwarden session when `send` is run from a
 trusted desktop.
 
-Desktop systems install Bitwarden Desktop and point `SSH_AUTH_SOCK` at its
-native Linux agent socket. Enable the SSH agent once in Bitwarden settings and
-test it with `ssh-add -L`. The repository remote then uses the key from
-Bitwarden. See the [Bitwarden SSH agent guide](https://bitwarden.com/help/ssh-agent/).
+Desktop systems install Bitwarden Desktop and the Bitwarden Chromium extension,
+and point `SSH_AUTH_SOCK` at the desktop app's native Linux agent socket. Enable
+the SSH agent once in Bitwarden settings and test it with `ssh-add -L`. The
+GitHub and Mosk SSH host entries explicitly use the Bitwarden Agent and their
+provisioned public keys to select the right identity. The repository remote
+then uses the device-specific GitHub key. After provisioning, Pino tests SSH
+access to the GitHub repository and changes an HTTPS `origin` to SSH if the
+check succeeds. If the Bitwarden SSH Agent is unavailable, the remote stays on
+HTTPS; rerun `pino provision install` after enabling the agent. See the
+[Bitwarden SSH agent guide](https://bitwarden.com/help/ssh-agent/).
+
+Bitwarden keeps vault lock settings per account and app. In Bitwarden Desktop,
+open File → Settings → Account security, set Vault timeout to 1 minute and
+Timeout action to Lock, then enable Unlock with PIN and choose a PIN in the app.
+Keep "Lock with master password on restart" enabled if you want a master
+password prompt after fully quitting and reopening Bitwarden. Configure the
+Chromium extension's timeout and PIN separately in its Account security
+settings. Bitwarden stores these settings locally; Nix does not provision them.
 
 ## VPN modes
 
@@ -335,13 +374,10 @@ pino os package remove ripgrep
 
 ## Git and system updates
 
-GitHub is the only remote:
+Use Git in `~/nixos-config` for status, pull, and push. Update flake inputs with:
 
 ```bash
-pino repo status
-pino repo pull
-pino repo push
-pino repo inputs update
+pino os update
 ```
 
 Only declarative configuration and public host hardware data belong in this

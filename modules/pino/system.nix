@@ -15,6 +15,7 @@ in
       description = "Rebuild NixOS and manage system generations";
       commands = {
         rebuild.description = "Confirm, rebuild, and switch the flake";
+        update.description = "Update flake inputs without rebuilding";
         generation = {
           description = "List, activate, and clean system generations";
           commands = {
@@ -40,7 +41,7 @@ in
         };
       };
       helpText = ''
-        All state-changing operations are interactive. Generation switching
+        Rebuild and generation operations are interactive. Generation switching
         activates the selected system profile generation directly and does not
         evaluate a legacy NIX_PATH configuration. Root invocations delegate to
         the configured Pino user and elevate only the system mutation itself.

@@ -8,6 +8,12 @@ let
   });
 in
 {
+  pino.provision.secrets = [{
+    item = "pino-galene-${config.networking.hostName}-main";
+    target = "/etc/pino/galene/main.json";
+    units = [ "galene.service" ];
+  }];
+
   assertions = [{
     assertion = cfg.domain != null;
     message = "server-galene requires pino.server.domain or pino.server.galene.domain";

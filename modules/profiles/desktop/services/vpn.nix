@@ -54,6 +54,12 @@ EOF
   '';
 in
 {
+  pino.provision.secrets = [
+    { item = "pino-vpn-client-${config.networking.hostName}-mosk"; target = "/etc/amneziawg/mosk.conf"; }
+    { item = "pino-vpn-client-${config.networking.hostName}-halos"; target = "/etc/amneziawg/halos.conf"; }
+    { item = "pino-hotspot-${config.networking.hostName}"; target = "/etc/NetworkManager/system-connections/${share.connection}.nmconnection"; }
+  ];
+
   programs.amnezia-vpn.enable = true;
 
   systemd.tmpfiles.rules = [
@@ -146,13 +152,13 @@ in
       };
     };
     helpText = ''
-      Store complete configs as uniquely named Bitwarden Secure Notes, then run:
-      `pino provision install pino-vpn-client-re-1-mosk /etc/amneziawg/mosk.conf`.
+      Store complete configs as uniquely named Bitwarden Secure Notes, then run
+      `pino provision install` to install the files declared by this profile.
       Pino selects one full-route connection at a time to avoid route conflicts.
       `share` only affects the dedicated `${share.connection}` connection. A hotspot
       created normally in GNOME keeps NetworkManager's normal routing behaviour.
-      Provision the `${share.connection}.nmconnection` Secure Note into
-      `/etc/NetworkManager/system-connections/`, then run `sudo nmcli connection reload`.
+      After provisioning the `${share.connection}.nmconnection` Secure Note,
+      run `sudo nmcli connection reload`.
     '';
     script = ''
       VPN_SHARE_WIFI=${lib.escapeShellArg (if share.wifiInterface == null then "" else share.wifiInterface)}

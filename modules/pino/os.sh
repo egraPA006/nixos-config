@@ -112,6 +112,7 @@ gc_os() {
 
 case "${1:-}" in
   rebuild) rebuild_os ;;
+  update) nix flake update --flake "$CONFIG_DIR" ;;
   generation)
     case "${2:-}" in
       list) list_generations ;;
@@ -124,6 +125,7 @@ case "${1:-}" in
     echo "pino os — manage the NixOS system"
     echo
     echo "  rebuild          Confirm, rebuild, and switch the flake"
+    echo "  update           Update flake.lock without rebuilding"
     echo "  generation       List, activate, and clean generations"
     ;;
   *) echo "pino os: unknown command '$1'" >&2; exit 1 ;;

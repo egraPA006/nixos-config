@@ -114,6 +114,12 @@ let
   '';
 in
 {
+  pino.provision.secrets = [{
+    item = "pino-vpn-server-${config.networking.hostName}";
+    target = cfg.configFile;
+    units = [ "amneziawg-server.service" "pino-vpn-mode.service" ];
+  }];
+
   boot.extraModulePackages = [ config.boot.kernelPackages.amneziawg ];
   boot.kernelModules = [ "amneziawg" ];
   networking.nftables.enable = true;

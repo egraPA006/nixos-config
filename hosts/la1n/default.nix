@@ -21,12 +21,14 @@
 
   programs.ssh.extraConfig = ''
     Host github.com
+      IdentityAgent ${config.pino.user.home}/.bitwarden-ssh-agent.sock
       IdentityFile ${config.pino.user.home}/.ssh/github.pub
       IdentitiesOnly yes
 
     Host mosk
       HostName vpn.egrapa.com
       User vincent
+      IdentityAgent ${config.pino.user.home}/.bitwarden-ssh-agent.sock
       IdentityFile ${config.pino.user.home}/.ssh/mosk.pub
       IdentitiesOnly yes
   '';

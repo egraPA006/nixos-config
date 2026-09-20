@@ -24,43 +24,144 @@ stream_note() {
     | jq -er 'select(.type == 2 and (.notes | type == "string")) | .notes'
 }
 
-operation="${1:-}"
-item="${2:-}"
-[ -n "$item" ] || { echo "A unique Bitwarden item name is required." >&2; exit 1; }
-[[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; exit 1; }
-if [ -z "${BW_SESSION:-}" ]; then
-  echo "Unlocking Bitwarden..." >&2
-  BW_SESSION="$(bw unlock --raw)" || {
-    echo "Bitwarden CLI is not logged in. Run 'bw login' once, then retry." >&2
-    exit 1
-  }
-  export BW_SESSION
-fi
+install_note() {
+  local item="$1" target="$2" payload
+  shift 2
+  [[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; return 1; }
+  validate_target "$target" || return 1
+  validate_units "$@" || return 1
+  if ! payload="$(stream_note "$item")"; then
+    echo "Could not read '$item' as a Bitwarden Secure Note." >&2
+    return 1
+  fi
+  [ -n "$payload" ] || { echo "Bitwarden Secure Note '$item' is empty." >&2; return 1; }
+  printf '%s\n' "$payload" | sudo install -D -o root -g root -m 0600 /dev/stdin "$target" || return 1
+  if [ "$#" -gt 0 ]; then sudo systemctl restart "$@" || return 1; fi
+  echo "Provisioned '$item' at $target."
+}
 
-if [ "$operation" = send ]; then
-  host="${3:-}"
-  target="${4:-}"
-  shift_count=4
-  [[ "$host" =~ ^[A-Za-z0-9_.@-]+$ ]] || { echo "Invalid SSH host: $host" >&2; exit 1; }
-elif [ "$operation" = install ]; then
-  target="${3:-}"
-  shift_count=3
+install_public_key() {
+  local item="$1" target="$2" public_key
+  [[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; return 1; }
+  validate_target "$target" || return 1
+  [[ "$target" == "$HOME/.ssh/"* ]] || {
+    echo "SSH public key target must be below ~/.ssh." >&2
+    return 1
+  }
+  if ! public_key="$(bw get item "$item" | jq -er 'select(.type == 5) | .sshKey.publicKey | select(type == "string")')"; then
+    echo "Could not read '$item' as a Bitwarden SSH Key." >&2
+    return 1
+  fi
+  [[ "$public_key" =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-[A-Za-z0-9-]+)[[:space:]][A-Za-z0-9+/=]+([[:space:]].*)?$ ]] || {
+    echo "Invalid SSH public key in '$item'." >&2
+    return 1
+  }
+  install -d -m 0700 "$HOME/.ssh" || return 1
+  printf '%s\n' "$public_key" | install -m 0644 /dev/stdin "$target" || return 1
+  echo "Provisioned public key '$item' at $target."
+}
+
+provision_step() {
+  local item="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf 'OK   %s\n' "$item"
+  else
+    failed_items+=("$item")
+    printf 'FAIL %s\n' "$item" >&2
+  fi
+}
+
+switch_github_remote() {
+  local config_dir="$1" current_remote ssh_remote
+  current_remote="$(git -C "$config_dir" config --local --get remote.origin.url 2>/dev/null)" || return 0
+  if [[ ! "$current_remote" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(\.git)?$ ]]; then
+    return 0
+  fi
+  ssh_remote="git@github.com:${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+  if git -C "$config_dir" -c 'core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=yes' \
+    ls-remote "$ssh_remote" HEAD >/dev/null 2>&1; then
+    if git -C "$config_dir" remote set-url origin "$ssh_remote" >/dev/null 2>&1; then
+      echo "OK   git origin (HTTPS -> SSH): $ssh_remote"
+      return 0
+    fi
+  fi
+  echo "FAIL git origin (HTTPS -> SSH)" >&2
+  return 1
+}
+
+operation="${1:-}"
+if [ "$operation" = install ] && [ "$#" -eq 1 ]; then
+  mode=declared
+elif [ "$operation" = install ] && [ "$#" -ge 3 ]; then
+  mode=single
+elif [ "$operation" = send ] && [ "$#" -ge 4 ]; then
+  mode=send
 else
   echo "Run 'pino provision help' for usage." >&2
   exit 1
 fi
 
-validate_target "$target"
-shift "$shift_count"
-validate_units "$@"
+if [ "$mode" = declared ] && [ "@declaredCount@" -eq 0 ]; then
+  echo "No secrets are declared for active profiles."
+  exit 0
+fi
+
+if [ -z "${BW_SESSION:-}" ]; then
+  vault_status="$(bw status | jq -er '.status')" || {
+    echo "Could not read Bitwarden CLI status." >&2
+    exit 1
+  }
+  case "$vault_status" in
+    unauthenticated)
+      echo "Logging in to Bitwarden..." >&2
+      BW_SESSION="$(bw login --raw)" || exit 1
+      ;;
+    locked|unlocked)
+      echo "Unlocking Bitwarden..." >&2
+      BW_SESSION="$(bw unlock --raw)" || exit 1
+      ;;
+    *) echo "Unknown Bitwarden CLI status: $vault_status" >&2; exit 1 ;;
+  esac
+  [ -n "$BW_SESSION" ] || { echo "Bitwarden did not return a session." >&2; exit 1; }
+  export BW_SESSION
+fi
 bw sync >/dev/null
+
+if [ "$mode" = declared ]; then
+  failed_items=()
+  @declaredSecrets@
+  @afterDeclared@
+  if [ "${#failed_items[@]}" -gt 0 ]; then
+    printf 'Failed (%d): %s' "${#failed_items[@]}" "${failed_items[0]}" >&2
+    for item in "${failed_items[@]:1}"; do printf ', %s' "$item" >&2; done
+    printf '\n' >&2
+    exit 1
+  fi
+  echo 'Failed: none.'
+  exit 0
+fi
+
+item="$2"
+[[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; exit 1; }
+if [ "$mode" = single ]; then
+  install_note "$item" "${3:-}" "${@:4}"
+  exit 0
+fi
+
+host="$3"
+target="$4"
+[[ "$host" =~ ^[A-Za-z0-9_.@-]+$ ]] || { echo "Invalid SSH host: $host" >&2; exit 1; }
+validate_target "$target"
+shift 4
+validate_units "$@"
 if ! payload="$(stream_note "$item")"; then
   echo "Could not read '$item' as a Bitwarden Secure Note." >&2
   exit 1
 fi
 [ -n "$payload" ] || { echo "Bitwarden Secure Note '$item' is empty." >&2; exit 1; }
 
-if [ "$operation" = send ]; then
+if [ "$mode" = send ]; then
   printf -v remote_install 'sudo install -D -o root -g root -m 0600 /dev/stdin %q' "$target"
   remote_restart=""
   if [ "$#" -gt 0 ]; then
@@ -77,9 +178,6 @@ if [ "$operation" = send ]; then
     ssh_args+=(-o "UserKnownHostsFile=$PINO_SSH_KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes)
   fi
   printf '%s\n' "$payload" | ssh "${ssh_args[@]}" "$host" "$remote_install$remote_restart"
-else
-  printf '%s\n' "$payload" | sudo install -D -o root -g root -m 0600 /dev/stdin "$target"
-  if [ "$#" -gt 0 ]; then sudo systemctl restart "$@"; fi
 fi
 
 echo "Provisioned '$item' at $target."
