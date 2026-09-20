@@ -47,7 +47,7 @@ in
   };
 
   environment.gnome.excludePackages = with pkgs; [
-    gnome-photos
+    loupe
     gnome-tour
     gnome-music
     epiphany
