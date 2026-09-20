@@ -1,4 +1,21 @@
 { config, pkgs, ... }:
+let
+  disableOpenrgbLogitechDetector = pkgs.writeShellScript "disable-openrgb-logitech-detector" ''
+    set -eu
+    settings="$1"
+    ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$settings")"
+    if [ ! -f "$settings" ]; then
+      printf '{}\n' > "$settings"
+    fi
+    if ${pkgs.jq}/bin/jq -e '.Detectors.detectors["Logitech HID++ 2.0"] == false' "$settings" >/dev/null; then
+      exit 0
+    fi
+    temporary="$(${pkgs.coreutils}/bin/mktemp "''${settings}.XXXXXX")"
+    trap '${pkgs.coreutils}/bin/rm -f "$temporary"' EXIT
+    ${pkgs.jq}/bin/jq '.Detectors.detectors["Logitech HID++ 2.0"] = false' "$settings" > "$temporary"
+    ${pkgs.coreutils}/bin/mv "$temporary" "$settings"
+  '';
+in
 {
   imports = [
     ./hardware.nix
@@ -31,6 +48,9 @@
   ];
 
   services.hardware.openrgb.enable = true;
+  systemd.services.openrgb.preStart = ''
+    ${disableOpenrgbLogitechDetector} /var/lib/OpenRGB/OpenRGB.json
+  '';
 
   environment.etc."systemd/sleep.conf.d/nosuspend.conf".text = ''
     [Sleep]
@@ -54,7 +74,11 @@
       IdentitiesOnly yes
   '';
 
-  home-manager.users.${config.pino.user.name} = {
+  home-manager.users.${config.pino.user.name} = { lib, ... }: {
+    home.activation.disableOpenrgbLogitechDetector =
+      lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        ${disableOpenrgbLogitechDetector} "$HOME/.config/OpenRGB/OpenRGB.json"
+      '';
     systemd.user.services.monitor-default = {
       Unit.Description = "Apply default single-monitor profile";
       Unit.After = [ "graphical-session.target" ];
