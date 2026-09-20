@@ -25,10 +25,14 @@ ssh-keygen -lf "$identity_file" >/dev/null
 
 [ -n "${SSH_AUTH_SOCK:-}" ] || { echo "SSH_AUTH_SOCK is not set; enable Bitwarden SSH Agent." >&2; exit 1; }
 ssh-add -L >/dev/null 2>&1 || { echo "Bitwarden SSH Agent is locked or has no keys." >&2; exit 1; }
-[ -n "${BW_SESSION:-}" ] || {
-  echo 'Unlock Bitwarden CLI first: export BW_SESSION="$(bw unlock --raw)"' >&2
-  exit 1
-}
+if [ -z "${BW_SESSION:-}" ]; then
+  echo "Unlocking Bitwarden..." >&2
+  BW_SESSION="$(bw unlock --raw)" || {
+    echo "Bitwarden CLI is not logged in. Run 'bw login' once, then retry." >&2
+    exit 1
+  }
+  export BW_SESSION
+fi
 
 address="${initial_target#*@}"
 final_user="$(nix eval --raw "path:$BOOTSTRAP_CONFIG_DIR#nixosConfigurations.$host.config.pino.user.name")"

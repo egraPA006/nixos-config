@@ -21,13 +21,13 @@
 
   programs.ssh.extraConfig = ''
     Host github.com
-      IdentityFile ${config.pino.user.home}/.ssh/github_ed25519
+      IdentityFile ${config.pino.user.home}/.ssh/github.pub
       IdentitiesOnly yes
 
     Host mosk
       HostName vpn.egrapa.com
       User vincent
-      IdentityFile ${config.pino.user.home}/.ssh/mosk_ed25519
+      IdentityFile ${config.pino.user.home}/.ssh/mosk.pub
       IdentitiesOnly yes
   '';
 

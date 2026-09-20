@@ -28,10 +28,14 @@ operation="${1:-}"
 item="${2:-}"
 [ -n "$item" ] || { echo "A unique Bitwarden item name is required." >&2; exit 1; }
 [[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; exit 1; }
-[ -n "${BW_SESSION:-}" ] || {
-  echo 'Unlock Bitwarden first: export BW_SESSION="$(bw unlock --raw)"' >&2
-  exit 1
-}
+if [ -z "${BW_SESSION:-}" ]; then
+  echo "Unlocking Bitwarden..." >&2
+  BW_SESSION="$(bw unlock --raw)" || {
+    echo "Bitwarden CLI is not logged in. Run 'bw login' once, then retry." >&2
+    exit 1
+  }
+  export BW_SESSION
+fi
 
 if [ "$operation" = send ]; then
   host="${3:-}"

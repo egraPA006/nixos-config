@@ -15,7 +15,6 @@
     ../pino/bootstrap.nix
     ../pino/secrets.nix
     ../pino/env.nix
-    ../pino/backup.nix
     ../pino/top.nix
   ];
 }

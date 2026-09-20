@@ -6,6 +6,7 @@
   imports = [
     ../../modules/core
     ../../modules/desktop
+    ../../modules/pino/files.nix
     ../../modules/profiles
   ];
 }

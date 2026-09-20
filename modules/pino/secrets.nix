@@ -14,12 +14,12 @@ in
     };
     mountPoint = lib.mkOption {
       type = lib.types.str;
-      default = "${user.home}/secrets";
+      default = "${user.home}/Secrets";
       description = "Directory where the secrets container is mounted";
     };
     size = lib.mkOption {
       type = lib.types.strMatching "[1-9][0-9]*[MG]";
-      default = "1G";
+      default = "10G";
       description = "Size allocated on the first pino secret unlock";
     };
   };
@@ -44,8 +44,8 @@ in
     pino.subcommands.secret = {
       description = "Lock or unlock the local LUKS recovery folder";
       commands = {
-        unlock.description = "Create if needed, then unlock and mount ~/secrets";
-        lock.description = "Unmount and lock ~/secrets";
+        unlock.description = "Create if needed, then unlock and mount ~/Secrets";
+        lock.description = "Unmount and lock ~/Secrets";
       };
       helpText = ''
         The encrypted container is ${cfg.container} and mounts at ${cfg.mountPoint}.

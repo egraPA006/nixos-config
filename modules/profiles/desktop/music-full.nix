@@ -40,8 +40,9 @@ in
       };
       helpText = ''
         Put .exe or .msi installers in ${installersDir}, restore that directory
-        from a backup on a new system, then run each installer. Wine is prepared
-        automatically. Install VST files into ${pluginsDir}; run `sync` afterwards.
+        from the external disk on a new system, then run each installer. Wine
+        is prepared automatically. Install VST files into ${pluginsDir}; run
+        `sync` afterwards.
       '';
       script = ''
         WINE_PREFIX="${cfg.winePrefix}"

@@ -1,6 +1,9 @@
 result
 result-*
-data/**
-!data/**/
-!data/**/.gitkeep
-!data/**/README
+*.luks
+.env
+.env.*
+Secrets/
+secrets/
+bitwarden_export*
+hosts/*/active-profiles.nix.backup.*

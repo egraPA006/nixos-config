@@ -9,8 +9,9 @@ One small flake for four machines:
 
 There is no Disko, Btrfs, mail server, or Git mirror. GitHub stores only the
 public configuration. Bitwarden stores passwords, SSH keys, and runtime
-configuration. A local LUKS2 container mounted at `~/secrets` stores recovery
-material only. Offline disks store folder snapshots.
+configuration. A 10 GiB local LUKS2 container mounted at `~/Secrets` stores
+recovery codes and document copies only. An external LUKS2 disk is compared
+and merged manually; Pino has no automatic backup or dataset layer.
 
 ## Fresh installation
 
@@ -22,13 +23,15 @@ and `pino-ssh-server-halos`. Give the provider only the public half of the
 matching item. Save that same public key locally as a selector, for example
 `~/.ssh/mosk.pub`; its private half stays in Bitwarden SSH Agent.
 
-Unlock Bitwarden CLI, make sure this checkout is clean and pushed to
+Log the Bitwarden CLI in once, make sure this checkout is clean and pushed to
 `origin/main`, then run:
 
 ```bash
-export BW_SESSION="$(bw unlock --raw)"
+bw login
 pino bootstrap install mosk ubuntu@203.0.113.10 ~/.ssh/mosk.pub
 ```
+
+`pino bootstrap` unlocks and synchronizes Bitwarden itself when needed.
 
 `install` requires an x86_64 Linux VPS with passwordless root or `sudo`, enough
 RAM for the pinned NixOS kexec installer, working DHCP, and Secure Boot disabled.
@@ -93,6 +96,11 @@ installs the bootloader, copies the Git checkout, optionally installs one SSH
 public key, and asks for the local user password on desktops. Servers require
 the public key and intentionally have no local password.
 
+A desktop or laptop installation performs no secret provisioning. After the
+first boot, use the copied checkout (or a normal HTTPS `git clone` on an
+already installed host), log in to Bitwarden, and explicitly install only the
+runtime secrets that host needs.
+
 To reinstall the declared system and bootloader without repartitioning or
 regenerating hardware configuration:
 
@@ -136,13 +144,18 @@ Desktop profiles are:
 The current host assignments are:
 
 - `la1n`: workstation, GNOME, development, VPN client, light gaming, and light music;
-- `re-1`: workstation, GNOME, development, VPN client, full gaming, and torrent;
+- `re-1`: workstation, GNOME, development, VPN client, full gaming, torrent, and light music;
 - `mosk`: VPN server, static website, and Galene;
 - `halos`: VPN server only.
 
 `music-full` is kept as an on-demand `re-1` profile. Its installers live under
 `/data/fast/music-full/installers`; `pino desktop music-full install` prepares
 Wine automatically and `pino desktop music-full sync` runs yabridge.
+
+Profiles preserve their normal application data when disabled. A future
+artifact drop-in flow (for example, placing plugins in a known folder and
+activating them) is intentionally left as a documented extension point; it is
+not implemented yet.
 
 Server profiles are:
 
@@ -179,31 +192,30 @@ instead of storing a plaintext password:
 
 ## Local secrets, Bitwarden, and SSH
 
-On `re-1` and `la1n`, `~/secrets` is an ext4 filesystem inside a LUKS2
+On `re-1` and `la1n`, `~/Secrets` is an ext4 filesystem inside a 10 GiB LUKS2
 container file on the normal root filesystem. It is not a partition and is not
 mounted at boot. It contains recovery codes, encrypted authenticator exports,
-and other emergency material only. The first unlock creates the container and
-asks for a new LUKS passphrase:
+document copies, and other emergency material only. The first unlock creates
+the container and asks for a new LUKS passphrase:
 
 ```bash
 pino secret unlock
 pino secret lock
 ```
 
-The encrypted file is `~/.local/share/pino/secrets.luks`. Back up that file as
-a whole; external-disk synchronization will be added to `pino backup` later.
-For safety, `pino backup` refuses a source or restore target containing an
-unlocked `~/secrets`; lock it first.
-Do not keep live VPN or server configuration there, and do not add
-`~/secrets` or the container to Git.
+The encrypted file is `~/.local/share/pino/secrets.luks`. Synchronization is a
+manual folder comparison while both the local container and external disk are
+unlocked. Do not keep live VPN or server configuration there, and never add
+`~/Secrets`, a LUKS container, or a Bitwarden export to Git.
 
-All working secrets live in Bitwarden. Log in once, then unlock its CLI in each
-trusted shell where provisioning is needed:
+All working secrets live in Bitwarden. Log its CLI in once on a new host:
 
 ```bash
 bw login
-export BW_SESSION="$(bw unlock --raw)"
 ```
+
+After that, `pino provision` prompts Bitwarden to unlock when needed. There is
+no shell-session setup command to remember.
 
 Store every complete runtime file in a uniquely named Secure Note. Names use
 `pino-<type>-<source>-<destination>` where applicable:
@@ -226,6 +238,15 @@ Or send it directly from Bitwarden to a server over SSH:
 pino provision send pino-vpn-server-mosk mosk \
   /etc/pino/vpn/awg0.conf \
   amneziawg-server.service pino-vpn-mode.service
+```
+
+As an explicit manual alternative, stream a file from any trusted unlocked
+folder to the same root-owned destination, then restart the service:
+
+```bash
+ssh mosk 'sudo install -D -o root -g root -m 0600 /dev/stdin /etc/pino/vpn/awg0.conf' \
+  < /trusted/folder/awg0.conf
+ssh mosk sudo systemctl restart amneziawg-server.service pino-vpn-mode.service
 ```
 
 Pino synchronizes Bitwarden first. The destination is root-owned and mode
@@ -251,28 +272,27 @@ pino server vpn mode set full     # Internet exit, server, and VPN peers
 The AmneziaWG configuration lives at `/etc/pino/vpn/awg0.conf` and is normally
 provisioned from a uniquely named Bitwarden Secure Note.
 
-## Offline backups
+## Manual files and encrypted external disk
 
-Initialize a whole backup disk once. This erases it and creates one ext4
-partition labelled `pino-backup`:
-
-```bash
-sudo scripts/backup-disk-init.sh /dev/sdX
-```
-
-Reconnect or mount it, then use its mount path or mounted block device:
+Initialize a whole external disk once. This erases it and creates one LUKS2
+partition containing ext4:
 
 ```bash
-pino backup /run/media/$USER/pino-backup ~/Pictures photos
-pino backup push /run/media/$USER/pino-backup ~/Projects projects
-pino backup status /run/media/$USER/pino-backup
-pino backup pull /run/media/$USER/pino-backup ~/Pictures photos
+sudo scripts/encrypted-disk-init.sh /dev/sdX
 ```
 
-Each push creates an immutable, hard-linked snapshot. Pull requires typing an
-explicit confirmation because it makes the target folder exactly match the
-snapshot. Push stops with a conflict if the disk changed since this machine's
-last push or pull.
+Reconnect the disk, unlock it with the desktop disk prompt, enter either local
+folder, and open a two-way comparison:
+
+```bash
+cd ~/Pictures
+pino files merge /run/media/$USER/pino-external/Pictures
+```
+
+Meld shows additions, changes, and deletions in both directions and applies
+only the operations selected in its UI. The same command can compare an
+unlocked `~/Secrets` with its folder on the encrypted disk. There are no
+snapshots, automatic synchronization, retention rules, or Pino metadata.
 
 ## Development environments and packages
 
@@ -280,20 +300,31 @@ Create a normal project-local development flake:
 
 ```bash
 pino env init cpp ./my-project
-pino env enter ./my-project
+cd ./my-project
+nix develop
 ```
 
-Without a path, the environment is personal and lives below
-`~/.config/pino/envs`:
+For a persistent package-only environment, create and enter a named profile:
 
 ```bash
-pino env init python
+pino env create lab python
 pino env list
-pino env enter python
+pino env enter lab
+pino env add ripgrep
+exit
 ```
 
-Available presets are `cpp`, `python`, and `verilog`. One-off user packages do
-not require a system rebuild:
+Packages added inside `lab` remain there, but files, processes, and networking
+are not isolated. Delete the package profile without touching project files,
+or export it as a reusable dev-shell configuration:
+
+```bash
+pino env export lab ./lab-template
+pino env delete lab
+```
+
+Available presets are `empty`, `cpp`, `python`, and `verilog`. One-off global
+user packages still do not require a system rebuild:
 
 ```bash
 pino os package search ripgrep
@@ -312,6 +343,11 @@ pino repo pull
 pino repo push
 pino repo inputs update
 ```
+
+Only declarative configuration and public host hardware data belong in this
+repository. `.gitignore` rejects common local secret containers, dotenv files,
+`Secrets` folders, and Bitwarden exports; inspect `git status` and the staged
+diff before every push.
 
 Rebuild the current host with:
 
