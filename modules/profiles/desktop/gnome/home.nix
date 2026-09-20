@@ -131,6 +131,7 @@
         "org.telegram.desktop.desktop"
       ];
       enabled-extensions = [
+        "appindicatorsupport@rgcjonas.gmail.com"
         "clipboard-history@alexsaveau.dev"
         "tiling-assistant@leleat-on-github"
       ];

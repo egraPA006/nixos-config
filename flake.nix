@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-openrgb.url = "github:NixOS/nixpkgs/148bab9c1c3c53136ecb44a6ea356a0ed5b39b06";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -10,7 +11,7 @@
     nixos-images.url = "github:nix-community/nixos-images";
   };
 
-  outputs = { self, nixpkgs, home-manager, nixos-images, ... }:
+  outputs = { self, nixpkgs, nixpkgs-openrgb, home-manager, nixos-images, ... }:
   let
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
 
@@ -38,6 +39,7 @@
     };
     re1 = mkHost "re-1" [
       { nixpkgs.overlays = [ overlays.neural-amp-modeler-lv2-0_2_0 ]; }
+      { services.hardware.openrgb.package = nixpkgs-openrgb.legacyPackages.x86_64-linux.openrgb; }
     ];
   in {
     packages.x86_64-linux.kexec-installer =

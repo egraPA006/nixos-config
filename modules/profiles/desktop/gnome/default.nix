@@ -26,6 +26,7 @@ in
   };
 
   environment.systemPackages = (with pkgs.gnomeExtensions; [
+    appindicator
     clipboard-history
     tiling-assistant
   ]) ++ [ monitorTool ];
