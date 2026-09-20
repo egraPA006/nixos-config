@@ -40,15 +40,18 @@ install_note() {
   echo "Provisioned '$item' at $target."
 }
 
-install_public_key() {
-  local item="$1" target="$2" public_key
+install_ssh_key() {
+  local item="$1" target="$2" item_json private_key public_key derived_key
+  local public_type public_data derived_type derived_data
   [[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; return 1; }
   validate_target "$target" || return 1
   [[ "$target" == "$HOME/.ssh/"* ]] || {
-    echo "SSH public key target must be below ~/.ssh." >&2
+    echo "SSH key target must be below ~/.ssh." >&2
     return 1
   }
-  if ! public_key="$(bw get item "$item" | jq -er 'select(.type == 5) | .sshKey.publicKey | select(type == "string")')"; then
+  if ! item_json="$(bw get item "$item")" ||
+     ! private_key="$(jq -er 'select(.type == 5) | .sshKey.privateKey | select(type == "string" and length > 0)' <<< "$item_json")" ||
+     ! public_key="$(jq -er 'select(.type == 5) | .sshKey.publicKey | select(type == "string")' <<< "$item_json")"; then
     echo "Could not read '$item' as a Bitwarden SSH Key." >&2
     return 1
   fi
@@ -56,9 +59,19 @@ install_public_key() {
     echo "Invalid SSH public key in '$item'." >&2
     return 1
   }
+  if ! derived_key="$(printf '%s\n' "$private_key" | ssh-keygen -y -P '' -f /dev/stdin 2>/dev/null)"; then
+    echo "Invalid or passphrase-protected SSH private key in '$item'." >&2
+    return 1
+  fi
+  read -r public_type public_data _ <<< "$public_key"
+  read -r derived_type derived_data _ <<< "$derived_key"
+  [ "$public_type" = "$derived_type" ] && [ "$public_data" = "$derived_data" ] || {
+    echo "SSH public and private keys do not match in '$item'." >&2
+    return 1
+  }
   install -d -m 0700 "$HOME/.ssh" || return 1
-  printf '%s\n' "$public_key" | install -m 0644 /dev/stdin "$target" || return 1
-  echo "Provisioned public key '$item' at $target."
+  printf '%s\n' "$private_key" | install -m 0600 /dev/stdin "$target" || return 1
+  printf '%s\n' "$public_key" | install -m 0644 /dev/stdin "$target.pub" || return 1
 }
 
 provision_step() {

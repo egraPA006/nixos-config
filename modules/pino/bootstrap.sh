@@ -14,6 +14,9 @@ case "$host" in mosk|halos) ;; *) echo "Host must be mosk or halos." >&2; exit 1
   exit 1
 }
 [ -f "$identity_file" ] || { echo "Public key file not found: $identity_file" >&2; exit 1; }
+[[ "$identity_file" == *.pub ]] || { echo "Pass a .pub identity selector." >&2; exit 1; }
+private_key="${identity_file%.pub}"
+[ -f "$private_key" ] || { echo "Private key not found; run 'pino provision install' first." >&2; exit 1; }
 
 public_key="$(tr -d '\r' < "$identity_file")"
 [[ "$public_key" != *$'\n'* ]] || { echo "Public key file must contain exactly one key." >&2; exit 1; }
@@ -22,9 +25,16 @@ case "$public_key" in
   *) echo "The identity selector must contain an SSH public key, never a private key." >&2; exit 1 ;;
 esac
 ssh-keygen -lf "$identity_file" >/dev/null
-
-[ -n "${SSH_AUTH_SOCK:-}" ] || { echo "SSH_AUTH_SOCK is not set; enable Bitwarden SSH Agent." >&2; exit 1; }
-ssh-add -L >/dev/null 2>&1 || { echo "Bitwarden SSH Agent is locked or has no keys." >&2; exit 1; }
+private_public="$(ssh-keygen -y -P '' -f "$private_key" 2>/dev/null)" || {
+  echo "Private key is invalid or passphrase-protected: $private_key" >&2
+  exit 1
+}
+read -r public_type public_data _ <<< "$public_key"
+read -r private_type private_data _ <<< "$private_public"
+[ "$public_type" = "$private_type" ] && [ "$public_data" = "$private_data" ] || {
+  echo "Public and private identity files do not match." >&2
+  exit 1
+}
 if [ -z "${BW_SESSION:-}" ]; then
   echo "Unlocking Bitwarden..." >&2
   BW_SESSION="$(bw unlock --raw)" || {
@@ -46,15 +56,17 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 ssh_options=(
-  -i "$identity_file"
+  -i "$private_key"
   -o IdentitiesOnly=yes
+  -o IdentityAgent=none
   -o UserKnownHostsFile="$known_hosts"
   -o StrictHostKeyChecking=ask
   -o ConnectTimeout=10
 )
 scp_options=(
-  -i "$identity_file"
+  -i "$private_key"
   -o IdentitiesOnly=yes
+  -o IdentityAgent=none
   -o UserKnownHostsFile="$known_hosts"
   -o StrictHostKeyChecking=ask
   -o ConnectTimeout=10

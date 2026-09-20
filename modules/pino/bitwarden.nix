@@ -12,13 +12,13 @@ let
     };
   };
   secrets = config.pino.provision.secrets;
-  publicKeys = config.pino.provision.publicKeys;
+  sshKeys = config.pino.provision.sshKeys;
   installCommands = lib.concatMapStringsSep "\n" (key:
-    "provision_step ${lib.escapeShellArg key.item} install_public_key ${lib.escapeShellArg key.item} ${lib.escapeShellArg key.target}"
-  ) publicKeys + "\n" + lib.concatMapStringsSep "\n" (secret:
+    "provision_step ${lib.escapeShellArg key.item} install_ssh_key ${lib.escapeShellArg key.item} ${lib.escapeShellArg key.target}"
+  ) sshKeys + "\n" + lib.concatMapStringsSep "\n" (secret:
     "provision_step ${lib.escapeShellArg secret.item} install_note ${lib.concatStringsSep " " (map lib.escapeShellArg ([ secret.item secret.target ] ++ secret.units))}"
   ) secrets;
-  afterInstall = lib.optionalString (lib.any (key: lib.hasSuffix "/.ssh/github.pub" key.target) publicKeys)
+  afterInstall = lib.optionalString (lib.any (key: lib.hasSuffix "/.ssh/github" key.target) sshKeys)
     ''if ! switch_github_remote ${lib.escapeShellArg config.pino.configDir}; then failed_items+=("git origin"); fi'';
 in
 {
@@ -27,15 +27,15 @@ in
     default = [ ];
     description = "Runtime files installed locally from Bitwarden for active profiles";
   };
-  options.pino.provision.publicKeys = lib.mkOption {
+  options.pino.provision.sshKeys = lib.mkOption {
     type = lib.types.listOf (lib.types.submodule {
       options = {
         item = lib.mkOption { type = lib.types.str; description = "Bitwarden SSH Key item name"; };
-        target = lib.mkOption { type = lib.types.str; description = "Public key path below ~/.ssh"; };
+        target = lib.mkOption { type = lib.types.str; description = "Private key path below ~/.ssh"; };
       };
     });
     default = [ ];
-    description = "SSH public key selectors installed locally from Bitwarden";
+    description = "SSH key pairs installed locally from Bitwarden";
   };
 
   config = {
@@ -58,12 +58,12 @@ in
         Pino prompts for Bitwarden login or unlock when needed, syncs before
         reading an item, and never
         writes secret contents to a temporary file. With no arguments, `install`
-        installs every secret and SSH public key declared by active profiles.
+        installs every secret and SSH key pair declared by active profiles.
         It continues past individual failures and reports them at the end.
         On a desktop, it switches the Git origin to SSH after verifying access.
       '';
       script = builtins.replaceStrings [ "@declaredCount@" "@declaredSecrets@" "@afterDeclared@" ]
-        [ (toString (builtins.length secrets + builtins.length publicKeys)) installCommands afterInstall ]
+        [ (toString (builtins.length secrets + builtins.length sshKeys)) installCommands afterInstall ]
         (builtins.readFile ./bitwarden.sh);
     };
   };

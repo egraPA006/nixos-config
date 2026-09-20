@@ -22,8 +22,9 @@ in
         };
       };
       helpText = ''
-        The public key file selects the matching private key already exposed by
-        Bitwarden SSH Agent. The private key is never copied or passed to Pino.
+        The public key file selects a matching private key beside it, installed
+        earlier by `pino provision install`. The private key is never copied to
+        the installer or committed to Git.
 
         `install` starts from Ubuntu or another x86_64 Linux VPS, boots the pinned
         NixOS installer through kexec, installs /dev/vda, reboots, and provisions

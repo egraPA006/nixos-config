@@ -21,15 +21,15 @@ The normal VPS flow starts from the temporary Ubuntu or Debian image supplied
 by the provider. Create Bitwarden SSH Key items named `pino-ssh-server-mosk`
 and `pino-ssh-server-halos`. Give the provider only the public half of the
 matching item. Before initial bootstrap, save that public key locally as a
-selector, for example `~/.ssh/mosk.pub`; its private half stays in Bitwarden
-SSH Agent. On an installed desktop, `pino provision install` updates these
-public selectors automatically.
+selector, for example `~/.ssh/mosk.pub`. On an installed desktop,
+`pino provision install` installs both halves locally as `~/.ssh/mosk` and
+`~/.ssh/mosk.pub`.
 
-Log the Bitwarden CLI in once, make sure this checkout is clean and pushed to
+Provision the SSH key, make sure this checkout is clean and pushed to
 `origin/main`, then run:
 
 ```bash
-bw login
+pino provision install
 pino bootstrap install mosk ubuntu@203.0.113.10 ~/.ssh/mosk.pub
 ```
 
@@ -229,11 +229,14 @@ Store every complete runtime file in a uniquely named Secure Note. Names use
 - `pino-hotspot-re-1` and `pino-hotspot-la1n`;
 - `pino-galene-mosk-main`.
 
-For desktop SSH selectors, use a device-specific Bitwarden SSH Key item named
+For desktop SSH access, use a device-specific Bitwarden SSH Key item named
 `pino-ssh-<host>-github` (for example, `pino-ssh-re-1-github`), plus
-`pino-ssh-server-mosk` and `pino-ssh-server-halos`. Provision extracts only
-their public keys into `~/.ssh/github.pub`, `mosk.pub`, and `halos.pub`; private
-keys remain in the Bitwarden SSH Agent.
+`pino-ssh-server-mosk` and `pino-ssh-server-halos`. Provision installs their
+private keys as `~/.ssh/github`, `mosk`, and `halos` with mode `0600`, and their
+public keys beside them with the `.pub` suffix. It verifies each key pair
+before writing it. The private keys stay on local disk in plaintext, protected
+by Unix file permissions and any disk encryption; using them no longer needs
+Bitwarden Desktop or its SSH Agent.
 
 Install every file declared by active profiles on the current host:
 
@@ -243,7 +246,7 @@ pino provision install
 
 Each profile declares its Bitwarden item name and destination in its Nix module.
 The VPN client profile declares both VPN connections and the dedicated hotspot
-connection. The workstation profile declares public SSH key selectors. After
+connection. The workstation profile declares SSH key pairs. After
 installing the hotspot file, run
 `sudo nmcli connection reload`. Server VPN and Galene profiles declare their
 service restarts. Missing or invalid Bitwarden items are reported at the end;
@@ -278,16 +281,11 @@ Pino synchronizes Bitwarden first. The destination is root-owned and mode
 `0600`. The server does not need a Bitwarden session when `send` is run from a
 trusted desktop.
 
-Desktop systems install Bitwarden Desktop and the Bitwarden Chromium extension,
-and point `SSH_AUTH_SOCK` at the desktop app's native Linux agent socket. Enable
-the SSH agent once in Bitwarden settings and test it with `ssh-add -L`. The
-GitHub and Mosk SSH host entries explicitly use the Bitwarden Agent and their
-provisioned public keys to select the right identity. The repository remote
-then uses the device-specific GitHub key. After provisioning, Pino tests SSH
-access to the GitHub repository and changes an HTTPS `origin` to SSH if the
-check succeeds. If the Bitwarden SSH Agent is unavailable, the remote stays on
-HTTPS; rerun `pino provision install` after enabling the agent. See the
-[Bitwarden SSH agent guide](https://bitwarden.com/help/ssh-agent/).
+Desktop systems install Bitwarden Desktop and the Bitwarden Chromium extension.
+SSH uses the provisioned local private keys directly. After provisioning, Pino
+tests SSH access to the GitHub repository and changes an HTTPS `origin` to SSH
+if the check succeeds. If the key is missing or access fails, the remote stays
+on HTTPS; rerun `pino provision install` after fixing the SSH key.
 
 Bitwarden keeps vault lock settings per account and app. In Bitwarden Desktop,
 open File → Settings → Account security, set Vault timeout to 1 minute and
