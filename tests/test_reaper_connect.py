@@ -13,9 +13,9 @@ def node(number, name):
     return {"id": number, "type": "PipeWire:Interface:Node", "info": {"props": {"node.name": name}}}
 
 
-def port(number, owner, name, direction):
+def port(number, owner, name, direction, dsp="32 bit float mono audio"):
     return {"id": number, "type": "PipeWire:Interface:Port", "info": {"props": {
-        "node.id": owner, "port.name": name, "port.direction": direction}}}
+        "node.id": owner, "port.name": name, "port.direction": direction, "format.dsp": dsp}}}
 
 
 def link(number, output, target):
@@ -47,6 +47,13 @@ class RoutingTests(unittest.TestCase):
         self.graph += [link(101, 31, 21), link(102, 22, 13), link(103, 31, 12)]
         _, removals = connect.plan(self.graph, self.routes)
         self.assertEqual(removals, [101, 102])
+
+    def test_other_reaper_audio_inputs_disconnect_but_midi_and_other_apps_remain(self):
+        self.graph += [port(24, 2, "in1", "in"), port(25, 2, "midi", "in", "8 bit raw midi"),
+                       port(32, 3, "in", "in"), link(101, 11, 21), link(102, 31, 24),
+                       link(103, 11, 24), link(104, 31, 25), link(105, 11, 32)]
+        _, removals = connect.plan(self.graph, self.routes)
+        self.assertEqual(removals, [102, 103])
 
     def test_missing_or_ambiguous_port_prevents_changes(self):
         with self.assertRaises(ValueError):

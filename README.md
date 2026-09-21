@@ -152,8 +152,9 @@ The current host assignments are:
 - `halos`: VPN server only.
 
 `music-full` is kept as an on-demand `re-1` profile. Its installers live under
-`/data/fast/music-full/installs`; `pino desktop music-full install` prepares
-Wine automatically and `pino desktop music-full sync` runs yabridge.
+`/data/fast/music-full/installs`; `pino desktop music-full plugins install` prepares
+Wine automatically and `pino desktop music-full plugins sync` runs yabridge.
+The top-level commands are `reaper`, `connect`, `quantum`, `status` and `plugins`.
 
 For a Scarlett Solo guitar session, select JACK in REAPER's Audio Device preferences
 and enable at least two inputs and outputs, then run:
@@ -166,10 +167,11 @@ pino desktop music-full quantum 128
 pino desktop music-full quantum auto
 ```
 
-`connect` routes Focusrite Input 2 to REAPER input 2, and REAPER outputs 1/2 to
+`connect` routes Focusrite `alsa_input.hw_USB_0:capture_AUX1` to REAPER input 2, and REAPER outputs 1/2 to
 Focusrite left/right. On the guitar track select mono Input 2 and enable record
-monitoring. The command replaces conflicting links on those REAPER ports while
-preserving other applications' connections. Rerun it after reopening REAPER or
+monitoring. The command disconnects all other REAPER audio inputs and replaces
+conflicting output links, preserving MIDI and other applications' connections.
+Rerun it after reopening REAPER or
 reconnecting the interface; qpwgraph is installed for visual inspection.
 Port patterns are configurable in `pino.profiles.musicFull.connections`.
 

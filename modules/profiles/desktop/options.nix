@@ -33,12 +33,12 @@
             input = lib.mkOption { type = lib.types.str; };
             replace = lib.mkOption {
               type = lib.types.enum [ "input" "output" ];
-              description = "REAPER endpoint whose other links are replaced.";
+              description = "Replace other links on this output, or all other audio inputs of the target REAPER node.";
             };
           };
         });
         default = [
-          { output = "alsa_input.*Focusrite*__Mic2__source:capture_MONO"; input = "REAPER:in2"; replace = "input"; }
+          { output = "alsa_input.hw_USB_0:capture_AUX1"; input = "REAPER:in2"; replace = "input"; }
           { output = "REAPER:out1"; input = "alsa_output.*Focusrite*__Line__sink:playback_FL"; replace = "output"; }
           { output = "REAPER:out2"; input = "alsa_output.*Focusrite*__Line__sink:playback_FR"; replace = "output"; }
         ];

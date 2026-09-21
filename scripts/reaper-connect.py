@@ -13,6 +13,8 @@ def plan(graph, routes):
     nodes = {o["id"]: o.get("info", {}).get("props", {}).get("node.name", "")
              for o in graph if o["type"] == "PipeWire:Interface:Node"}
     ports = {}
+    port_nodes = {}
+    audio_inputs = set()
     links = []
     for obj in graph:
         props = obj.get("info", {}).get("props", {})
@@ -20,6 +22,9 @@ def plan(graph, routes):
             node = nodes.get(int(props.get("node.id", -1)), "")
             if node and "port.name" in props:
                 ports[obj["id"]] = (f'{node}:{props["port.name"]}', props.get("port.direction"))
+                port_nodes[obj["id"]] = int(props["node.id"])
+                if props.get("port.direction") == "in" and "audio" in props.get("format.dsp", "").lower():
+                    audio_inputs.add(obj["id"])
         elif obj["type"] == "PipeWire:Interface:Link":
             links.append((obj["id"], int(props["link.output.port"]), int(props["link.input.port"])))
 
@@ -39,6 +44,7 @@ def plan(graph, routes):
         desired.add((output, target))
         if route["replace"] == "input":
             replace_inputs.add(target)
+            replace_inputs.update(port for port in audio_inputs if port_nodes[port] == port_nodes[target])
         else:
             replace_outputs.add(output)
     if not desired:

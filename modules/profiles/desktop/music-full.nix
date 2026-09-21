@@ -108,18 +108,36 @@ in
     ];
 
     pino.subcommands.desktop.commands."music-full" = {
-      description = "Reaper, Wine installers and yabridge";
+      description = "REAPER guitar routing and audio settings";
       commands = {
-        installers.description = "List saved Windows installers";
-        install = { description = "Run one saved installer or a path"; usage = "<name|path>"; };
-        deps.description = "Install declared Wine dependencies with network access";
-        apply = { description = "Install one or all declared Windows plugins and sync yabridge"; usage = "[name] [--force]"; };
-        sync.description = "Synchronize yabridge plugins";
-        reset-wine.description = "Stop an obsolete Wine server after a system update";
-        prefix.description = "Print the Wine prefix path";
+        plugins = {
+          description = "Manage Windows plugins and Wine";
+          helpText = ''
+            Declare Windows plugins in pino.profiles.musicFull.windowsPlugins, put
+            installers or saved libraries in ${installersDir}, then run `plugins apply`
+            or `plugins apply <name>` for one plugin.
+            Changed installers or arguments are installed again. Optional sha256 is
+            the lowercase hex digest from sha256sum. GUI installers may
+            still need clicks or license login. Wine and yabridge are prepared
+            automatically; default Wine VST2, VST3 and CLAP folders are scanned.
+            Declared Winetricks dependencies are installed with network access
+            before Wine installers run offline. Inno Setup archives can instead
+            be extracted locally. Saved sound libraries can be linked into the
+            Wine prefix. REAPER also runs Wine offline.
+          '';
+          commands = {
+            list.description = "List saved Windows installers";
+            install = { description = "Run one saved installer or a path"; usage = "<name|path>"; };
+            apply = { description = "Install declared plugins and sync yabridge"; usage = "[name] [--force]"; };
+            sync.description = "Synchronize yabridge plugins";
+            deps.description = "Install declared Wine dependencies";
+            reset-wine.description = "Stop an obsolete Wine server after an update";
+            prefix.description = "Print the Wine prefix path";
+          };
+        };
         status.description = "Show Wine and yabridge state";
         reaper = { description = "Launch Reaper"; usage = "[samples]"; };
-        connect = { description = "Connect Focusrite input 2 and REAPER stereo output"; usage = "[--dry-run]"; };
+        connect = { description = "Connect guitar capture_AUX1 and REAPER stereo output"; usage = "[--dry-run]"; };
         quantum = {
           description = "Show or change the global PipeWire quantum without restarting audio";
           usage = "[32|64|128|256|512|1024|auto]";
@@ -148,25 +166,23 @@ in
         };
       };
       helpText = ''
-        Declare Windows plugins in pino.profiles.musicFull.windowsPlugins, put
-        installers or saved libraries in ${installersDir}, then run `apply`
-        or `apply <name>` for one plugin.
-        Changed installers or arguments are installed again. Optional sha256 is
-        the lowercase hex digest from sha256sum. GUI installers may
-        still need clicks or license login. Wine and yabridge are prepared
-        automatically; default Wine VST2, VST3 and CLAP folders are scanned.
-        Declared Winetricks dependencies are installed with network access
-        before Wine installers run offline. Inno Setup archives can instead
-        be extracted locally. Saved sound libraries can be linked into the
-        Wine prefix. REAPER also runs Wine offline.
         For guitar routing, select JACK in REAPER's Audio Device preferences
         with at least two inputs and outputs, then run `pino desktop music-full connect`.
-        Input 2 goes to REAPER input 2; master outputs 1/2 go to Focusrite L/R.
+        capture_AUX1 goes to REAPER input 2; other REAPER audio inputs are disconnected.
+        Master outputs 1/2 go to Focusrite L/R.
         Select mono Input 2 on the guitar track and enable record monitoring.
         Rerun connect after reopening REAPER or reconnecting the interface.
         qpwgraph is available to inspect the routing visually.
       '';
       script = ''
+        if [ "''${1:-}" = plugins ]; then
+          shift
+          case "''${1:-}" in
+            list) shift; set -- installers "$@" ;;
+            install|apply|sync|deps|reset-wine|prefix) ;;
+            *) echo "Run 'pino desktop music-full plugins help' for usage." >&2; exit 1 ;;
+          esac
+        fi
         WINE_PREFIX="${cfg.winePrefix}"
         INSTALLERS="${installersDir}"
         WIN_PLUGINS="${pluginsDir}"
@@ -257,7 +273,7 @@ in
             if ! probe=$(${wine}/bin/wine cmd.exe /c exit 2>&1); then
               if printf '%s\n' "$probe" | grep -q 'version mismatch'; then
                 echo "Wine was updated while its old server was running." >&2
-                echo "Close REAPER, then run: pino desktop music-full reset-wine" >&2
+                echo "Close REAPER, then run: pino desktop music-full plugins reset-wine" >&2
               else
                 printf '%s\n' "$probe" >&2
               fi
@@ -316,7 +332,7 @@ in
 
           install)
             installer="''${2:-}"
-            [ -n "$installer" ] || { echo "Usage: pino desktop music-full install <name|path>" >&2; exit 1; }
+            [ -n "$installer" ] || { echo "Usage: pino desktop music-full plugins install <name|path>" >&2; exit 1; }
             [ -f "$installer" ] || installer="$INSTALLERS/$installer"
             [ -f "$installer" ] || { echo "Installer not found: $installer" >&2; exit 1; }
             prepare || exit 1
@@ -331,7 +347,7 @@ in
               case "$arg" in
                 --force) FORCE_INSTALL=1 ;;
                 *)
-                  [ -z "$ONLY_PLUGIN" ] || { echo "Usage: pino desktop music-full apply [name] [--force]" >&2; exit 1; }
+                  [ -z "$ONLY_PLUGIN" ] || { echo "Usage: pino desktop music-full plugins apply [name] [--force]" >&2; exit 1; }
                   ONLY_PLUGIN="$arg"
                   ;;
               esac
@@ -401,13 +417,13 @@ in
             ;;
 
           *)
-            echo "Usage: pino desktop music-full installers|install <name|path>|deps|apply [name] [--force]|sync|reset-wine|prefix|status|reaper [samples]|connect [--dry-run]|quantum [samples|auto]"
+            echo "Usage: pino desktop music-full reaper [samples]|connect [--dry-run]|quantum [samples|auto]|status|plugins"
             exit 1
             ;;
         esac
       '';
       fishCompletions = ''
-        complete -c pino -F -n '__fish_pino_at_path desktop music-full install'
+        complete -c pino -F -n '__fish_pino_at_path desktop music-full plugins install'
         complete -c pino -f -n '__fish_pino_at_path desktop music-full reaper' \
           -a '64 128 256' -d 'PipeWire latency samples'
       '';
