@@ -9,6 +9,7 @@ let
       "gaming-full" = { module = ./desktop/gaming-full.nix; description = "Full gaming stack"; };
       "music-lite" = { module = ./desktop/music-lite.nix; description = "Light music workstation"; };
       "music-full" = { module = ./desktop/music-full.nix; description = "Full music workstation"; };
+      "guitar-pro" = { module = ./desktop/guitar-pro.nix; description = "Guitar Pro in a separate Wine prefix"; };
       torrent = { module = ./desktop/torrent.nix; description = "Torrent client"; };
       "vpn-client" = { module = ./desktop/services/vpn.nix; description = "AmneziaWG client and explicit WiFi sharing"; };
     };

@@ -1,0 +1,25 @@
+<REAPER_PROJECT 0.1
+  TEMPO 120 4 4
+  SAMPLERATE 48000 1
+  <TRACK
+    NAME "Drums MIDI"
+  >
+  <TRACK
+    NAME "Bass DI"
+  >
+  <TRACK
+    NAME "Guitar L DI"
+  >
+  <TRACK
+    NAME "Guitar R DI"
+  >
+  <TRACK
+    NAME "Lead Guitar DI"
+  >
+  <TRACK
+    NAME "Vocals"
+  >
+  <TRACK
+    NAME "Reference"
+  >
+>
