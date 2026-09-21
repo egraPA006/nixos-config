@@ -155,6 +155,30 @@ The current host assignments are:
 `/data/fast/music-full/installs`; `pino desktop music-full install` prepares
 Wine automatically and `pino desktop music-full sync` runs yabridge.
 
+For a Scarlett Solo guitar session, select JACK in REAPER's Audio Device preferences
+and enable at least two inputs and outputs, then run:
+
+```bash
+pino desktop music-full connect --dry-run
+pino desktop music-full connect
+pino desktop music-full quantum 64
+pino desktop music-full quantum 128
+pino desktop music-full quantum auto
+```
+
+`connect` routes Focusrite Input 2 to REAPER input 2, and REAPER outputs 1/2 to
+Focusrite left/right. On the guitar track select mono Input 2 and enable record
+monitoring. The command replaces conflicting links on those REAPER ports while
+preserving other applications' connections. Rerun it after reopening REAPER or
+reconnecting the interface; qpwgraph is installed for visual inspection.
+Port patterns are configurable in `pino.profiles.musicFull.connections`.
+
+The music profiles default to 128 samples at 48 kHz, configurable with
+`pino.profiles.music.quantum`. The quantum command changes the entire running
+PipeWire graph without restarting it; `auto` releases the forced value.
+Use 64 for lower latency if the current project runs without xruns, or 128/256
+for more processing headroom. `pino desktop music-full quantum` shows current settings.
+
 `pino profile disable <name>` rebuilds the system and then deletes that
 profile's declared mutable state. This includes settings, caches and application
 data: `music-full` removes its Wine prefixes, installed plugins, installation

@@ -7,8 +7,8 @@
   services.pipewire.extraConfig.pipewire."10-realtime" = {
     "context.properties" = {
       "default.clock.rate"        = 48000;
-      "default.clock.quantum"     = 256;
-      "default.clock.min-quantum" = 64;
+      "default.clock.quantum"     = config.pino.profiles.music.quantum;
+      "default.clock.min-quantum" = 32;
     };
   };
 

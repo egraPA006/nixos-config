@@ -6,6 +6,12 @@ let
   installersDir = "${cfg.localDir}/installs";
   pluginsDir = "${cfg.localDir}/plugins/win";
   wine = pkgs.wineWow64Packages.stable;
+  reaperPackage = pkgs.reaper.override { jackLibrary = pkgs.pipewire.jack; };
+  connectionConfig = pkgs.writeText "reaper-connections.json" (builtins.toJSON cfg.connections);
+  connectReaper = pkgs.writeShellScript "reaper-connect" ''
+    export PATH=${lib.makeBinPath [ pkgs.pipewire ]}:"$PATH"
+    exec ${pkgs.python3}/bin/python3 ${../../../scripts/reaper-connect.py} ${connectionConfig} "$@"
+  '';
   reaperMcp = pkgs.python3Packages.buildPythonApplication rec {
     pname = "twelvetake-reaper-mcp";
     version = "1.7.3";
@@ -29,8 +35,8 @@ let
     export WINEPREFIX=${lib.escapeShellArg cfg.winePrefix}
     export WINELOADER=${offlineWine}/bin/music-wine-offline
     export YABRIDGE_NO_WATCHDOG=1
-    export PIPEWIRE_QUANTUM="''${PIPEWIRE_QUANTUM:-256/48000}"
-    exec ${pkgs.reaper}/bin/reaper "$@"
+    export PIPEWIRE_LATENCY="''${PIPEWIRE_LATENCY:-${toString config.pino.profiles.music.quantum}/48000}"
+    exec ${reaperPackage}/bin/reaper "$@"
   '';
   declaredDependencies = lib.unique (lib.concatMap (plugin: plugin.winetricks) (lib.attrValues cfg.windowsPlugins));
   dependencyCommands = lib.concatMapStringsSep "\n" (verb:
@@ -61,7 +67,7 @@ in
 
   config = {
     environment.systemPackages = with pkgs; [
-      reaper
+      reaperPackage
       reaperMcp
       surge-xt
       drumgizmo
@@ -113,6 +119,33 @@ in
         prefix.description = "Print the Wine prefix path";
         status.description = "Show Wine and yabridge state";
         reaper = { description = "Launch Reaper"; usage = "[samples]"; };
+        connect = { description = "Connect Focusrite input 2 and REAPER stereo output"; usage = "[--dry-run]"; };
+        quantum = {
+          description = "Show or change the global PipeWire quantum without restarting audio";
+          usage = "[32|64|128|256|512|1024|auto]";
+          helpText = ''
+            Default: ${toString config.pino.profiles.music.quantum} samples at 48000 Hz.
+            Changes affect the whole PipeWire graph until its next restart.
+            auto releases the override and lets clients negotiate the quantum.
+          '';
+          script = ''
+            [ "$#" -le 1 ] || { echo "Usage: pino desktop music-full quantum [samples|auto]" >&2; exit 1; }
+            case "''${1:-}" in
+              "") ${pkgs.pipewire}/bin/pw-metadata -n settings ;;
+              32|64|128|256|512|1024|auto)
+                quantum="$1"
+                [ "$quantum" != auto ] || quantum=0
+                ${pkgs.pipewire}/bin/pw-metadata -n settings 0 clock.force-quantum "$quantum" || exit 1
+                echo "PipeWire quantum: $1"
+                ;;
+              *) echo "Quantum must be 32, 64, 128, 256, 512, 1024 or auto" >&2; exit 1 ;;
+            esac
+          '';
+          fishCompletions = ''
+            complete -c pino -f -n '__fish_pino_at_path desktop music-full quantum' \
+              -a '32 64 128 256 512 1024 auto' -d 'PipeWire quantum'
+          '';
+        };
       };
       helpText = ''
         Declare Windows plugins in pino.profiles.musicFull.windowsPlugins, put
@@ -126,6 +159,12 @@ in
         before Wine installers run offline. Inno Setup archives can instead
         be extracted locally. Saved sound libraries can be linked into the
         Wine prefix. REAPER also runs Wine offline.
+        For guitar routing, select JACK in REAPER's Audio Device preferences
+        with at least two inputs and outputs, then run `pino desktop music-full connect`.
+        Input 2 goes to REAPER input 2; master outputs 1/2 go to Focusrite L/R.
+        Select mono Input 2 on the guitar track and enable record monitoring.
+        Rerun connect after reopening REAPER or reconnecting the interface.
+        qpwgraph is available to inspect the routing visually.
       '';
       script = ''
         WINE_PREFIX="${cfg.winePrefix}"
@@ -348,15 +387,21 @@ in
 
           reaper)
             samples="''${2:-}"
+            case "$samples" in ""|32|64|128|256|512|1024) ;; *) echo "Invalid quantum: $samples" >&2; exit 1 ;; esac
             if [ -n "$samples" ]; then
-              PIPEWIRE_QUANTUM="''${samples}/48000" ${reaperOffline}/bin/reaper-offline &
+              PIPEWIRE_LATENCY="''${samples}/48000" ${reaperOffline}/bin/reaper-offline &
             else
               ${reaperOffline}/bin/reaper-offline &
             fi
             ;;
 
+          connect)
+            shift
+            ${connectReaper} "$@"
+            ;;
+
           *)
-            echo "Usage: pino desktop music-full installers|install <name|path>|deps|apply [name] [--force]|sync|reset-wine|prefix|status|reaper [samples]"
+            echo "Usage: pino desktop music-full installers|install <name|path>|deps|apply [name] [--force]|sync|reset-wine|prefix|status|reaper [samples]|connect [--dry-run]|quantum [samples|auto]"
             exit 1
             ;;
         esac

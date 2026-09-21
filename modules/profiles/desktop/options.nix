@@ -1,6 +1,11 @@
 { config, lib, ... }:
 {
   options.pino.profiles = {
+    music.quantum = lib.mkOption {
+      type = lib.types.enum [ 32 64 128 256 512 1024 ];
+      default = 128;
+      description = "Default PipeWire quantum in samples for music profiles at 48 kHz.";
+    };
     musicLite.localDir = lib.mkOption {
       type = lib.types.str;
       default = "${config.pino.user.home}/music-lite";
@@ -21,6 +26,24 @@
       };
     };
     musicFull = {
+      connections = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            output = lib.mkOption { type = lib.types.str; };
+            input = lib.mkOption { type = lib.types.str; };
+            replace = lib.mkOption {
+              type = lib.types.enum [ "input" "output" ];
+              description = "REAPER endpoint whose other links are replaced.";
+            };
+          };
+        });
+        default = [
+          { output = "alsa_input.*Focusrite*__Mic2__source:capture_MONO"; input = "REAPER:in2"; replace = "input"; }
+          { output = "REAPER:out1"; input = "alsa_output.*Focusrite*__Line__sink:playback_FL"; replace = "output"; }
+          { output = "REAPER:out2"; input = "alsa_output.*Focusrite*__Line__sink:playback_FR"; replace = "output"; }
+        ];
+        description = "PipeWire node:port patterns for guitar input and stereo REAPER output.";
+      };
       localDir = lib.mkOption {
         type = lib.types.str;
         default = "${config.pino.user.home}/music-full";
