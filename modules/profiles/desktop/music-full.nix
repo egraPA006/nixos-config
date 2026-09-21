@@ -109,6 +109,7 @@ in
         deps.description = "Install declared Wine dependencies with network access";
         apply = { description = "Install one or all declared Windows plugins and sync yabridge"; usage = "[name] [--force]"; };
         sync.description = "Synchronize yabridge plugins";
+        reset-wine.description = "Stop an obsolete Wine server after a system update";
         prefix.description = "Print the Wine prefix path";
         status.description = "Show Wine and yabridge state";
         reaper = { description = "Launch Reaper"; usage = "[samples]"; };
@@ -213,7 +214,16 @@ in
         install_dependencies() {
           :
           ${lib.optionalString (declaredDependencies != []) ''
-            local installed_verbs verb missing=0
+            local installed_verbs probe verb missing=0
+            if ! probe=$(${wine}/bin/wine cmd.exe /c exit 2>&1); then
+              if printf '%s\n' "$probe" | grep -q 'version mismatch'; then
+                echo "Wine was updated while its old server was running." >&2
+                echo "Close REAPER, then run: pino desktop music-full reset-wine" >&2
+              else
+                printf '%s\n' "$probe" >&2
+              fi
+              return 1
+            fi
             installed_verbs=$(${pkgs.winetricks}/bin/winetricks list-installed 2>/dev/null) || installed_verbs=""
             for verb in ${lib.escapeShellArgs declaredDependencies}; do
               if ! printf '%s\n' "$installed_verbs" | grep -Fxq "$verb"; then
@@ -310,6 +320,19 @@ in
             ${pkgs.yabridgectl}/bin/yabridgectl sync
             ;;
 
+          reset-wine)
+            if ${pkgs.procps}/bin/pgrep -u "$(id -u)" -x reaper >/dev/null || \
+               ${pkgs.procps}/bin/pgrep -u "$(id -u)" -f 'yabridge-host' >/dev/null; then
+              echo "REAPER or yabridge is still running; close it before resetting Wine" >&2
+              exit 1
+            fi
+            if ${pkgs.procps}/bin/pkill -u "$(id -u)" -TERM -x wineserver 2>/dev/null; then
+              echo "Stopped the old Wine server"
+            else
+              echo "No Wine server is running"
+            fi
+            ;;
+
           prefix)
             echo "$WINE_PREFIX"
             ;;
@@ -333,7 +356,7 @@ in
             ;;
 
           *)
-            echo "Usage: pino desktop music-full installers|install <name|path>|deps|apply [name] [--force]|sync|prefix|status|reaper [samples]"
+            echo "Usage: pino desktop music-full installers|install <name|path>|deps|apply [name] [--force]|sync|reset-wine|prefix|status|reaper [samples]"
             exit 1
             ;;
         esac
