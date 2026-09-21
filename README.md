@@ -152,13 +152,30 @@ The current host assignments are:
 - `halos`: VPN server only.
 
 `music-full` is kept as an on-demand `re-1` profile. Its installers live under
-`/data/fast/music-full/installers`; `pino desktop music-full install` prepares
+`/data/fast/music-full/installs`; `pino desktop music-full install` prepares
 Wine automatically and `pino desktop music-full sync` runs yabridge.
 
-Profiles preserve their normal application data when disabled. A future
-artifact drop-in flow (for example, placing plugins in a known folder and
-activating them) is intentionally left as a documented extension point; it is
-not implemented yet.
+`pino profile disable <name>` rebuilds the system and then deletes that
+profile's declared mutable state. This includes settings, caches and application
+data: `music-full` removes its Wine prefixes, installed plugins, installation
+stamps, yabridge files and REAPER settings; `torrent` removes downloads and
+Transmission state; gaming profiles remove their game libraries and settings.
+Desktop and development profiles also remove their application profiles,
+extensions and sessions. Server profiles remove their service state and
+provisioned service credentials.
+
+Original installation artifacts under the music-full and Guitar Pro `installs`
+directories are retained, including the replacement Guitar Pro EXE and saved
+libraries used by linked plugins. Shared data is retained while another enabled
+profile owns it (for example Steam, audio settings, or Caddy used by Galene).
+Ownership and cleanup paths are declared in `modules/profiles/cleanup.nix`.
+
+Close the affected applications first. Log out of GNOME and use a TTY to disable
+the GNOME profile. Cleanup only runs after a successful rebuild; if it fails or
+is interrupted, rerun the same disable command to finish. A system rollback
+does not restore deleted application data. Nix generations/store objects,
+shared system logs and files outside the declared application directories are
+not erased by this command.
 
 Server profiles are:
 

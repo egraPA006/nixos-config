@@ -6,6 +6,11 @@
       default = "${config.pino.user.home}/music-lite";
     };
     guitarPro = {
+      replacementExe = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional local executable copied over GuitarPro.exe during installation.";
+      };
       localDir = lib.mkOption {
         type = lib.types.str;
         default = "${config.pino.user.home}/guitar-pro";

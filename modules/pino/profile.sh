@@ -4,13 +4,14 @@ PROFILES_FILE="${CONFIG_DIR}/hosts/${HOSTNAME_VAL}/active-profiles.nix"
 VALID_PROFILES=(@validProfiles@)
 PROFILE_DESCRIPTIONS=(@profileDescriptions@)
 PROFILE_GROUPS=(@profileGroups@)
+CLEANUP=@cleanup@
 
 usage() {
   echo "Usage: pino profile <command> [profile]"
   echo
   echo "Commands:"
   echo "  enable <profile>   Enable a profile and rebuild"
-  echo "  disable <profile>  Disable a profile and rebuild"
+  echo "  disable <profile>  Disable, rebuild and remove profile data"
   echo "  list               List profiles with enabled markers"
   echo "  list --enabled     Print enabled profile names only"
 }
@@ -107,6 +108,7 @@ case "$command" in
   disable)
     profile="${2:-}"
     [ -n "$profile" ] || { usage; exit 1; }
+    is_valid "$profile" || { echo "Unknown profile: $profile"; exit 1; }
     mapfile -t active < <(get_active)
     remaining=()
     found=false
@@ -117,8 +119,16 @@ case "$command" in
         remaining+=("$candidate")
       fi
     done
-    [ "$found" = true ] || { echo "Profile '$profile' is not enabled"; exit 0; }
-    apply_profiles "${remaining[@]}"
+    sudo "$CLEANUP" check "$profile" "$CONFIG_DIR" "${remaining[@]}" || exit 1
+    if [ "$found" = true ]; then
+      apply_profiles "${remaining[@]}" || exit 1
+    else
+      echo "Profile '$profile' is not enabled"
+    fi
+    sudo "$CLEANUP" apply "$profile" "$CONFIG_DIR" "${remaining[@]}" || {
+      echo "Profile is disabled, but cleanup failed; retry: pino profile disable $profile" >&2
+      exit 1
+    }
     ;;
   list)
     mapfile -t active < <(get_active)

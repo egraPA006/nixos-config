@@ -1,4 +1,4 @@
-{ activeProfiles, config, lib, ... }:
+{ activeProfiles, config, lib, pkgs, ... }:
 
 let
   profileGroups = {
@@ -28,8 +28,12 @@ let
   serverProfiles = builtins.attrNames profileGroups.server;
   hasActiveProfile = profiles: lib.any (name: builtins.elem name activeProfiles) profiles;
   validProfiles = builtins.attrNames profileModules;
+  cleanup = import ./cleanup.nix {
+    inherit config lib pkgs activeProfiles;
+    profiles = validProfiles;
+  };
   profileScript = builtins.replaceStrings
-    [ "@validProfiles@" "@profileDescriptions@" "@profileGroups@" "@configDir@" ]
+    [ "@validProfiles@" "@profileDescriptions@" "@profileGroups@" "@configDir@" "@cleanup@" ]
     [
       (lib.concatStringsSep " " validProfiles)
       (lib.concatStringsSep " " (map (name: lib.escapeShellArg profileCatalog.${name}.description) validProfiles))
@@ -37,6 +41,7 @@ let
         (group: profiles: "'${group}:${lib.concatStringsSep "," (builtins.attrNames profiles)}'")
         profileGroups))
       config.pino.configDir
+      (toString cleanup.runner)
     ]
     (builtins.readFile ../pino/profile.sh);
 in
@@ -77,11 +82,15 @@ in
         usage = "[--enabled]";
       };
       enable = { description = "Enable a profile and rebuild"; usage = "<profile>"; };
-      disable = { description = "Disable a profile and rebuild"; usage = "<profile>"; };
+      disable = { description = "Disable a profile, rebuild and remove its data"; usage = "<profile>"; };
     };
     helpText = ''
       Active profiles: hosts/<hostname>/active-profiles.nix
-      Disabling a profile preserves its data.
+      Disable removes the profile's declared application data, settings,
+      caches and installed plugins after a successful rebuild. Saved install
+      artifacts and resources owned by remaining profiles are preserved.
+      Close the profile's applications first; disable GNOME from a TTY.
+      Run disable again to retry an interrupted cleanup.
     '';
     script = profileScript;
     fishCompletions = ''

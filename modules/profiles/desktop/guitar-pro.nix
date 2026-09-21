@@ -7,6 +7,12 @@ let
   programDir = "${cfg.localDir}/program";
   soundbanksDir = "${cfg.localDir}/soundbanks";
   wine = pkgs.wineWow64Packages.stable;
+  configureAudio = pkgs.writeShellScript "guitar-pro-audio" ''
+    export WINEPREFIX=${lib.escapeShellArg cfg.winePrefix}
+    mkdir -p "$WINEPREFIX" || exit 1
+    exec ${wine}/bin/wine reg add 'HKCU\Software\Wine\Drivers' \
+      /v Audio /t REG_SZ /d alsa /f
+  '';
   guitarPro = pkgs.writeShellScriptBin "guitar-pro" ''
     export WINEPREFIX=${lib.escapeShellArg cfg.winePrefix}
     program=${lib.escapeShellArg "${programDir}/GuitarPro.exe"}
@@ -14,10 +20,17 @@ let
       echo "Guitar Pro is not installed in $WINEPREFIX; run: pino desktop guitar-pro install" >&2
       exit 1
     fi
+    ${configureAudio} >/dev/null || exit 1
     exec ${wine}/bin/wine "$program" "$@"
   '';
 in
 {
+  assertions = [{
+    assertion = cfg.winePrefix != config.pino.profiles.musicFull.winePrefix
+      && cfg.winePrefix != "${user.home}/.wine";
+    message = "Guitar Pro requires its own Wine prefix, separate from music-full and ~/.wine.";
+  }];
+
   environment.systemPackages = [ wine guitarPro ];
 
   systemd.tmpfiles.rules = [
@@ -46,6 +59,9 @@ in
       Put the complete Guitar Pro 8 installer in ${installersDir}, then run
       `pino desktop guitar-pro install`. The app and soundbanks are extracted
       to ${cfg.localDir}; Wine settings live in ${cfg.winePrefix}.
+      Installation and launch select the ALSA audio driver in this prefix.
+      When replacementExe is configured, install also replaces GuitarPro.exe
+      with that local file, including when the app is already installed.
     '';
     script = ''
       export WINEPREFIX=${lib.escapeShellArg cfg.winePrefix}
@@ -53,6 +69,13 @@ in
       PROGRAM=${lib.escapeShellArg programDir}
       SOUNDBANKS=${lib.escapeShellArg soundbanksDir}
       BANK_LINK="$WINEPREFIX/drive_c/ProgramData/Arobas Music/Soundbanks"
+
+      replace_exe() {
+        ${if cfg.replacementExe == null then ":" else ''
+          cp -- ${lib.escapeShellArg cfg.replacementExe} "$PROGRAM/GuitarPro.exe" || return 1
+          echo ${lib.escapeShellArg "GuitarPro.exe replaced from ${cfg.replacementExe}"}
+        ''}
+      }
 
       link_soundbanks() {
         mkdir -p "$(dirname "$BANK_LINK")" || return 1
@@ -68,6 +91,7 @@ in
 
       install_deps() {
         local installer="$1" work runtime
+        ${configureAudio} >/dev/null || return 1
         [ -f "$WINEPREFIX/.guitar-pro-vcrun-ready" ] && return 0
         mkdir -p "$WINEPREFIX" || return 1
         ${wine}/bin/wineboot --init || return 1
@@ -86,6 +110,12 @@ in
 
       case "''${1:-}" in
         install)
+          ${lib.optionalString (cfg.replacementExe != null) ''
+            [ -f ${lib.escapeShellArg cfg.replacementExe} ] || {
+              echo "Replacement executable not found: "${lib.escapeShellArg cfg.replacementExe} >&2
+              exit 1
+            }
+          ''}
           installer="''${2:-}"
           if [ -z "$installer" ]; then
             shopt -s nullglob
@@ -104,6 +134,7 @@ in
           }
           if [ -f "$PROGRAM/GuitarPro.exe" ] && [ -d "$SOUNDBANKS/com.arobas-music.soundbank.standard" ]; then
             link_soundbanks || exit 1
+            replace_exe || exit 1
             install_deps "$installer" || exit 1
             echo "Guitar Pro files already installed"
             exit 0
@@ -130,6 +161,7 @@ in
           mv "$work/main/app" "$PROGRAM" || exit 1
           mv "$bank_source" "$SOUNDBANKS" || exit 1
           link_soundbanks || exit 1
+          replace_exe || exit 1
           install_deps "$installer" || exit 1
           echo "Guitar Pro files installed in $PROGRAM and $SOUNDBANKS"
           ;;

@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 {
   imports = [
     ./hardware.nix
@@ -20,6 +20,7 @@
     guitarPro = {
       localDir = "/data/fast/guitar-pro";
       winePrefix = "/data/fast/guitar-pro/wine-prefix";
+      replacementExe = "${config.pino.profiles.guitarPro.localDir}/installs/replacement/GuitarPro.exe";
     };
     musicFull = {
       localDir = "/data/fast/music-full";
@@ -136,7 +137,7 @@
   '';
 
   home-manager.users.${config.pino.user.name} = {
-    systemd.user.services.monitor-default = {
+    systemd.user.services.monitor-default = lib.mkIf config.services.desktopManager.gnome.enable {
       Unit.Description = "Apply default single-monitor profile";
       Unit.After = [ "graphical-session.target" ];
       Install.WantedBy = [ "graphical-session.target" ];

@@ -15,11 +15,11 @@
 
   environment.systemPackages = [ pkgs.git ];
 
-  services.journald.extraConfig = ''
-    SystemMaxUse=256M
-    RuntimeMaxUse=64M
-    MaxRetentionSec=14day
-  '';
+  services.journald.settings.Journal = {
+    SystemMaxUse = "256M";
+    RuntimeMaxUse = "64M";
+    MaxRetentionSec = "14day";
+  };
 
   pino.subcommands.server = {
     description = lib.mkDefault "Server services and connections";
