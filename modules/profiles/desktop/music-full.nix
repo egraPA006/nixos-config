@@ -5,7 +5,8 @@ let
   user = config.pino.user;
   installersDir = "${cfg.localDir}/installs";
   pluginsDir = "${cfg.localDir}/plugins/win";
-  wine = pkgs.wineWow64Packages.stable;
+  # Match the Wine version used to build and run nixpkgs' yabridge.
+  wine = pkgs.wineWow64Packages.yabridge;
   reaperPackage = pkgs.reaper.override { jackLibrary = pkgs.pipewire.jack; };
   connectionConfig = pkgs.writeText "reaper-connections.json" (builtins.toJSON cfg.connections);
   connectReaper = pkgs.writeShellScript "reaper-connect" ''
@@ -29,11 +30,13 @@ let
     pythonImportsCheck = [ "reaper_mcp_server" ];
   };
   offlineWine = pkgs.writeShellScriptBin "music-wine-offline" ''
-    exec ${pkgs.bubblewrap}/bin/bwrap --unshare-net --bind / / -- ${wine}/bin/wine "$@"
+    # Plain bind mounts are nodev; Wine needs GPU devices for plugin editors.
+    exec ${pkgs.bubblewrap}/bin/bwrap --unshare-net --bind / / --dev-bind /dev /dev -- ${wine}/bin/wine "$@"
   '';
   reaperOffline = pkgs.writeShellScriptBin "reaper-offline" ''
     export WINEPREFIX=${lib.escapeShellArg cfg.winePrefix}
     export WINELOADER=${offlineWine}/bin/music-wine-offline
+    export WINESERVER=${wine}/bin/wineserver
     export YABRIDGE_NO_WATCHDOG=1
     export PIPEWIRE_LATENCY="''${PIPEWIRE_LATENCY:-${toString config.pino.profiles.music.quantum}/48000}"
     exec ${reaperPackage}/bin/reaper "$@"
@@ -49,8 +52,14 @@ let
     ++ lib.filter (item: item.plugin.method == "link") installers;
   declaredInstallers = lib.concatStringsSep "\n" (map ({ name, plugin }:
     let
+      hook = if plugin.postInstall == "" then "" else pkgs.writeShellScript "music-plugin-post-install" ''
+        set -euo pipefail
+        ${plugin.postInstall}
+      '';
+      # Preserve existing install stamps when no hook was added.
+      signatureConfig = if plugin.postInstall == "" then builtins.removeAttrs plugin [ "postInstall" ] else plugin;
       arguments = [ name plugin.installer (if plugin.sha256 == null then "" else plugin.sha256)
-        (builtins.hashString "sha256" (builtins.toJSON plugin)) plugin.method ]
+        (builtins.hashString "sha256" (builtins.toJSON signatureConfig)) plugin.method hook ]
         ++ (if plugin.method == "wine" then plugin.args else
           lib.concatLists (lib.mapAttrsToList (source: target: [ source target ])
             (if plugin.method == "link" then plugin.links else plugin.extractedFiles)));
@@ -68,12 +77,15 @@ in
   config = {
     environment.systemPackages = with pkgs; [
       reaperPackage
+      (lib.hiPrio (pkgs.writeShellScriptBin "reaper" ''
+        exec ${reaperOffline}/bin/reaper-offline "$@"
+      ''))
       reaperMcp
       surge-xt
       drumgizmo
       yabridge
       yabridgectl
-      wineWow64Packages.stable
+      (lib.lowPrio wine)
       winetricks
       carla
     ];
@@ -189,6 +201,8 @@ in
         STAMPS="${cfg.localDir}/installed"
 
         export WINEPREFIX="$WINE_PREFIX"
+        export WINE=${wine}/bin/wine
+        export WINESERVER=${wine}/bin/wineserver
 
         prepare() {
           mkdir -p "$WINE_PREFIX" "$INSTALLERS" "$WIN_PLUGINS" "$STAMPS" || return 1
@@ -294,12 +308,13 @@ in
         }
 
         install_declared() {
-          local name="$1" filename="$2" expected="$3" signature="$4" method="$5"
-          shift 5
+          local name="$1" filename="$2" expected="$3" signature="$4" method="$5" hook="$6"
+          shift 6
           local installer="$INSTALLERS/$filename"
           if [ "$method" = link ]; then
             [ -d "$installer" ] || { echo "Missing saved content for $name: $installer" >&2; return 1; }
             install_links "$installer" "$@" || return 1
+            run_post_install "$hook" "$name" "$installer" || return 1
             echo "Linked: $name"
             return 0
           fi
@@ -322,7 +337,17 @@ in
             innoextract) install_extracted "$installer" "$@" || return 1 ;;
             *) echo "Unsupported installation method: $method" >&2; return 1 ;;
           esac
+          run_post_install "$hook" "$name" "$(dirname "$installer")" || return 1
           printf '%s %s\n' "$signature" "$actual" > "$stamp"
+        }
+
+        run_post_install() {
+          [ -n "$1" ] || return 0
+          echo "Post-install: $2"
+          PLUGIN_NAME="$2" INSTALLER_DIR="$3" "$1" || {
+            echo "Post-install failed: $2" >&2
+            return 1
+          }
         }
 
         case "''${1:-}" in

@@ -29,7 +29,8 @@
         installer = "Gojira/Setup Archetype Gojira v1.0.0.exe";
         sha256 = "c80d19911d98523d5bcccace01373d1cb34ec695f825e6c1c929aa91a3d15200";
         method = "innoextract";
-        winetricks = [ "vcrun2019" ];
+        # Keep DXVK compatible with the Wine 9.21 used by yabridge.
+        winetricks = [ "vcrun2019" "dxvk2062" "hidewineexports=enable" ];
         extractedFiles = {
           "code$GetDir$VST3x64/Archetype Gojira.vst3" = "drive_c/Program Files/Common Files/VST3/Archetype Gojira.vst3";
           "commonappdata/Neural DSP/Archetype Gojira" = "drive_c/ProgramData/Neural DSP/Archetype Gojira";
@@ -45,7 +46,7 @@
         installer = "Soldano/Setup Soldano SLO-100 X v1.0.0.exe";
         sha256 = "5955a1f72f28b06e2f300a483825158237082f36ea211eaa6e03f8793237b137";
         args = [ "/VERYSILENT" "/SUPPRESSMSGBOXES" "/NORESTART" "/COMPONENTS=vst3_64,data" ];
-        winetricks = [ "vcrun2019" ];
+        winetricks = [ "vcrun2019" "dxvk2062" "hidewineexports=enable" ];
       };
       windowsPlugins."Valhalla-Delay" = {
         installer = "ValhallaDSP - Valhalla Delay v3.0.0/Setup Valhalla Delay v3.0.0.exe";
@@ -84,7 +85,7 @@
       windowsPlugins."MODO-BASS-2" = {
         installer = "IK.Multimedia.MODO.BASS.2.v2.0.4.Incl.Keygen-R2R/Setup MODO BASS 2 v2.0.4.exe";
         sha256 = "102c73c82a6296d87d37635745de356a7049208a4e666b1c667132f7fd0db713";
-        args = [ "/VERYSILENT" "/SUPPRESSMSGBOXES" "/NORESTART" ];
+        args = [ "/VERYSILENT" "/SUPPRESSMSGBOXES" "/NORESTART" "/COMPONENTS=vst3_64,data" ];
       };
       windowsPlugins.EZdrummer = {
         installer = "Toontrack - EZdrummer 3.1.2/WIN/Toontrack EZdrummer v3.1.2.exe";

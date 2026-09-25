@@ -154,6 +154,28 @@ The current host assignments are:
 `music-full` is kept as an on-demand `re-1` profile. Its installers live under
 `/data/fast/music-full/installs`; `pino desktop music-full plugins install` prepares
 Wine automatically and `pino desktop music-full plugins sync` runs yabridge.
+
+Declared plugins can run a Bash `postInstall` hook, for example to install a
+preset for your own plugin (illustrative configuration, not enabled by default):
+
+```nix
+pino.profiles.musicFull.windowsPlugins."Example-NAM" = {
+  installer = "Example-NAM/setup.exe";
+  postInstall = ''
+    install -Dm644 "$INSTALLER_DIR/presets/Clean.nam" \
+      "$WINEPREFIX/drive_c/users/egrapa/Documents/Example-NAM/Clean.nam"
+  '';
+};
+```
+
+The hook runs as the invoking user with `WINEPREFIX`, `INSTALLER_DIR` (the
+installer's directory, or the source directory for `method = "link"`) and
+`PLUGIN_NAME`. Hooks are native Bash scripts, not network-isolated Wine
+installers. Use explicit store paths for additional tools. A failed hook fails
+the installation without writing its success stamp; it does not roll back files.
+Changing the hook reruns installation on the next `plugins apply`. An unchanged
+installation skips the hook unless `--force` is given. Link hooks run on every
+apply, like the links themselves. Hooks must therefore be safe to repeat.
 The top-level commands are `reaper`, `connect`, `quantum`, `status` and `plugins`.
 
 For a Scarlett Solo guitar session, select JACK in REAPER's Audio Device preferences

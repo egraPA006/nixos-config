@@ -79,6 +79,11 @@
               default = [];
               description = "Arguments passed to the Windows installer.";
             };
+            postInstall = lib.mkOption {
+              type = lib.types.lines;
+              default = "";
+              description = "Bash commands run after installation or linking. Receives WINEPREFIX, INSTALLER_DIR and PLUGIN_NAME. Failure prevents recording a successful installation. Must be safe to repeat.";
+            };
             winetricks = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [];
