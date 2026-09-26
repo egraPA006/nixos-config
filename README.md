@@ -17,6 +17,92 @@ and merged manually; Pino has no automatic backup or dataset layer.
 
 ### Remote servers
 
+Prepare new VPN and Galene note contents locally before bootstrapping:
+
+To generate and save missing records directly in Bitwarden, without temporary
+export files, log in to the CLI once with `bw login`, then run from this checkout:
+
+```bash
+nix run path:.#server-secrets -- mosk --bitwarden
+# After rebuilding the desktop: pino bootstrap prepare mosk --bitwarden
+```
+
+This unlocks the vault when necessary, generates a 32-character Galene password
+using `bw generate`, saves the `admin` Login as `pino-galene-mosk-admin`, and
+creates Secure Notes `pino-galene-mosk-main` and `pino-vpn-server-mosk`. Existing
+records are never overwritten. Duplicate names, mismatched Login/room passwords,
+or an existing room without its Login require manual resolution. Interrupted
+runs can be retried: an already-created Login is reused. SSH records are untouched.
+Secret payloads are passed through stdin, never command arguments or terminal
+output. Bitwarden CLI still maintains its normal encrypted local vault cache.
+
+Rotate existing secrets explicitly (each operation asks for confirmation):
+
+```bash
+nix run path:.#server-secrets -- mosk --bitwarden --rotate galene
+nix run path:.#server-secrets -- mosk --bitwarden --rotate vpn
+```
+
+Before editing, rotation saves the original records in a uniquely named Secure
+Note `pino-rotation-backup-<host>-<scope>-…`. Galene rotation preserves room
+settings and other users, updating the admin Login and password hash. These two
+Bitwarden writes are not atomic: if interrupted, repair the room hash from the
+saved Login without generating another password:
+
+```bash
+nix run path:.#server-secrets -- mosk --bitwarden --repair-galene
+```
+
+VPN rotation changes only the server private key; peers, addresses and AWG
+parameters are preserved. Update the server public key on all clients when
+deploying. Rotating records does not alter the running server. Deploy from the
+desktop using its configured SSH alias (or `vincent@IP`):
+
+```bash
+pino provision send pino-galene-mosk-main mosk /etc/pino/galene/main.json galene.service
+pino provision send pino-vpn-server-mosk mosk /etc/pino/vpn/awg0.conf amneziawg-server.service pino-vpn-mode.service
+```
+
+Keep the recovery snapshot until the server and clients have been verified.
+Restoring it means restoring each original record's fields from the snapshot
+and provisioning the old configuration again. Retire obsolete snapshots manually
+once they are no longer needed. Do not run preparation/rotation concurrently:
+the CLI checks for changes before writing, but Bitwarden provides no multi-item
+transaction here. After a timeout, inspect saved records before retrying rotation;
+for Galene, prefer `--repair-galene` to avoid generating another password.
+
+Alternatively, prepare local files for manual import:
+
+```bash
+pino bootstrap prepare mosk
+# VPN only:
+pino bootstrap prepare halos
+```
+
+`prepare` prompts twice for the Galene `admin` password on Mosk and stores only
+its bcrypt hash. Files go to a unique `pino-<host>-…` directory in the system
+temporary directory (normally `/tmp`, directory 0700, files 0600); an optional
+final argument selects another new directory. After saving and checking the
+Bitwarden notes, delete the generated directory; temporary storage may also be
+cleared by the system.
+Existing directories and paths inside Git checkouts are rejected. Import the
+contents of `pino-vpn-server-<host>.conf` and, for Mosk,
+`pino-galene-mosk-main.json` into the Notes fields of Secure Notes with the
+matching names (without the file extension). Nothing is uploaded automatically,
+and existing SSH keys are not changed.
+
+The generated VPN listens on UDP 585 at `10.77.0.1/24`, matching the current
+server defaults. It has no peers: add each client's public key and a unique
+`AllowedIPs = 10.77.0.x/32`. Clients need the generated server public key from
+`server.pub` and matching `S1`, `S2`, `H1`–`H4`. Internet egress is a separate
+VPN mode; the default is `private`. Set DNS `meet.egrapa.com` to Mosk for Galene.
+
+Without rebuilding the local system, run the same generator from this checkout:
+
+```bash
+nix run path:.#server-secrets -- mosk
+```
+
 The normal VPS flow starts from the temporary Ubuntu or Debian image supplied
 by the provider. Create Bitwarden SSH Key items named `pino-ssh-server-mosk`
 and `pino-ssh-server-halos`. Give the provider only the public half of the

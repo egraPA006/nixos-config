@@ -42,6 +42,13 @@
       { services.hardware.openrgb.package = nixpkgs-openrgb.legacyPackages.x86_64-linux.openrgb; }
     ];
   in {
+    packages.x86_64-linux.server-secrets = pkgs.writeShellApplication {
+      name = "pino-server-secrets";
+      runtimeInputs = [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ];
+      text = ''
+        exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${./scripts/server-secrets.py} "$@"
+      '';
+    };
     packages.x86_64-linux.kexec-installer =
       nixos-images.packages.x86_64-linux.kexec-installer-nixos-unstable-noninteractive;
 
