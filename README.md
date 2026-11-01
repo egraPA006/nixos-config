@@ -225,10 +225,31 @@ Desktop profiles are:
 - `workstation`: desktop applications, audio, and Bluetooth;
 - `gnome`: GNOME desktop environment;
 - `development`: Git, Codex, and VS Code;
+- `latex`: full TeX Live with BibTeX/Biber and LaTeX Workshop when VS Code is enabled;
 - `vpn-client`: named AmneziaWG connections and explicit WiFi sharing;
 - `gaming-lite` / `gaming-full`;
 - `music-lite` / `music-full`;
 - `torrent`.
+
+The `latex` profile is optional and independent of `development`. After rebuilding
+once to register the new profile, enable it with:
+
+```bash
+pino profile enable latex
+```
+
+It installs the full TeX Live distribution (several GB), including `latexmk`,
+pdfLaTeX, XeLaTeX, LuaLaTeX, BibTeX and Biber. With `development` enabled,
+VS Code also gets LaTeX Workshop, builds on save, and displays PDFs in a tab.
+Use **LaTeX Workshop: Build with recipe** to select XeLaTeX or another engine;
+the initial recipe uses pdfLaTeX, and subsequent builds reuse the last selected recipe.
+
+Keep the thesis sources, bibliography, fonts and university template settings
+in a separate project. For a XeLaTeX project, create a `.latexmkrc` containing
+`$pdf_mode = 5;` and build from the project directory with `latexmk main.tex`.
+In VS Code, select the **latexmk (latexmkrc)** recipe to use that same configuration.
+`latexmk` runs BibTeX or Biber as required by the document; use the bibliography
+style required by the university template.
 
 The current host assignments are:
 

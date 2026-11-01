@@ -15,6 +15,7 @@ let
     };
     development = {
       development = { module = ./development; description = "Git, Codex and Visual Studio Code"; };
+      latex = { module = ./development/latex.nix; description = "TeX Live, BibTeX/Biber and LaTeX Workshop for VS Code"; };
     };
     server = {
       "server-web" = { module = ./server/web.nix; description = "Static Caddy website"; };
