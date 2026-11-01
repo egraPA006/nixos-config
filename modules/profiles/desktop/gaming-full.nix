@@ -46,6 +46,7 @@
   environment.systemPackages = with pkgs; [
     gamescope-wsi
     lutris
+    protontricks
     r2modman
     # wineWowPackages.stable
     # winetricks

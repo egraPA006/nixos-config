@@ -18,6 +18,10 @@
       };
 
       projects = {
+        "${config.pino.user.home}/Projects/prog/evalution" = {
+          trust_level = "trusted";
+        };
+
         "${config.pino.user.home}/prog/nvim-config" = {
           trust_level = "trusted";
         };
