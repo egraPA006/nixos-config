@@ -140,7 +140,18 @@ if [ "$operation" = install ]; then
 
   echo "Booting the RAM installer; SSH will disconnect briefly..."
   set +e
-  ssh_to "$initial_target" "$elevate '$remote_kexec_dir/kexec/run'"
+  # Retry inside the same SSH connection: a transport disconnect must not
+  # trigger a second boot attempt. Restore the archive because run appends
+  # machine state to the initrd on each invocation.
+  ssh_to "$initial_target" "
+    if $elevate '$remote_kexec_dir/kexec/run'; then
+      exit 0
+    else
+      echo 'Automatic kexec load failed; retrying with --kexec-syscall.' >&2
+      $elevate tar -xzf /tmp/pino-kexec.tar.gz -C '$remote_kexec_dir' || exit 1
+      $elevate '$remote_kexec_dir/kexec/run' --kexec-extra-flags --kexec-syscall
+    fi
+  "
   kexec_status=$?
   set -e
   case "$kexec_status" in 0|255) ;; *) echo "kexec failed with status $kexec_status." >&2; exit 1 ;; esac
