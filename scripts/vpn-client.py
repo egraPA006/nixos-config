@@ -41,6 +41,31 @@ def public_key(private):
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
+def peer_networks(peers, excluding=None):
+    try:
+        return [ipaddress.ip_network(value.strip()) for peer in peers
+                if peer.get("PublicKey") != excluding
+                for value in peer["AllowedIPs"].split(",")]
+    except (ValueError, KeyError):
+        raise ValueError("Invalid server peer AllowedIPs") from None
+
+
+def update_peer_address(config, public, address):
+    # Use the same comment/whitespace rules as sections(), retaining every
+    # unrelated line, including hooks, comments and optional peer settings.
+    lines = config.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines)
+              if line.split("#", 1)[0].strip() == "[Peer]"]
+    for start, end in zip(starts, starts[1:] + [len(lines)]):
+        _, peers = sections("[Interface]\n" + "".join(lines[start:end]))
+        if peers[0].get("PublicKey") == public:
+            for index in range(start, end):
+                if re.match(r"^[ \t]*AllowedIPs[ \t]*=", lines[index]):
+                    lines[index] = f"AllowedIPs = {address}\n"
+                    return "".join(lines)
+    raise ValueError("Could not locate the existing peer address")
+
+
 def prepare_client(vault, host, name, force=False):
     if host != "mosk" or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name):
         raise ValueError("Use host mosk and a client name of 1–32 letters, digits, hyphens or underscores")
@@ -48,17 +73,25 @@ def prepare_client(vault, host, name, force=False):
     if not server:
         raise ValueError("Prepare the server Bitwarden note first")
     interface, peers = sections(server["notes"])
-    address = ipaddress.IPv4Interface(interface["Address"])
+    try:
+        address = ipaddress.IPv4Interface(interface["Address"])
+    except (ValueError, KeyError):
+        raise ValueError("Invalid server Interface Address") from None
     if address.network.prefixlen < 16:
         raise ValueError("VPN subnet is unexpectedly large")
     server_public = public_key(interface["PrivateKey"])
     item_name = f"pino-vpn-client-{name}-{host}"
     existing = vault.find(item_name, 2)
-    used = [ipaddress.ip_network(value.strip()) for peer in peers
-            for value in peer["AllowedIPs"].split(",")]
-    if existing and not force:
+    used = peer_networks(peers)
+    client = None
+    if existing:
         client, destinations = sections(existing["notes"])
-        client_address = ipaddress.IPv4Interface(client["Address"])
+        try:
+            old_interface = ipaddress.IPv4Interface(client["Address"])
+        except (ValueError, KeyError):
+            raise ValueError("Invalid client Interface Address; record preserved") from None
+    if existing and not force:
+        client_address = old_interface
         if (len(destinations) != 1 or destinations[0].get("PublicKey") != server_public
                 or destinations[0].get("AllowedIPs") != "0.0.0.0/0"
                 or client_address.network.prefixlen != 32
@@ -70,15 +103,12 @@ def prepare_client(vault, host, name, force=False):
     else:
         old_address = None
         if existing:
-            client, _ = sections(existing["notes"])
             private = client["PrivateKey"]
             public = public_key(private)
-            old_address = ipaddress.IPv4Interface(client["Address"]).ip
+            old_address = old_interface.ip
             # Preserve the device key, so a failed vault update can be retried
             # without losing track of an old peer or revoking another device.
-            used = [ipaddress.ip_network(value.strip()) for peer in peers
-                    if peer.get("PublicKey") != public
-                    for value in peer["AllowedIPs"].split(",")]
+            used = peer_networks(peers, excluding=public)
         else:
             private = subprocess.run(["awg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
             public = public_key(private)
@@ -96,21 +126,20 @@ def prepare_client(vault, host, name, force=False):
                       if re.fullmatch(r"Jc|Jmin|Jmax|S[1-4]|H[1-4]|I[1-5]", key)}
         config = f"[Interface]\nPrivateKey = {private}\nAddress = {client_address}\n"
         config += "".join(f"{key} = {value}\n" for key, value in parameters.items())
+        port = interface.get("ListenPort", "585")
+        if not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
+            raise ValueError("Invalid server ListenPort")
         config += (f"\n[Peer]\nPublicKey = {server_public}\n"
-                   f"Endpoint = vpn.egrapa.com:{int(interface.get('ListenPort', '585'))}\n"
+                   f"Endpoint = vpn.egrapa.com:{port}\n"
                    "AllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n")
         matching = [peer for peer in peers if peer.get("PublicKey") == public]
         if len(matching) > 1:
             raise ValueError("Duplicate server peers for this device; resolve them first")
         if matching and matching[0].get("PresharedKey"):
             config += f"PresharedKey = {matching[0]['PresharedKey']}\n"
-        # Save client first: a failed server edit is recoverable by rerunning.
-        if existing:
-            updated_client = copy.deepcopy(existing)
-            updated_client["notes"] = config
-            vault.edit(existing, updated_client)
-        else:
-            vault.create(item_name, 2, notes=config)
+    if any(client_address.ip in network for network in peer_networks(peers, excluding=public)):
+        raise ValueError("Client address is already assigned to another peer")
+    updated = copy.deepcopy(server)
     matching = [p for p in peers if p.get("PublicKey") == public]
     if matching:
         if len(matching) != 1:
@@ -118,22 +147,20 @@ def prepare_client(vault, host, name, force=False):
         if matching[0].get("AllowedIPs") != str(client_address):
             if not force:
                 raise ValueError("Existing server peer has a conflicting address; retry with --force")
-            # Modify only this public key's peer block, preserving other peers,
-            # comments and optional settings such as preshared keys.
-            blocks = re.split(r"(?m)(?=^[ \t]*\[Peer\][ \t]*$)", server["notes"])
-            for index in range(1, len(blocks)):
-                _, entries = sections("[Interface]\n" + blocks[index])
-                if entries[0].get("PublicKey") == public:
-                    blocks[index] = re.sub(r"(?m)^\s*AllowedIPs\s*=.*$", f"AllowedIPs = {client_address}", blocks[index])
-            updated = copy.deepcopy(server)
-            updated["notes"] = "".join(blocks)
-            vault.edit(server, updated)
+            updated["notes"] = update_peer_address(server["notes"], public, client_address)
     else:
-        if any(client_address.ip in network for network in used):
-            raise ValueError("Client address is already assigned to another peer")
-        updated = copy.deepcopy(server)
         updated["notes"] = server["notes"].rstrip() + (
             f"\n\n[Peer]\n# {name}\nPublicKey = {public}\nAllowedIPs = {client_address}\n")
+
+    # Finish all validation before the first vault mutation. Save the client
+    # first so that a failed server edit can be recovered by rerunning.
+    if not existing:
+        vault.create(item_name, 2, notes=config)
+    elif force and config != existing["notes"]:
+        updated_client = copy.deepcopy(existing)
+        updated_client["notes"] = config
+        vault.edit(existing, updated_client)
+    if updated != server:
         vault.edit(server, updated)
     return config
 

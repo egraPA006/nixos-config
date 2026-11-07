@@ -80,7 +80,7 @@ class Bitwarden:
 
     def edit(self, original, updated):
         current = self.json_call("get", "item", original["id"])
-        for field in ("revisionDate", "name", "type", "notes", "login"):
+        for field in ("revisionDate", "name", "type", "notes", "login", "fields"):
             if current.get(field) != original.get(field):
                 raise ValueError("Bitwarden item changed during rotation; retry after reviewing it")
         encoded = base64.b64encode(json.dumps(updated).encode()).decode()

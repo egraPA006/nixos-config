@@ -194,7 +194,7 @@ fi
 
 host="$3"
 target="$4"
-[[ "$host" =~ ^[A-Za-z0-9_.@-]+$ ]] || { echo "Invalid SSH host: $host" >&2; exit 1; }
+[[ "$host" =~ ^[A-Za-z0-9_.@-]+$ ]] && [[ "$host" != -* ]] || { echo "Invalid SSH host: $host" >&2; exit 1; }
 validate_target "$target"
 shift 4
 validate_units "$@"

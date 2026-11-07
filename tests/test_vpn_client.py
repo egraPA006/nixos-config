@@ -106,3 +106,38 @@ class ClientTests(unittest.TestCase):
         vault.items["pino-vpn-server-mosk"]["notes"] = vault.items["pino-vpn-server-mosk"]["notes"].replace("server-secret", "new-server-secret")
         config = self.prepare(vault, "phone", force=True)
         self.assertIn("PublicKey = public-new-server-secret", config)
+
+    def test_force_updates_peer_with_inline_header_comment(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        server = vault.items["pino-vpn-server-mosk"]
+        server["notes"] = server["notes"].replace("[Peer]", "[Peer] # phone")
+        server["notes"] = server["notes"].replace("Address = 10.77.0.1/24", "Address = 10.78.0.1/24")
+        self.prepare(vault, "phone", force=True)
+        self.assertIn("[Peer] # phone", vault.items["pino-vpn-server-mosk"]["notes"])
+        self.assertNotIn("10.77.0.2/32", vault.items["pino-vpn-server-mosk"]["notes"])
+
+    def test_conflicting_other_peer_is_rejected_before_any_write(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        vault.items["pino-vpn-server-mosk"]["notes"] += "\n[Peer]\nPublicKey = other\nAllowedIPs = 10.77.0.2/32\n"
+        before = copy.deepcopy(vault.items)
+        with self.assertRaises(ValueError):
+            self.prepare(vault, "phone")
+        self.assertEqual(vault.items, before)
+
+    def test_invalid_port_is_not_echoed_or_saved(self):
+        vault = Vault()
+        vault.items["pino-vpn-server-mosk"]["notes"] = vault.items["pino-vpn-server-mosk"]["notes"].replace("ListenPort = 585", "ListenPort = sensitive-fixture")
+        before = copy.deepcopy(vault.items)
+        with self.assertRaises(ValueError) as error:
+            self.prepare(vault, "phone")
+        self.assertNotIn("sensitive-fixture", str(error.exception))
+        self.assertEqual(vault.items, before)
+
+    def test_force_preserves_server_preshared_key(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        vault.items["pino-vpn-server-mosk"]["notes"] += "PresharedKey = synthetic-psk\n"
+        config = self.prepare(vault, "phone", force=True)
+        self.assertIn("PresharedKey = synthetic-psk", config)
