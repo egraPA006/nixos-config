@@ -131,7 +131,7 @@ in
     commands = {
       add-client = {
         description = "Create an AWG client in Bitwarden, export it and deploy the server peer";
-        usage = "<mosk> <client-name> <new-export-directory>";
+        usage = "<mosk> <client-name> <new-export-directory> [--force]";
       };
       list.description = "List installed named VPN connections";
       connect = {

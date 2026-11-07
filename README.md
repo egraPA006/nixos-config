@@ -679,11 +679,19 @@ pino vpn add-client mosk phone ~/mosk-phone
 This unlocks Bitwarden, creates or reuses `pino-vpn-client-phone-mosk`, adds its
 public peer to `pino-vpn-server-mosk`, exports `mosk-phone.conf` into the new
 private directory, and deploys the server note. Import that file in AmneziaWG
-on the phone. The generated profile routes only the VPN subnet; it does not
-change the desktop's active VPN. Deployment restarts AWG, briefly interrupting
+on the phone. New profiles route all IPv4 traffic (`AllowedIPs = 0.0.0.0/0`):
+server mode `private` blocks IPv4 Internet, while `full` enables Internet and
+the VPN network. IPv6 is not routed. Creating a client does not change the
+server mode or the desktop's active VPN. Deployment restarts AWG, briefly interrupting
 existing peers. Use one device name per device. The export must be outside Git
 and must not already exist. To re-export the same client, choose a new directory;
-keys are preserved. If deployment fails after saving, run `pino provision host
+keys are preserved. To replace a stale or private-only Bitwarden client profile,
+pass `--force` and a new export directory. This preserves the device private key,
+refreshes the server key and AWG settings, and keeps the client address when
+available. Other server peers are preserved. Import/install the updated client
+file afterwards. `--force` does not overwrite local files or rotate device keys.
+If deployment fails after saving, retry the command with a new directory
+(and `--force` if the server peer address still needs updating), then run `pino provision host
 mosk`. Remove the local export after importing and keep the Bitwarden note.
 This command currently supports Mosk only; it does not create Xray credentials.
 
