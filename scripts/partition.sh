@@ -59,9 +59,9 @@ settle() {
 
 mount_desktop() {
   local root="$1" boot="$2"
-  mount -o noatime "$root" /mnt
+  mount -t ext4 -o noatime "$root" /mnt
   install -d /mnt/boot
-  mount -o umask=0077 "$boot" /mnt/boot
+  mount -t vfat -o umask=0077 "$boot" /mnt/boot
 }
 
 case "$host" in
@@ -83,8 +83,8 @@ case "$host" in
     mkfs.ext4 -F -L pino-slow "$slow_part"
     mount_desktop "$root_part" "$boot_part"
     install -d /mnt/data/fast /mnt/data/slow
-    mount -o noatime "$fast_part" /mnt/data/fast
-    mount -o noatime "$slow_part" /mnt/data/slow
+    mount -t ext4 -o noatime "$fast_part" /mnt/data/fast
+    mount -t ext4 -o noatime "$slow_part" /mnt/data/slow
     ;;
   la1n)
     system="$1"
@@ -108,7 +108,7 @@ case "$host" in
     settle "$system"
     root_part="$(partition_by_label "$system" pino-root)"
     mkfs.ext4 -F -L pino-root "$root_part"
-    mount -o noatime "$root_part" /mnt
+    mount -t ext4 -o noatime "$root_part" /mnt
     ;;
 esac
 
