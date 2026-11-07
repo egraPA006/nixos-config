@@ -198,8 +198,13 @@ hardware_tmp=""
 
 echo "Cloning the pushed configuration in the installer..."
 install_revision="$(git -C "$BOOTSTRAP_CONFIG_DIR" rev-parse HEAD)"
+nixpkgs_revision="$(jq -er '.nodes.nixpkgs.locked.rev' "$BOOTSTRAP_CONFIG_DIR/flake.lock")"
+[[ "$nixpkgs_revision" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "Invalid pinned nixpkgs revision." >&2
+  exit 1
+}
 ssh_to "$installer_target" \
-  "test ! -e /root/nixos-config && nix-shell -p git --run 'git clone --no-checkout $BOOTSTRAP_REPOSITORY /root/nixos-config && git -C /root/nixos-config checkout -B main $install_revision'"
+  "test ! -e /root/nixos-config && nix --extra-experimental-features 'nix-command flakes' shell 'github:NixOS/nixpkgs/$nixpkgs_revision#git' --command sh -c 'git clone --no-checkout $BOOTSTRAP_REPOSITORY /root/nixos-config && git -C /root/nixos-config checkout -B main $install_revision'"
 printf '%s\n' "$public_key" | ssh_to "$installer_target" \
   'umask 077; cat > /root/pino-bootstrap.pub'
 
