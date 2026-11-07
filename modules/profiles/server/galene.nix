@@ -2,6 +2,8 @@
 
 let
   cfg = config.pino.server.galene;
+  service = config.services.galene;
+  mediaPorts = { from = 49152; to = 65535; };
   domain = if cfg.domain == null then "meet.invalid.local" else cfg.domain;
   publicConfig = pkgs.writeText "galene-config.json" (builtins.toJSON {
     proxyURL = "https://${domain}/";
@@ -28,6 +30,19 @@ in
   };
 
   systemd.services.galene = {
+    # The upstream module has no UDP-range option. Keep ICE media sockets
+    # inside the same range that the firewall permits.
+    serviceConfig.ExecStart = lib.mkForce (lib.escapeShellArgs ([
+      "${service.package}/bin/galene"
+    ] ++ lib.optional service.insecure "-insecure" ++ [
+      "-http" "${service.httpAddress}:${toString service.httpPort}"
+      "-turn" service.turnAddress
+      "-data" service.dataDir
+      "-groups" service.groupsDir
+      "-recordings" service.recordingsDir
+      "-static" service.staticDir
+      "-udp-range" "${toString mediaPorts.from}-${toString mediaPorts.to}"
+    ]));
     unitConfig.ConditionPathExists = "/etc/pino/galene/main.json";
     serviceConfig.LoadCredential = "main-group:/etc/pino/galene/main.json";
     preStart = lib.mkAfter ''
@@ -46,7 +61,7 @@ in
   networking.firewall = {
     allowedTCPPorts = [ 80 443 cfg.turnPort ];
     allowedUDPPorts = [ cfg.turnPort ];
-    allowedUDPPortRanges = [{ from = 49152; to = 65535; }];
+    allowedUDPPortRanges = [ mediaPorts ];
   };
 
   environment.systemPackages = [ config.services.galene.package ];
