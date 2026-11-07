@@ -14,6 +14,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
+from urllib.parse import urlencode
 
 import bcrypt
 
@@ -156,6 +158,12 @@ def rotate_bitwarden(host, scope, vault, repair=False):
 
 
 def prepare_bitwarden(host, vault):
+    existing_proxies = {}
+    if host == "mosk":
+        for name in ("pino-xray-mosk", "pino-telemt-mosk"):
+            existing_proxies[name] = vault.find(name, 2)
+            if existing_proxies[name]:
+                validate_proxy_note(name, existing_proxies[name].get("notes"))
     vpn_name = f"pino-vpn-server-{host}"
     vpn = vault.find(vpn_name, 2)
     if vpn and not (vpn.get("notes") or "").strip():
@@ -195,8 +203,64 @@ def prepare_bitwarden(host, vault):
         if not private:
             raise ValueError("awg did not generate a private key")
         vault.create(vpn_name, 2, notes=vpn_config(private))
+    if host == "mosk":
+        for name, record in proxy_records().items():
+            if not existing_proxies[name]:
+                vault.create(name, 2, **record)
     print("Bitwarden records ready. Existing records were preserved; no plaintext export files were created.")
     print("New VPN configs have no peers. Existing SSH keys are unchanged.")
+
+
+def validate_proxy_note(name, notes):
+    try:
+        entries = json.loads(notes)["users"]
+        if not isinstance(entries, dict) or not entries:
+            raise ValueError()
+        seen = set()
+        for user, key in entries.items():
+            if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", user) or not isinstance(key, str):
+                raise ValueError()
+            if name == "pino-xray-mosk":
+                if str(uuid.UUID(key)) != key or uuid.UUID(key).int == 0:
+                    raise ValueError()
+            elif not re.fullmatch(r"[0-9a-f]{32}", key) or key == "0" * 32:
+                raise ValueError()
+            if key in seen:
+                raise ValueError()
+            seen.add(key)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise ValueError(f"Invalid users object in {name}; existing record was preserved") from None
+
+
+def proxy_records(settings=None):
+    # The same public manifest is imported by hosts/mosk/default.nix.
+    # Connection URIs are hidden vault fields, never printed or passed in argv.
+    if settings is None:
+        path = Path(os.environ.get("PINO_PROXY_SETTINGS", Path(__file__).resolve().parents[1]
+                                   / "resources/mosk-proxies.json"))
+        settings = json.loads(path.read_text())
+    xray = settings["xray"]
+    telemt = settings["telemt"]
+    identifier = str(uuid.uuid4())
+    secret = secrets.token_hex(16)
+    xray_link = f"vless://{identifier}@{xray['domain']}:443?" + urlencode({
+        "encryption": "none", "security": "tls", "sni": xray["domain"],
+        "type": "xhttp", "path": xray["path"], "mode": "auto", "alpn": "h2",
+    }) + "#mosk-owner"
+    telegram_link = "tg://proxy?" + urlencode({
+        "server": telemt["publicHost"], "port": telemt["port"],
+        "secret": "ee" + secret + telemt["tlsDomain"].encode().hex(),
+    })
+    return {
+        "pino-xray-mosk": {
+            "notes": json.dumps({"users": {"owner": identifier}}, indent=2),
+            "fields": [{"name": "owner connection URI", "value": xray_link, "type": 1}],
+        },
+        "pino-telemt-mosk": {
+            "notes": json.dumps({"users": {"owner": secret}}, indent=2),
+            "fields": [{"name": "owner connection URI", "value": telegram_link, "type": 1}],
+        },
+    }
 
 
 def vpn_config(private_key):
@@ -266,6 +330,9 @@ def prepare(host, output, password=None):
         write_private(output / "server.pub", public + "\n")
         if room is not None:
             write_private(output / "pino-galene-mosk-main.json", json.dumps(room, indent=2) + "\n")
+            for name, record in proxy_records().items():
+                write_private(output / f"{name}.json", record["notes"] + "\n")
+                write_private(output / f"{name}-client.txt", record["fields"][0]["value"] + "\n")
     except BaseException:
         shutil.rmtree(output)
         raise
@@ -317,6 +384,8 @@ def main():
     print(f"Bitwarden Secure Note pino-vpn-server-{args.host}: use pino-vpn-server-{args.host}.conf as Notes")
     if args.host == "mosk":
         print("Bitwarden Secure Note pino-galene-mosk-main: use pino-galene-mosk-main.json as Notes")
+        print("Bitwarden Secure Notes pino-xray-mosk and pino-telemt-mosk: use the matching JSON files as Notes")
+        print("Save the matching -client.txt connection URI as a hidden field in each note")
     print("VPN has no peers yet; add client public keys and distinct /32 addresses before connecting clients.")
     print("Copy S1, S2 and H1–H4 to client configs. Default server VPN mode is private.")
     print("Existing SSH keys in Bitwarden are not changed.")

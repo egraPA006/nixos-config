@@ -6,6 +6,7 @@ import tempfile
 import io
 from contextlib import redirect_stdout
 import unittest
+from urllib.parse import urlparse, parse_qs
 from unittest.mock import patch
 
 import bcrypt
@@ -37,6 +38,29 @@ class FakeVault:
 
 
 class ServerSecretsTests(unittest.TestCase):
+    def test_proxy_links_match_credentials_and_are_hidden_fields(self):
+        records = setup.proxy_records()
+        for name, record in records.items():
+            setup.validate_proxy_note(name, record["notes"])
+            self.assertEqual(record["fields"][0]["type"], 1)
+        xray = records["pino-xray-mosk"]
+        self.assertEqual(urlparse(xray["fields"][0]["value"]).username,
+                         json.loads(xray["notes"])["users"]["owner"])
+        telemt = records["pino-telemt-mosk"]
+        link = parse_qs(urlparse(telemt["fields"][0]["value"]).query)
+        self.assertEqual(link["secret"][0], "ee" + json.loads(telemt["notes"])["users"]["owner"]
+                         + "www.microsoft.com".encode().hex())
+
+    def test_invalid_existing_proxy_note_is_preserved(self):
+        vault = FakeVault()
+        vault.create("pino-xray-mosk", 2, notes="do-not-disclose")
+        with patch.object(setup.subprocess, "run", side_effect=self.tool), redirect_stdout(io.StringIO()):
+            with self.assertRaises(ValueError) as error:
+                setup.prepare_bitwarden("mosk", vault)
+        self.assertNotIn("do-not-disclose", str(error.exception))
+        self.assertEqual(vault.items["pino-xray-mosk"]["notes"], "do-not-disclose")
+        self.assertEqual(vault.created, ["pino-xray-mosk"])
+
     def tool(self, args, **kwargs):
         if args[0] == "git":
             return subprocess.CompletedProcess(args, 128, "", "")
@@ -84,7 +108,7 @@ class ServerSecretsTests(unittest.TestCase):
             setup.prepare_bitwarden("mosk", vault)
             original = json.dumps(vault.items, sort_keys=True)
             setup.prepare_bitwarden("mosk", vault)
-        self.assertEqual(len(vault.created), 3)
+        self.assertEqual(len(vault.created), 5)
         self.assertEqual(original, json.dumps(vault.items, sort_keys=True))
         self.assertNotIn("generated-test-password", output.getvalue())
         self.assertNotIn("test-private", output.getvalue())

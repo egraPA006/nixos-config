@@ -4,7 +4,7 @@ One small flake for four machines:
 
 - `re-1`: desktop, ext4 root plus `/data/fast` and `/data/slow`;
 - `la1n`: laptop, LUKS2-encrypted ext4 root;
-- `mosk`: VPN exit, static website, and data disk;
+- `mosk`: private VPN/optional exit, website, Galene, Xray/XHTTP and telemt/FakeTLS;
 - `halos`: VPN only.
 
 There is no Disko, Btrfs, mail server, or Git mirror. GitHub stores only the
@@ -17,7 +17,7 @@ and merged manually; Pino has no automatic backup or dataset layer.
 
 ### Remote servers
 
-Prepare new VPN and Galene note contents locally before bootstrapping:
+Prepare server credentials before bootstrapping:
 
 To generate and save missing records directly in Bitwarden, without temporary
 export files, log in to the CLI once with `bw login`, then run from this checkout:
@@ -29,7 +29,10 @@ nix run path:.#server-secrets -- mosk --bitwarden
 
 This unlocks the vault when necessary, generates a 32-character Galene password
 using `bw generate`, saves the `admin` Login as `pino-galene-mosk-admin`, and
-creates Secure Notes `pino-galene-mosk-main` and `pino-vpn-server-mosk`. Existing
+creates Secure Notes `pino-galene-mosk-main`, `pino-vpn-server-mosk`,
+`pino-xray-mosk` and `pino-telemt-mosk`. The proxy notes contain a `users` JSON
+object and a hidden `owner connection URI` field for importing into clients.
+Public endpoints are shared with Nix in `resources/mosk-proxies.json`. Existing
 records are never overwritten. Duplicate names, mismatched Login/room passwords,
 or an existing room without its Login require manual resolution. Interrupted
 runs can be retried: an already-created Login is reused. SSH records are untouched.
@@ -89,7 +92,10 @@ Existing directories and paths inside Git checkouts are rejected. Import the
 contents of `pino-vpn-server-<host>.conf` and, for Mosk,
 `pino-galene-mosk-main.json` into the Notes fields of Secure Notes with the
 matching names (without the file extension). Nothing is uploaded automatically,
-and existing SSH keys are not changed.
+and existing SSH keys are not changed. Proxy preparation also writes matching
+`pino-xray-mosk.json` / `pino-telemt-mosk.json` note payloads and private
+`-client.txt` files with connection URIs; save those as hidden fields in the
+corresponding Bitwarden notes, without printing them in terminal logs.
 
 The generated VPN listens on UDP 585 at `10.77.0.1/24`, matching the current
 server defaults. It has no peers: add each client's public key and a unique
@@ -163,7 +169,7 @@ sudo scripts/partition.sh re-1 /dev/system /dev/fast /dev/slow
 # Laptop: EFI + LUKS2 container + ext4 root
 sudo scripts/partition.sh la1n /dev/nvme0n1
 
-# Mosk: BIOS boot + 64 GiB ext4 root + ext4 /data
+# Mosk: BIOS boot + ext4 root using the remaining disk (suitable for 20 GB VPS)
 sudo scripts/partition.sh mosk /dev/vda
 
 # Halos: BIOS boot + ext4 root
@@ -491,7 +497,7 @@ The current host assignments are:
 
 - `la1n`: workstation, GNOME, development, VPN client, light gaming, and light music;
 - `re-1`: workstation, GNOME, development, VPN client, full gaming, Assetto Corsa, torrent, full music, Guitar Pro, and LaTeX;
-- `mosk`: VPN server, static website, and Galene;
+- `mosk`: VPN server, static website, Galene, Xray/XHTTP and telemt/FakeTLS;
 - `halos`: VPN server only.
 
 `music-full` is enabled on `re-1`. Its installers live under
@@ -573,7 +579,110 @@ Server profiles are:
 
 - `server-vpn`: AmneziaWG server;
 - `server-web`: static Caddy site;
-- `server-galene`: lightweight calls, screen sharing, and streams.
+- `server-galene`: lightweight calls, screen sharing, and streams;
+- `server-xray`: VLESS over XHTTP, with public TLS terminated by Caddy;
+- `server-telemt`: Telegram MTProxy in FakeTLS-only mode.
+
+### Mosk on a small VPS
+
+The current Mosk layout targets an x86_64 BIOS VPS with `/dev/vda`, 4 GB RAM and
+20 GB storage. Partitioning creates a small BIOS boot partition and one ext4 root
+covering the rest of the disk; there is no separate `/data` partition. This is a
+fresh-install layout, not an in-place conversion of an older Mosk disk. The
+installation erases the entire selected disk. The tested system closure is about
+2 GiB; updates, build inputs, old generations and state need additional space.
+Weekly GC removes generations older than 14 days, and journals are capped at
+256 MiB. Avoid server-side call recording and large archives on this disk.
+
+| Service | Public endpoint | Runtime secret |
+| --- | --- | --- |
+| SSH | TCP 22, `vincent@vpn.egrapa.com` | Public half of `pino-ssh-server-mosk` installed as authorized key |
+| Website | `https://egrapa.com`, TCP 80/443 | Caddy obtains certificates automatically |
+| Galene | `https://meet.egrapa.com/group/main/` | `pino-galene-mosk-main` → `/etc/pino/galene/main.json` |
+| AmneziaWG 3.1 | UDP 585, normally `10.77.0.1/24` | `pino-vpn-server-mosk` → `/etc/pino/vpn/awg0.conf` |
+| Xray/XHTTP | `https://egrapa.com/pino-xhttp`, TCP 443 | `pino-xray-mosk` → `/etc/pino/xray/users.json` |
+| telemt/FakeTLS | `vpn.egrapa.com:2443`, TCP | `pino-telemt-mosk` → `/etc/pino/telemt/users.json` |
+
+Galene additionally needs TCP/UDP 1194 for TURN and UDP 49152–65535 for media.
+Allow these ports both in NixOS and in any provider firewall. Point `egrapa.com`,
+`meet.egrapa.com` and `vpn.egrapa.com` at the VPS public IPv4 address. Remove stale
+AAAA records if the new VPS has no working IPv6. Use direct DNS for VPN/telemt;
+an ordinary HTTP CDN proxy cannot carry their protocols. Telemt binds IPv4 only.
+Website/Xray TLS issuance needs public DNS and access to ports 80/443. The FakeTLS
+masking domain is `www.microsoft.com`, distinct from the actual proxy endpoint;
+it must be reachable from Mosk.
+
+On the new Ubuntu/Debian, install the **public** half of `pino-ssh-server-mosk`
+using the provider's SSH-key option. The initial user needs root or passwordless
+sudo. From the trusted desktop, after rebuilding Pino:
+
+```bash
+pino provision install
+pino bootstrap prepare mosk --bitwarden
+# Substitute the actual initial user/IP; verify the provider's SSH fingerprint:
+pino bootstrap install mosk root@203.0.113.10 ~/.ssh/mosk.pub
+```
+
+Use `ubuntu@…` or `debian@…` instead if appropriate. Bootstrap checks every Secure
+Note declared by the selected profiles before changing the VPS, boots a NixOS
+installer through kexec, and asks for `erase mosk` before partitioning `/dev/vda`.
+It installs the exact pushed revision (including generated hardware updates),
+then sends every declared note and restarts its services. This requires a clean
+checkout on `origin/main`. If kexec is unavailable, boot a NixOS rescue image and
+use `bootstrap rescue`. After reinstalling, verify the new SSH host fingerprint
+through the provider console before updating your normal known_hosts entry.
+
+Proxy notes contain `{"users": {"owner": "credential"}}`. For Xray, use a canonical
+UUID; for telemt, a 32-character lowercase hex secret. The generator creates
+independent random values and stores matching client URIs in hidden fields.
+Import VLESS into an XHTTP-capable Xray client; support in the Amnezia app itself
+is not assumed. Import the Telegram URI in Telegram's proxy settings. Telegram
+proxying does not provide a private IP network; use AmneziaWG for that.
+
+Only credentials are in these notes. Ports, routing and TLS paths are declared in
+Nix. Systemd renders private configs below `/run/pino-xray` and `/run/pino-telemt`
+from loaded credentials. Both services use dynamic unprivileged users. The
+telemt control API is disabled; proxy payload logs and generated links are not
+written to the journal. `logs` shows systemd lifecycle events. Neither proxy
+starts until its credentials have been provisioned.
+
+To add/revoke access, edit the appropriate `users` object in Bitwarden (distinct
+credentials per named user), update that user's hidden URI, then provision the
+note again. Preparation preserves existing notes and does not rotate credentials
+or refresh existing URIs. When endpoints change, update the shared public manifest
+and existing client URIs together.
+
+```bash
+pino provision send pino-xray-mosk mosk /etc/pino/xray/users.json xray.service
+pino provision send pino-telemt-mosk mosk /etc/pino/telemt/users.json telemt.service
+pino host mosk server status
+pino host mosk server xray status
+pino host mosk server telemt restart
+pino host mosk server galene status
+pino host mosk server vpn mode set private
+pino host mosk os rebuild
+```
+
+`pino host` uses the local SSH alias and allocates a TTY when invoked in a terminal.
+Ordinary `ssh mosk` remains available. Rebuild uses the server's checkout: pull
+the desired revision there first.
+
+VPN `private` mode allows the server and VPN peers but blocks Internet forwarding.
+Use client `AllowedIPs = 10.77.0.0/24` (or your actual private subnet) to retain
+ordinary Internet access through the client's local connection. `egress` enables
+Internet only; `full` enables both. These are interface-wide IPv4 policies, not
+per-peer roles. IPv6 VPN routing is not configured. Mode changes replace nftables
+rules atomically. Private mode also blocks telemt through `awg0`; XHTTP rejects
+private source addresses in every mode. Xray blocks private/link-local destinations,
+including the VPN subnet and metadata addresses. A local reverse proxy placed in
+front of Caddy would require revisiting the source-address policy. The website
+and Galene remain public; their visibility is not controlled by VPN mode.
+
+For offline integration checks, run `tests/check_server_runtime.py` under
+`unshare -Urn`, passing the built Xray, telemt and Caddy binaries and generated
+Caddyfile. It checks startup, website routing, real XHTTP forwarding and private
+address restrictions using documentation IPs in an isolated network. Public
+DNS/ACME, Telegram connectivity and remote AWG handshakes require post-deploy tests.
 
 Galene is enabled on Mosk at `https://meet.egrapa.com/group/main/`. Store the
 complete group definition in a Bitwarden Secure Note named
@@ -629,7 +738,9 @@ pino provision install
 Pino prompts for CLI login on the first run and unlocks the vault on later
 runs. There is no shell-session setup command to remember.
 
-Store every complete runtime file in a uniquely named Secure Note. Names use
+Store runtime payloads in uniquely named Secure Notes. VPN, hotspot and Galene
+notes contain complete runtime files; Xray and telemt notes contain their `users`
+JSON object, merged with public policy at startup. Names use
 `pino-<type>-<source>-<destination>` where applicable:
 
 - `pino-vpn-client-re-1-mosk` and `pino-vpn-client-re-1-halos`;

@@ -40,12 +40,16 @@ let
             echo "Cannot determine the default IPv4 interface; set pino.server.vpn.externalInterface." >&2
             return 1
           fi
-          ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
+          # Replace the rules in one nft transaction: a failed update retains
+          # the previous rules, and mode changes never leave an unfiltered gap.
           ${pkgs.nftables}/bin/nft -f - <<EOF
+    add table inet ${table}
+    delete table inet ${table}
     table inet ${table} {
       chain input {
         type filter hook input priority -10; policy accept;
         $(if [ "$mode" = egress ]; then printf 'iifname "%s" drop' "${cfg.interface}"; fi)
+        ${lib.optionalString (builtins.hasAttr "telemt" config.systemd.services) ''$(if [ "$mode" = private ]; then printf 'iifname "%s" tcp dport %s drop' "${cfg.interface}" "${toString config.pino.server.telemt.port}"; fi)''}
       }
       chain forward {
         type filter hook forward priority -10; policy accept;
@@ -68,8 +72,8 @@ let
     }
 
     cleanup_rules() {
-      ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
       ${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=0 >/dev/null
+      ${pkgs.nftables}/bin/nft delete table inet ${table} 2>/dev/null || true
     }
 
     write_mode() {

@@ -111,7 +111,13 @@ let
       ((resource [ "server-galene" ] [ config.services.galene.stateDir "/etc/pino/galene" ]) // {
         services = [ "galene.service" ];
       })
-      ((resource [ "server-web" "server-galene" ] [ config.services.caddy.dataDir "/var/lib/private/caddy" "/var/log/caddy" ]) // {
+      ((resource [ "server-xray" ] [ "/etc/pino/xray" "/var/lib/pino-xray" "/var/lib/private/pino-xray" ]) // {
+        services = [ "xray.service" ];
+      })
+      ((resource [ "server-telemt" ] [ "/etc/pino/telemt" "/var/lib/pino-telemt" "/var/lib/private/pino-telemt" ]) // {
+        services = [ "telemt.service" ];
+      })
+      ((resource [ "server-web" "server-galene" "server-xray" ] [ config.services.caddy.dataDir "/var/lib/private/caddy" "/var/log/caddy" ]) // {
         services = [ "caddy.service" ];
       })
     ];

@@ -22,6 +22,8 @@ let
       "server-web" = { module = ./server/web.nix; description = "Static Caddy website"; };
       "server-vpn" = { module = ./server/vpn.nix; description = "AmneziaWG VPN server"; };
       "server-galene" = { module = ./server/galene.nix; description = "Lightweight video calls and streams"; };
+      "server-xray" = { module = ./server/xray.nix; description = "VLESS over XHTTP and TLS"; };
+      "server-telemt" = { module = ./server/telemt.nix; description = "Telegram MTProxy with FakeTLS"; };
     };
   };
   profileCatalog = lib.mergeAttrsList (builtins.attrValues profileGroups);

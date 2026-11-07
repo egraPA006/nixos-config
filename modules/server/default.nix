@@ -43,7 +43,7 @@
           echo
           echo "Active Pino server services:"
           systemctl list-units --type=service --state=active --no-pager \
-            | grep -E 'caddy|jitsi|amneziawg' || true
+            | grep -E 'caddy|galene|amneziawg|pino-vpn-mode|xray|telemt' || true
           ;;
         connections)
           ${pkgs.iproute2}/bin/ss -H -tupn state established

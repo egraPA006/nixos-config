@@ -100,22 +100,7 @@ case "$host" in
     mkfs.ext4 -F -L pino-root /dev/mapper/cryptroot
     mount_desktop /dev/mapper/cryptroot "$boot_part"
     ;;
-  mosk)
-    system="$1"
-    wipefs --all --force "$system"; sgdisk --zap-all "$system"
-    sgdisk -n 1:1MiB:+1MiB -t 1:EF02 -c 1:pino-bios "$system"
-    sgdisk -n 2:0:+64GiB -t 2:8300 -c 2:pino-root "$system"
-    sgdisk -n 3:0:0 -t 3:8300 -c 3:pino-data "$system"
-    settle "$system"
-    root_part="$(partition_by_label "$system" pino-root)"
-    data_part="$(partition_by_label "$system" pino-data)"
-    mkfs.ext4 -F -L pino-root "$root_part"
-    mkfs.ext4 -F -L pino-data "$data_part"
-    mount -o noatime "$root_part" /mnt
-    install -d /mnt/data
-    mount -o noatime "$data_part" /mnt/data
-    ;;
-  halos)
+  mosk|halos)
     system="$1"
     wipefs --all --force "$system"; sgdisk --zap-all "$system"
     sgdisk -n 1:1MiB:+1MiB -t 1:EF02 -c 1:pino-bios "$system"

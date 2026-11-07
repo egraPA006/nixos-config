@@ -33,6 +33,30 @@ in
         description = "Built-in Galene TURN TCP/UDP port";
       };
     };
+    xray = {
+      domain = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = cfg.domain;
+      };
+      path = lib.mkOption {
+        type = lib.types.strMatching "/[a-zA-Z0-9/_-]+";
+        default = "/pino-xhttp";
+      };
+      port = lib.mkOption { type = lib.types.port; default = 10080; };
+    };
+    telemt = {
+      publicHost = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = if cfg.domain == null then null else "vpn.${cfg.domain}";
+        description = "Public endpoint used by Telegram clients.";
+      };
+      port = lib.mkOption { type = lib.types.port; default = 2443; };
+      tlsDomain = lib.mkOption {
+        type = lib.types.strMatching "[a-zA-Z0-9.-]+";
+        default = "www.microsoft.com";
+        description = "Real HTTPS masking target; changing it invalidates client links.";
+      };
+    };
     vpn = {
       interface = lib.mkOption {
         type = lib.types.str;

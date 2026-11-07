@@ -20,5 +20,5 @@
   pino.server = {
     domain = "egrapa.com";
     acmeEmail = "admin@egrapa.com";
-  };
+  } // builtins.fromJSON (builtins.readFile ../../resources/mosk-proxies.json);
 }

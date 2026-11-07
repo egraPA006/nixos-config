@@ -3,6 +3,7 @@
 let
   cfg = config.pino.bootstrap;
   prepareSecrets = pkgs.writeShellScript "pino-server-secrets" ''
+    export PINO_PROXY_SETTINGS=${../../resources/mosk-proxies.json}
     export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ]}:"$PATH"
     exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../scripts/server-secrets.py} "$@"
   '';
@@ -17,7 +18,7 @@ in
       description = "Install a Pino server over SSH";
       commands = {
         prepare = {
-          description = "Prepare VPN and Galene secrets locally or in Bitwarden";
+          description = "Prepare VPN, Galene, Xray and telemt secrets locally or in Bitwarden";
           usage = "<mosk|halos> [new-output-directory] [--bitwarden] [--rotate galene|vpn | --repair-galene]";
         };
         install = {

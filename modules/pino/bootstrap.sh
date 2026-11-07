@@ -97,8 +97,9 @@ git -C "$BOOTSTRAP_CONFIG_DIR" fetch origin main
   exit 1
 }
 bw sync >/dev/null
-check_note "pino-vpn-server-$host"
-if [ "$host" = mosk ]; then check_note pino-galene-mosk-main; fi
+provision_manifest="$(nix eval --json "path:$BOOTSTRAP_CONFIG_DIR#nixosConfigurations.$host.config.pino.provision.secrets")"
+mapfile -t provision_items < <(jq -r '.[].item' <<< "$provision_manifest")
+for item in "${provision_items[@]}"; do check_note "$item"; done
 
 echo "Connecting to $initial_target. Verify the new VPS host fingerprint when prompted."
 remote_uid="$(ssh_to "$initial_target" 'id -u')"
@@ -108,6 +109,13 @@ else
   ssh_to "$initial_target" 'sudo -n true'
   elevate=sudo
 fi
+
+# The host storage declarations install BIOS GRUB on /dev/vda. Check this
+# before replacing the running OS with the RAM installer.
+ssh_to "$initial_target" 'test -b /dev/vda && test ! -d /sys/firmware/efi' || {
+  echo "This bootstrap requires BIOS boot and /dev/vda; adapt storage/boot configuration before continuing." >&2
+  exit 1
+}
 
 if [ "$operation" = install ]; then
   echo "Preparing root SSH access for the RAM installer..."
@@ -178,8 +186,9 @@ rm -f "$hardware_tmp"
 hardware_tmp=""
 
 echo "Cloning the pushed configuration in the installer..."
+install_revision="$(git -C "$BOOTSTRAP_CONFIG_DIR" rev-parse HEAD)"
 ssh_to "$installer_target" \
-  "test ! -e /root/nixos-config && nix-shell -p git --run 'git clone --depth 1 $BOOTSTRAP_REPOSITORY /root/nixos-config'"
+  "test ! -e /root/nixos-config && nix-shell -p git --run 'git clone --no-checkout $BOOTSTRAP_REPOSITORY /root/nixos-config && git -C /root/nixos-config checkout -B main $install_revision'"
 printf '%s\n' "$public_key" | ssh_to "$installer_target" \
   'umask 077; cat > /root/pino-bootstrap.pub'
 
@@ -209,14 +218,14 @@ done
 }
 
 echo "Provisioning enabled services from Bitwarden..."
-export PINO_SSH_IDENTITY_FILE="$identity_file"
+export PINO_SSH_IDENTITY_FILE="$private_key"
 export PINO_SSH_KNOWN_HOSTS_FILE="$known_hosts"
-pino provision send "pino-vpn-server-$host" "$final_target" \
-  /etc/pino/vpn/awg0.conf amneziawg-server.service pino-vpn-mode.service
-if [ "$host" = mosk ]; then
-  pino provision send pino-galene-mosk-main "$final_target" \
-    /etc/pino/galene/main.json galene.service
-fi
+while IFS= read -r declaration; do
+  item="$(jq -r '.item' <<< "$declaration")"
+  target="$(jq -r '.target' <<< "$declaration")"
+  mapfile -t units < <(jq -r '.units[]' <<< "$declaration")
+  pino provision send "$item" "$final_target" "$target" "${units[@]}"
+done < <(jq -c '.[]' <<< "$provision_manifest")
 
 ssh_to "$final_target" '/run/current-system/sw/bin/pino server status'
 echo "$host installation and provisioning complete at $address."

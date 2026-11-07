@@ -46,6 +46,7 @@
       name = "pino-server-secrets";
       runtimeInputs = [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ];
       text = ''
+        export PINO_PROXY_SETTINGS=${./resources/mosk-proxies.json}
         exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${./scripts/server-secrets.py} "$@"
       '';
     };
