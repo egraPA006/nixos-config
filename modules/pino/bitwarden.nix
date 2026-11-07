@@ -52,6 +52,10 @@ in
           description = "Install a Secure Note on an SSH host";
           usage = "<item> <host> <absolute-target> [systemd-unit ...]";
         };
+        host = {
+          description = "Send all declared runtime secrets to a server";
+          usage = "<mosk|halos> [user@address]";
+        };
       };
       helpText = ''
         Store each complete runtime file in a uniquely named Bitwarden Secure Note.
@@ -61,9 +65,12 @@ in
         installs every secret and SSH key pair declared by active profiles.
         It continues past individual failures and reports them at the end.
         On a desktop, it switches the Git origin to SSH after verifying access.
+        `host mosk` reads Mosk's secret declarations from the local checkout,
+        sends them using the SSH alias, and restarts their declared services.
+        An optional SSH target overrides the alias. SSH private keys are not sent.
       '';
-      script = builtins.replaceStrings [ "@declaredCount@" "@declaredSecrets@" "@afterDeclared@" ]
-        [ (toString (builtins.length secrets + builtins.length sshKeys)) installCommands afterInstall ]
+      script = builtins.replaceStrings [ "@declaredCount@" "@declaredSecrets@" "@afterDeclared@" "@configDir@" ]
+        [ (toString (builtins.length secrets + builtins.length sshKeys)) installCommands afterInstall (lib.escapeShellArg config.pino.configDir) ]
         (builtins.readFile ./bitwarden.sh);
     };
   };

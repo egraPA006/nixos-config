@@ -653,6 +653,8 @@ or refresh existing URIs. When endpoints change, update the shared public manife
 and existing client URIs together.
 
 ```bash
+pino provision host mosk
+# Or update a single service:
 pino provision send pino-xray-mosk mosk /etc/pino/xray/users.json xray.service
 pino provision send pino-telemt-mosk mosk /etc/pino/telemt/users.json telemt.service
 pino host mosk server status

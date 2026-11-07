@@ -110,6 +110,18 @@ elif [ "$operation" = install ] && [ "$#" -ge 3 ]; then
   mode=single
 elif [ "$operation" = send ] && [ "$#" -ge 4 ]; then
   mode=send
+elif [ "$operation" = host ] && [ "$#" -ge 2 ] && [ "$#" -le 3 ]; then
+  mode=host
+  case "$2" in mosk|halos) ;; *) echo "Host must be mosk or halos." >&2; exit 1 ;; esac
+  remote_host="${3:-$2}"
+  [[ "$remote_host" =~ ^[A-Za-z0-9_.@-]+$ ]] && [[ "$remote_host" != -* ]] || {
+    echo "Invalid SSH target." >&2; exit 1
+  }
+  config_dir=@configDir@
+  manifest="$(nix eval --json "path:$config_dir#nixosConfigurations.$2.config.pino.provision.secrets")"
+  [ "$(jq 'length' <<< "$manifest")" -gt 0 ] || {
+    echo "No runtime secrets declared for $2."; exit 0
+  }
 else
   echo "Run 'pino provision help' for usage." >&2
   exit 1
@@ -140,6 +152,24 @@ if [ -z "${BW_SESSION:-}" ]; then
   export BW_SESSION
 fi
 bw sync >/dev/null
+
+if [ "$mode" = host ]; then
+  # Validate the complete list before sending anything to the server.
+  while IFS= read -r declaration; do
+    item="$(jq -er '.item' <<< "$declaration")"
+    bw get item "$item" | jq -e 'select(.type == 2 and (.notes | type == "string") and (.notes | length > 0))' >/dev/null || {
+      echo "Missing or invalid Bitwarden Secure Note: $item" >&2; exit 1
+    }
+  done < <(jq -c '.[]' <<< "$manifest")
+  while IFS= read -r declaration; do
+    item="$(jq -r '.item' <<< "$declaration")"
+    target="$(jq -r '.target' <<< "$declaration")"
+    mapfile -t units < <(jq -r '.units[]' <<< "$declaration")
+    pino provision send "$item" "$remote_host" "$target" "${units[@]}"
+  done < <(jq -c '.[]' <<< "$manifest")
+  echo "Runtime secrets provisioned on $remote_host."
+  exit 0
+fi
 
 if [ "$mode" = declared ]; then
   failed_items=()
