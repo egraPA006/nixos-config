@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, activeProfiles, ... }:
 {
   imports = [
     ./hardware.nix
@@ -6,6 +6,7 @@
     ../../configurations/desktop
     ../../modules/hardware/nvidia.nix
     ./music-full-fabfilter.nix
+    ./assetto-corsa.nix
   ];
 
   pino.user = {
@@ -107,6 +108,11 @@
   };
 
   networking.hostName = "re-1";
+
+  pino.artifacts = lib.genAttrs
+    (builtins.filter (name: builtins.elem name activeProfiles)
+      [ "music-full" "guitar-pro" "assetto-corsa" ])
+    (_: { requiredMount = "/data/fast"; });
 
   systemd.tmpfiles.rules = [
     "z /data/fast 0755 ${config.pino.user.name} users -"

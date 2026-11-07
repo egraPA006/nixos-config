@@ -93,6 +93,12 @@ apply_profiles() {
 }
 
 command="${1:-}"
+setup_profile() {
+  case "$1" in
+    assetto-corsa) /run/current-system/sw/bin/assetto-corsa-setup setup ;;
+  esac
+}
+
 case "$command" in
   enable)
     profile="${2:-}"
@@ -100,10 +106,11 @@ case "$command" in
     is_valid "$profile" || { echo "Unknown profile: $profile"; exit 1; }
     mapfile -t active < <(get_active)
     for candidate in "${active[@]}"; do
-      [ "$candidate" = "$profile" ] && { echo "Profile '$profile' is already enabled"; exit 0; }
+      [ "$candidate" = "$profile" ] && { echo "Profile '$profile' is already enabled"; setup_profile "$profile"; exit $?; }
     done
     active+=("$profile")
-    apply_profiles "${active[@]}"
+    apply_profiles "${active[@]}" || exit 1
+    setup_profile "$profile"
     ;;
   disable)
     profile="${2:-}"

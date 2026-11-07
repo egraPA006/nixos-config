@@ -7,6 +7,7 @@ let
       gnome = { module = ./desktop/gnome; description = "GNOME desktop environment"; };
       "gaming-lite" = { module = ./desktop/gaming-lite.nix; description = "Basic gaming tools"; };
       "gaming-full" = { module = ./desktop/gaming-full.nix; description = "Full gaming stack"; };
+      "assetto-corsa" = { module = ./desktop/assetto-corsa.nix; description = "Assetto Corsa, Content Manager and declared mods (requires gaming-full)"; };
       "music-lite" = { module = ./desktop/music-lite.nix; description = "Light music workstation"; };
       "music-full" = { module = ./desktop/music-full.nix; description = "Full music workstation"; };
       "guitar-pro" = { module = ./desktop/guitar-pro.nix; description = "Guitar Pro in a separate Wine prefix"; };
@@ -57,6 +58,10 @@ in
     assertion = builtins.hasAttr name profileModules;
     message = "Unknown profile '${name}'. Valid: ${lib.concatStringsSep ", " validProfiles}";
   }) activeProfiles ++ [
+    {
+      assertion = !(builtins.elem "assetto-corsa" activeProfiles) || builtins.elem "gaming-full" activeProfiles;
+      message = "assetto-corsa requires gaming-full; enable gaming-full first";
+    }
     {
       assertion = !(builtins.elem "gaming-lite" activeProfiles && builtins.elem "gaming-full" activeProfiles);
       message = "gaming-lite and gaming-full are alternatives; enable only one";

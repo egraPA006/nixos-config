@@ -149,6 +149,49 @@ class WineCleanupTests(unittest.TestCase):
 
 
 class ProfileCommandTests(unittest.TestCase):
+    def test_assetto_enable_setup_and_retry(self):
+        for enabled, rebuild_fails, setup_fails in [(False, False, False), (True, False, False),
+                                                     (False, True, False), (False, False, True)]:
+            with self.subTest(enabled=enabled, rebuild_fails=rebuild_fails, setup_fails=setup_fails), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                profiles = root / "hosts/test-host/active-profiles.nix"
+                profiles.parent.mkdir(parents=True)
+                initial = '[ "gaming-full"' + (' "assetto-corsa"' if enabled else '') + ' ]\n'
+                profiles.write_text(initial)
+                events = root / "events"
+                binary = root / "bin"
+                binary.mkdir()
+                for name, body in {
+                    "hostname": "echo test-host",
+                    "sudo": 'exec "$@"',
+                    "nixos-rebuild": f'echo rebuild >> "{events}"; exit {int(rebuild_fails)}',
+                    "setup": f'echo setup >> "{events}"; exit {int(setup_fails)}',
+                }.items():
+                    target = binary / name
+                    target.write_text("#!/bin/sh\n" + body + "\n")
+                    target.chmod(0o755)
+                source = (ROOT / "modules/pino/profile.sh").read_text()
+                for key, value in {
+                    "@validProfiles@": "gaming-full assetto-corsa",
+                    "@profileDescriptions@": "Gaming Assetto",
+                    "@profileGroups@": "desktop:gaming-full,assetto-corsa",
+                    "@configDir@": str(root), "@cleanup@": "unused",
+                    "/run/current-system/sw/bin/assetto-corsa-setup": str(binary / "setup"),
+                }.items():
+                    source = source.replace(key, value)
+                script = root / "profile.sh"
+                script.write_text("set -euo pipefail\n" + source)
+                env = dict(os.environ, PATH=str(binary) + ":" + os.environ["PATH"])
+                env.pop("NIXOS_CONFIG_DIR", None)
+                result = subprocess.run(["bash", str(script), "enable", "assetto-corsa"], env=env, capture_output=True)
+                self.assertEqual(result.returncode != 0, rebuild_fails or setup_fails)
+                self.assertEqual(events.read_text().splitlines(),
+                                 ["setup"] if enabled else ["rebuild"] if rebuild_fails else ["rebuild", "setup"])
+                if rebuild_fails:
+                    self.assertEqual(profiles.read_text(), initial)
+                else:
+                    self.assertIn('"assetto-corsa"', profiles.read_text())
+
     def run_scenario(self, rebuild_fails=False, check_fails=False, cleanup_fails=False, enabled=True):
         with tempfile.TemporaryDirectory(prefix="pino-disable-") as temporary:
             root = Path(temporary)

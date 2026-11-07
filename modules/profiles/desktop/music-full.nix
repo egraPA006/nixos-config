@@ -75,6 +75,7 @@ in
   imports = [ ./music-base.nix ];
 
   config = {
+    pino.artifacts.music-full.target = installersDir;
     environment.systemPackages = with pkgs; [
       reaperPackage
       (lib.hiPrio (pkgs.writeShellScriptBin "reaper" ''

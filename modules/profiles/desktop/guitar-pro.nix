@@ -25,6 +25,7 @@ let
   '';
 in
 {
+  pino.artifacts.guitar-pro.target = installersDir;
   assertions = [{
     assertion = cfg.winePrefix != config.pino.profiles.musicFull.winePrefix
       && cfg.winePrefix != "${user.home}/.wine";

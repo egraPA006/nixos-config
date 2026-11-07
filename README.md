@@ -189,6 +189,124 @@ first boot, use the copied checkout (or a normal HTTPS `git clone` on an
 already installed host), then run `pino provision install` to log in to
 Bitwarden and install the runtime files declared by active profiles.
 
+### Reinstalling re-1 and preparing another desktop
+
+There are three inputs to a fresh desktop: Git supplies the system and application
+declarations, Bitwarden supplies declared runtime credentials, and an unlocked
+external disk supplies saved installers and libraries. Installing NixOS does not
+install those local Windows applications or restore personal documents.
+
+After booting the new `re-1`, log in as `egrapa` and run:
+
+```bash
+pino provision install
+sudo nmcli connection reload
+pino artifacts list
+pino artifacts import /run/media/$USER/pino-external/artifacts --dry-run
+pino artifacts import /run/media/$USER/pino-external/artifacts
+pino desktop music-full plugins apply
+pino desktop guitar-pro install
+```
+
+The new `artifacts` command becomes available after installing this revision or
+running `pino os rebuild` on an existing system. Run it without sudo. Unlock the
+existing external disk in GNOME first; **do not run encrypted-disk-init.sh again**.
+The source directory is explicit, so a different mount name works too.
+
+Prepare this layout on the external disk before erasing the old system:
+
+| External folder below `artifacts/` | Local destination on re-1 | Contents |
+| --- | --- | --- |
+| `music-full/` | `/data/fast/music-full/installs/` | Entire installer tree, FabFilter installers, linked EZX/Nucleus libraries, and any hook assets; preserve names and subfolders |
+| `guitar-pro/` | `/data/fast/guitar-pro/installs/` | Complete GP8 EXE and the configured `replacement/GuitarPro.exe` |
+| `assetto-corsa/` | `/data/fast/assetto-corsa/installs/` | Declared CSP/Pure/Hakone/Moscow Raceway/NOLA ZIPs; retaining cached public downloads is optional |
+
+Use `pino files merge <external-folder> <local-folder>` for each row to prepare
+or update the external copy, explicitly choosing the copy direction in Meld.
+The import command copies files from those external folders into destinations
+declared by active profiles. It checks all declared folders before copying,
+skips identical files, rejects different existing files and symlinks, and never
+deletes files. Missing folders or the unmounted `/data/fast` filesystem fail the
+preflight. Extra external folders are ignored. Interrupted copies can be retried;
+completed files remain. This is an installer import, not a full backup restore.
+Do not modify the source or destination while importing. Application installers
+perform their own declared checksum checks; importing does not establish that
+an archive is the release expected by the application configuration.
+
+Keep the imported library directories locally: plugins using `method = "link"`
+link into them. They must work after unplugging the external disk. Do not copy
+only the EXEs, rename the saved directories, or import old installation stamps
+instead of running the installation commands. Licensing/login is separate and
+may require manual activation. `pino provision install` does not retrieve music,
+Guitar Pro or Content Manager license keys automatically.
+
+For Assetto Corsa, log into Steam, install the game and required DLC, select
+Proton-GE, start the original game once, then close the game and Steam:
+
+```bash
+pino desktop assetto-corsa setup
+```
+
+CM and the declared public shader archive can download over HTTPS; the local ZIPs
+must already be imported. Configure CM's game directory and AppID starter as
+described below. Activate CM manually with your own key stored in Bitwarden.
+The fresh install creates the active profile directly, so it does not run the
+interactive `pino profile enable assetto-corsa` setup hook for you.
+
+For `re-1`, `pino provision install` currently retrieves these records:
+
+| Bitwarden item | Destination |
+| --- | --- |
+| SSH Key `pino-ssh-re-1-github` | `~/.ssh/github` and `.pub` |
+| SSH Key `pino-ssh-server-mosk` | `~/.ssh/mosk` and `.pub` |
+| SSH Key `pino-ssh-server-halos` | `~/.ssh/halos` and `.pub` |
+| Secure Note `pino-vpn-client-re-1-mosk` | `/etc/amneziawg/mosk.conf` |
+| Secure Note `pino-vpn-client-re-1-halos` | `/etc/amneziawg/halos.conf` |
+| Secure Note `pino-hotspot-re-1` | `/etc/NetworkManager/system-connections/pino-vpn-share.nmconnection` |
+
+These must already exist; provisioning does not generate a new client identity
+or register SSH public keys with GitHub. Browser, Steam, Bitwarden Desktop, Codex
+and other application sessions are not restored by this command. Local user and
+LUKS passwords are entered during installation/unlock, not fetched from the vault.
+Server VPN/Galene notes are provisioned on the servers, not onto this desktop.
+
+For a *second concurrently used computer*, create `hosts/<new-name>/` and a
+matching `mkHost` entry in `flake.nix`. Reuse the profile list and application
+declarations, but supply its own `networking.hostName`, hardware, storage, GPU
+module and WiFi interface. The current re-1 application overrides are in
+`hosts/re-1/default.nix`, `music-full-fabfilter.nix`, and `assetto-corsa.nix`:
+copy/adapt those declarations too if the same plugins and mods are wanted.
+Copying only `active-profiles.nix` does not copy the host's plugin/mod selections.
+Keep the needed package overlays from the re-1 flake entry as well.
+
+Do not import the complete re-1 host into the new host: it fixes its hostname,
+three-disk storage layout, NVIDIA and device-specific settings. The partition
+script supports only the four existing layouts; prepare/mount a new host's
+filesystems under `/mnt` yourself before `sudo scripts/install.sh <new-name>`.
+The installer regenerates hardware.nix, but does not design storage.nix or add
+a flake entry for you. A one-disk machine needs different storage declarations.
+Reusing `re-1` unchanged is appropriate only for replacing the original machine.
+
+Create `pino-ssh-<new-name>-github`, `pino-vpn-client-<new-name>-mosk`,
+`pino-vpn-client-<new-name>-halos`, and `pino-hotspot-<new-name>` in Bitwarden.
+Authorize the new GitHub public key; give each VPN client its own private key
+and address and add the matching peer on each server before deploying. Adapt
+the hotspot interface in its Secure Note too. Server SSH items are currently
+shared between desktops by design. Then use exactly the same provision/import/
+application-install sequence. `pino artifacts list` shows that computer's local
+destinations; the external folder names remain unchanged. If local paths use a
+separate filesystem, declare `pino.artifacts.<name>.requiredMount` for it.
+Custom archive paths outside the declared `installs` directory require separate
+handling; keep local archives inside that directory for the common import flow.
+
+Personal projects, photos, REAPER projects, saves, activation state and recovery
+documents are separate from installers. Restore those selectively with Meld.
+For recovery documents, unlock a new local `~/Secrets` container and merge from
+the unlocked encrypted external copy. A fresh empty container is not a restore.
+Back up Steam's `compatdata/244210` and its Documents symlink target separately
+if CM state/saves are needed. The re-1 partition command erases **all three**
+selected disks; an existing `/data/fast` is not preserved by that command.
+
 To reinstall the declared system and bootloader without repartitioning or
 regenerating hardware configuration:
 
@@ -231,6 +349,124 @@ Desktop profiles are:
 - `music-lite` / `music-full`;
 - `torrent`.
 
+`assetto-corsa` (requires `gaming-full`) includes declarative Content Manager and ZIP mods for the
+Steam-installed Assetto Corsa. It discovers the game in native Steam libraries,
+including secondary SSD/HDD libraries. Steam still owns and installs the game.
+
+```bash
+pino profile enable assetto-corsa
+```
+
+Enabling the profile runs setup after rebuilding. Enabling it again reapplies
+the declared mods and settings without rebuilding; ordinary rebuilds preserve
+manual in-game changes. Setup failures leave the profile enabled so setup can
+be retried. Disabling this profile preserves Steam's game, mods and saves.
+For diagnostics or partial restoration, the following commands remain available:
+
+```bash
+pino desktop assetto-corsa status
+pino desktop assetto-corsa deps
+pino desktop assetto-corsa apply
+pino desktop assetto-corsa graphics
+pino desktop assetto-corsa launch-options
+```
+
+Select Proton-GE in Steam and launch the original game once before setup. Close
+Steam, the game and Content Manager before applying changes. `apply` restores
+the declared launch options for app 244210 in each local Steam account, then verifies all ZIPs
+and their SHA-256 digests before installing CM as the Steam launcher, then CSP
+and additional mods in declaration order. Identical files are skipped; changed
+files are backed up. `graphics` merges video, weather and `settings` INI files,
+preserving resolution and undeclared settings. The re-1 training presets enable
+automatic clutch, paddle shifting, moderate Neck FX, grass, smoke, ambient
+occlusion and half-resolution local reflections. Existing wheel axes and paddle
+buttons are preserved. It is a starting
+preset, not a measured FPS guarantee. Run `apply` again if Steam Verify restores
+the original launcher. Removing a mod declaration does not uninstall its files.
+
+The re-1 bundle includes Moscow Raceway SMP 1.0.5, ACS NOLA Skidpad 1.5,
+and Hakone Ohiradai v3 with its emissive shaders. Original downloads and provenance
+remain in `installs/`; normalized ZIPs preserve game files. The rejected drift BMWs
+and Project Touge are no longer declared, but their existing files are not deleted.
+
+In CM's Quick Drive preset menu, open **Pino**. The folders cover car control on
+NOLA (dry and light rain), Moscow Raceway, Magione/Imola, Highlands and Trento.
+The roster uses installed Kunos cars with factory paddle/automatic transmissions:
+Giulietta QV Launch Edition TCT, Z4 DCT, 4C TCT, Macan PDK and M235i Racing.
+Macan is a heavier AWD comparison; M235i is a race car. They are not substitutes
+for a low-power road hatchback. Factory ABS/TC are the default; the two Z4
+car-control presets explicitly disable TC. Steering axes and paddle bindings
+are preserved. `roadTyreCompounds` installs a small CSP app that selects road tyres
+for Z4 and 4C once in the offline pre-drive menu, preserving other setup values
+and subsequent manual changes. `Pino Drift` remains an alias
+for the dry Z4/NOLA exercise.
+
+`quickDrivePresets` declares named presets (including folders). Undeclared presets
+are preserved. Launcher edits affect runtime files; reapplying the profile restores
+declared settings and presets. Save personal variants under a different name.
+`extendedPhysicsCars` enables CSP extended physics per car. Pure Static follows
+preset weather; Rain FX is enabled without automatically replacing road tyres with
+rain tyres. Base grip is fixed at 98% for repeatability; wet physics is applied by
+CSP separately. Snow/ice simulation is not part of this configuration.
+
+Setup also sets CM's **Disable windows transparency** preference for Wine,
+the declared weather controller, and the selected cars' extended-physics flags.
+Only those records are changed in `Values.data`; other records are preserved,
+and this private file is never logged or backed up by the installer.
+Set `disableWindowsTransparency = false` to leave that preference untouched.
+The launch environment selects Wine's old PDB reader with
+`WINE_DBGHELP_OLD_PDB=1`: the newer reader in GE-Proton11-6 omits symbols
+required by CSP. Keep CSP's original `NAMES_WINE` mappings intact.
+
+On `re-1`, archive declarations live in `hosts/re-1/assetto-corsa.nix`.
+Back up `/data/fast/assetto-corsa`: `installs/` holds source archives (including
+downloaded public archives), and `backups/` holds replaced files with a
+`changes.jsonl` log. This directory is retained when disabling gaming-full.
+`apply` and `deps` check `pino.profiles.assettoCorsa.winetricks` against the
+game's `winetricks.log`, installing only missing components. The default fixes
+are `dotnet48`, `d3dcompiler_47`, `d3dx11_43`, then `win10`. These match the
+manual fix recorded on `re-1` and the bundled GE-Proton game fix. After a
+runtime installation, Windows 10 mode is restored even if it was set before.
+`status` reports any missing runtime fixes.
+`deps` also copies Microsoft core fonts supplied by Nix and Segoe UI supplied
+by the Steam game's `content/fonts/` into the Proton prefix,
+including the Windows filenames for Verdana styles that CSP opens directly,
+links Steam's account-discovery file without copying its contents, and sets
+the native `dwrite` override for CSP. The first Proton-GE launch must create
+the prefix; runtime fixes are then verified explicitly rather than assumed.
+For saves, CM activation and settings, also back up the game's Steam
+`steamapps/compatdata/244210` directory while the game is closed; Documents may
+be a symlink into your home directory, so include its target in that backup.
+
+Declare paid archives as **string paths**, never Nix path literals, to keep
+their contents out of Git and the Nix store. For example:
+
+```nix
+pino.profiles.assettoCorsa.mods = [ {
+  source = "/data/fast/assetto-corsa/installs/my-track.zip";
+  sha256 = "<64-character hex digest from sha256sum>";
+  stripPrefix = "release"; # optional enclosing directory inside the ZIP
+  destination = "content/tracks"; # omit for archives laid out like the game root
+} ];
+```
+
+Download CSP preview from x4fab and Pure from Peter Boese using your own
+subscriptions. Check each release's compatibility and archive layout before
+declaring it. No Patreon credentials or CM activation keys belong in Nix;
+activate CM once in its interface using your key from Bitwarden.
+
+`pino.profiles.assettoCorsa.launchOptions` defaults to
+`PROTON_ENABLE_WAYLAND=0 WINE_DBGHELP_OLD_PDB=1 WINEDLLOVERRIDES="dwrite=n,b" %command%`.
+This keeps CM's keyboard input working through XWayland. `apply` sets it
+automatically; `launch-options` restores just this setting without reinstalling
+mods. Log in to Steam once after reinstalling, then close Steam before running
+either command. Other games and unrelated Steam settings are preserved; whole
+Steam configuration files are never copied into the archive backup directory.
+In CM select the game directory, set **Settings → Content Manager → Drive →
+Game starter** to **AppID**, and disable window transparency if tooltips are
+black. The `re-1` declaration selects Pure LCS and the `pureLinear` filter.
+For changing weather in Quick Drive, select Pure and configure Pure Planner.
+
 The `latex` profile is optional and independent of `development`. After rebuilding
 once to register the new profile, enable it with:
 
@@ -254,13 +490,14 @@ style required by the university template.
 The current host assignments are:
 
 - `la1n`: workstation, GNOME, development, VPN client, light gaming, and light music;
-- `re-1`: workstation, GNOME, development, VPN client, full gaming, torrent, and light music;
+- `re-1`: workstation, GNOME, development, VPN client, full gaming, Assetto Corsa, torrent, full music, Guitar Pro, and LaTeX;
 - `mosk`: VPN server, static website, and Galene;
 - `halos`: VPN server only.
 
-`music-full` is kept as an on-demand `re-1` profile. Its installers live under
-`/data/fast/music-full/installs`; `pino desktop music-full plugins install` prepares
-Wine automatically and `pino desktop music-full plugins sync` runs yabridge.
+`music-full` is enabled on `re-1`. Its installers live under
+`/data/fast/music-full/installs`; `pino desktop music-full plugins apply` installs
+the declared set and prepares Wine/yabridge. `plugins install <name|path>` runs
+one installer; `plugins sync` runs yabridge separately.
 
 Declared plugins can run a Bash `postInstall` hook, for example to install a
 preset for your own plugin (illustrative configuration, not enabled by default):
