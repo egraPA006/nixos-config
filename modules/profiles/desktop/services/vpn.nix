@@ -129,6 +129,10 @@ in
   pino.subcommands.vpn = {
     description = "AmneziaWG VPN";
     commands = {
+      add-client = {
+        description = "Create an AWG client in Bitwarden, export it and deploy the server peer";
+        usage = "<mosk> <client-name> <new-export-directory>";
+      };
       list.description = "List installed named VPN connections";
       connect = {
         description = "Select, start, and autostart a connection";
@@ -161,6 +165,12 @@ in
       run `sudo nmcli connection reload`.
     '';
     script = ''
+      if [ "''${1:-}" = add-client ]; then
+        shift
+        export PINO_SERVER_SECRETS=${../../../../scripts/server-secrets.py}
+        export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ]}:"$PATH"
+        exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/vpn-client.py} "$@"
+      fi
       VPN_SHARE_WIFI=${lib.escapeShellArg (if share.wifiInterface == null then "" else share.wifiInterface)}
       VPN_SHARE_CONNECTION=${lib.escapeShellArg share.connection}
       VPN_GUARD=${vpnGuard}

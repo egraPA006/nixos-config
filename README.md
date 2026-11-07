@@ -670,6 +670,23 @@ Ordinary `ssh mosk` remains available. Rebuild uses the server's checkout: pull
 the desired revision there first.
 
 VPN `private` mode allows the server and VPN peers but blocks Internet forwarding.
+Create a separate device profile from a desktop with the `vpn-client` profile:
+
+```bash
+pino vpn add-client mosk phone ~/mosk-phone
+```
+
+This unlocks Bitwarden, creates or reuses `pino-vpn-client-phone-mosk`, adds its
+public peer to `pino-vpn-server-mosk`, exports `mosk-phone.conf` into the new
+private directory, and deploys the server note. Import that file in AmneziaWG
+on the phone. The generated profile routes only the VPN subnet; it does not
+change the desktop's active VPN. Deployment restarts AWG, briefly interrupting
+existing peers. Use one device name per device. The export must be outside Git
+and must not already exist. To re-export the same client, choose a new directory;
+keys are preserved. If deployment fails after saving, run `pino provision host
+mosk`. Remove the local export after importing and keep the Bitwarden note.
+This command currently supports Mosk only; it does not create Xray credentials.
+
 Use client `AllowedIPs = 10.77.0.0/24` (or your actual private subnet) to retain
 ordinary Internet access through the client's local connection. `egress` enables
 Internet only; `full` enables both. These are interface-wide IPv4 policies, not
