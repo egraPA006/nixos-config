@@ -6,8 +6,9 @@ host="${2:-}"
 initial_target="${3:-}"
 identity_file="${4:-}"
 disk=/dev/vda
+[ "$#" -eq 4 ] || { echo "Usage: pino os install|rescue <mosk|halos> <user@address> <public-key-file>" >&2; exit 1; }
 
-case "$operation" in install|rescue) ;; *) echo "Run 'pino bootstrap help' for usage." >&2; exit 1 ;; esac
+case "$operation" in install|rescue) ;; *) echo "Run 'pino os help' for usage." >&2; exit 1 ;; esac
 case "$host" in mosk|halos) ;; *) echo "Host must be mosk or halos." >&2; exit 1 ;; esac
 [[ "$initial_target" =~ ^[A-Za-z_][A-Za-z0-9_-]*@[A-Za-z0-9.-]+$ ]] || {
   echo "SSH target must be user@IPv4-or-hostname." >&2
@@ -16,7 +17,7 @@ case "$host" in mosk|halos) ;; *) echo "Host must be mosk or halos." >&2; exit 1
 [ -f "$identity_file" ] || { echo "Public key file not found: $identity_file" >&2; exit 1; }
 [[ "$identity_file" == *.pub ]] || { echo "Pass a .pub identity selector." >&2; exit 1; }
 private_key="${identity_file%.pub}"
-[ -f "$private_key" ] || { echo "Private key not found; run 'pino provision install' first." >&2; exit 1; }
+[ -f "$private_key" ] || { echo "Private key not found; run 'pino os provision install' first." >&2; exit 1; }
 
 public_key="$(tr -d '\r' < "$identity_file")"
 [[ "$public_key" != *$'\n'* ]] || { echo "Public key file must contain exactly one key." >&2; exit 1; }
@@ -240,7 +241,7 @@ while IFS= read -r declaration; do
   item="$(jq -r '.item' <<< "$declaration")"
   target="$(jq -r '.target' <<< "$declaration")"
   mapfile -t units < <(jq -r '.units[]' <<< "$declaration")
-  pino provision send "$item" "$final_target" "$target" "${units[@]}"
+  pino os provision send "$item" "$final_target" "$target" "${units[@]}"
 done < <(jq -c '.[]' <<< "$provision_manifest")
 
 ssh_to "$final_target" '/run/current-system/sw/bin/pino server status'

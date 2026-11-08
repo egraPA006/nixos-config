@@ -6,7 +6,7 @@
     helpText = ''
       Examples: pino host mosk server status
                 pino host mosk server vpn mode set private
-                pino host mosk server xray restart
+                pino host mosk server xray status
                 pino host mosk os rebuild
       Uses your configured SSH identity and normal host-key verification.
       Secrets belong in Bitwarden, not command arguments.

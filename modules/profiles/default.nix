@@ -82,7 +82,7 @@ in
     description = "Server services and connections";
   };
 
-  pino.subcommands.profile = {
+  pino.subcommands.os.commands.profile = {
     description = "Manage optional NixOS profiles";
     commands = {
       list = {
@@ -90,21 +90,23 @@ in
         usage = "[--enabled]";
       };
       enable = { description = "Enable a profile and rebuild"; usage = "<profile>"; };
-      disable = { description = "Disable a profile, rebuild and remove its data"; usage = "<profile>"; };
+      disable = { description = "Disable a profile and rebuild, preserving its data"; usage = "<profile>"; };
+      purge = { description = "Disable a profile and explicitly delete its declared data"; usage = "<profile>"; };
     };
     helpText = ''
       Active profiles: hosts/<hostname>/active-profiles.nix
-      Disable removes the profile's declared application data, settings,
+      Disable preserves data. Purge removes declared application data, settings,
       caches and installed plugins after a successful rebuild. Saved install
       artifacts and resources owned by remaining profiles are preserved.
+      Purge shows a plan and asks for confirmation before rebuilding or deleting.
       Close the profile's applications first; disable GNOME from a TTY.
-      Run disable again to retry an interrupted cleanup.
+      Run purge again to retry an interrupted cleanup.
     '';
     script = profileScript;
     fishCompletions = ''
-      complete -c pino -f -n '__fish_pino_at_path profile enable; or __fish_pino_at_path profile disable' \
+      complete -c pino -f -n '__fish_pino_at_path os profile enable; or __fish_pino_at_path os profile disable; or __fish_pino_at_path os profile purge' \
         -a '${lib.concatStringsSep " " validProfiles}' -d 'Profile name'
-      complete -c pino -f -n '__fish_pino_at_path profile list' \
+      complete -c pino -f -n '__fish_pino_at_path os profile list' \
         -l enabled -d 'Print enabled profile names only'
     '';
   };

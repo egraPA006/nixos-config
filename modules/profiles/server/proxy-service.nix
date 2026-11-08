@@ -60,18 +60,14 @@ in {
     };
   };
   pino.subcommands.server.commands.${name} = {
-    description = "Operate ${name}; credentials are managed in Bitwarden";
+    description = "Inspect ${name}; service lifecycle is declared by its profile";
     commands = {
       status.description = "Show service state";
-      restart.description = "Validate credentials and restart the service";
-      stop.description = "Stop the service until started again or rebooted";
-      start.description = "Start the service";
       logs.description = "Show systemd lifecycle events (proxy payload logging is disabled)";
     };
     script = ''
       case "''${1:-}" in
         status) systemctl status ${name} --no-pager ;;
-        start|stop|restart) sudo systemctl "$1" ${name} ;;
         logs) journalctl -u ${name} -n 100 --no-pager ;;
         *) echo "Run 'pino server ${name} help' for usage." >&2; exit 1 ;;
       esac

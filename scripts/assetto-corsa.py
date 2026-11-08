@@ -498,12 +498,39 @@ def configure_steam(value, home=None):
     print(f"Steam launch options: {len(changes)} account(s) updated")
 
 
+def check_populate(config):
+    """Read-only setup gate; pending prerequisites are distinct from failures."""
+    try:
+        game, prefix = discover(config["gameDir"])
+        if not (prefix / "system.reg").is_file():
+            raise ValueError("Select Proton-GE in Steam, launch the game once and close it first")
+        if subprocess.run(["pgrep", "-x", "steam|steamwebhelper|AssettoCorsa.ex|acs.exe|acs_x86.exe|AC: ?main thread|Content Manager"],
+                          stdout=subprocess.DEVNULL).returncode != 1:
+            raise ValueError("Close Steam, Assetto Corsa and Content Manager before setup")
+        roots = [Path.home() / ".local/share/Steam", Path.home() / ".steam/steam"]
+        if not any(list(root.glob("userdata/*/config/localconfig.vdf")) for root in roots):
+            raise ValueError("Log in to Steam once, then close it")
+        if not (game / "content/fonts/segoeui.ttf").is_file():
+            raise ValueError("Verify the game files in Steam (content/fonts/segoeui.ttf is missing)")
+        specs = [config["contentManager"], config["csp"], *config["mods"]]
+        for spec in filter(None, specs):
+            if not spec["source"].startswith("https://") and not Path(spec["source"]).is_file():
+                raise ValueError(f"Restore the declared archive: {spec['source']}")
+    except ValueError as error:
+        print(f"Action required: {error}. Then repeat pino os populate.")
+        return 2
+    print("Assetto Corsa prerequisites: ready")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
-    parser.add_argument("action", choices=["status", "setup", "apply", "deps", "graphics", "launch-options"])
+    parser.add_argument("action", choices=["status", "check", "setup", "apply", "deps", "graphics", "launch-options"])
     args = parser.parse_args()
     config = json.loads(args.manifest.read_text())
+    if args.action == "check":
+        return check_populate(config)
     if args.action == "launch-options":
         configure_steam(config["launchOptions"])
         return
@@ -571,7 +598,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(main())
     except (OSError, ValueError, zipfile.BadZipFile, subprocess.CalledProcessError) as error:
         print(f"assetto-corsa: {error}", file=sys.stderr)
         sys.exit(1)

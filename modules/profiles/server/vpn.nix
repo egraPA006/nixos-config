@@ -165,8 +165,6 @@ in
   pino.subcommands.server.commands.vpn = {
     description = "Operate the AmneziaWG private network";
     commands = {
-      start.description = "Start the VPN interface";
-      stop.description = "Stop the VPN interface";
       status.description = "Show VPN service and peers";
       peers.description = "Show peer handshakes and traffic";
       logs.description = "Show recent VPN service logs";
@@ -186,8 +184,6 @@ in
     '';
     script = ''
       case "''${1:-}" in
-        start) sudo systemctl start amneziawg-server pino-vpn-mode ;;
-        stop) sudo systemctl stop pino-vpn-mode amneziawg-server ;;
         status)
           sudo test -f ${lib.escapeShellArg cfg.configFile} || {
             echo "VPN config is missing: ${cfg.configFile}" >&2

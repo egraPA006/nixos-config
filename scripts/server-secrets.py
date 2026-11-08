@@ -154,7 +154,7 @@ def rotate_bitwarden(host, scope, vault, repair=False):
     print(f"Updated {scope} in Bitwarden only; the running server has NOT changed.")
     if scope == "vpn":
         print("Peers and network settings were preserved. Update the server public key on every client when deploying.")
-    print("Deploy the updated note using pino provision send; retain the recovery snapshot until verified.")
+    print("Deploy the updated note using pino os provision send; retain the recovery snapshot until verified.")
 
 
 def prepare_bitwarden(host, vault):

@@ -76,6 +76,21 @@ in
 
   config = {
     pino.artifacts.music-full.target = installersDir;
+    pino.populate.steps.music-full = {
+      command = [ "pino" "desktop" "music-full" "plugins" "apply" ];
+      requiresSession = true;
+      requiredMount = config.pino.artifacts.music-full.requiredMount;
+      prerequisite = ''
+        missing=0
+        ${lib.concatMapStringsSep "\n" ({ name, plugin }: ''
+          if [ ! -e ${lib.escapeShellArg "${installersDir}/${plugin.installer}"} ]; then
+            printf '%s\n' ${lib.escapeShellArg "Restore installer for ${name}: ${installersDir}/${plugin.installer}"}
+            missing=1
+          fi
+        '') installers}
+        if [ "$missing" -ne 0 ]; then exit 2; fi
+      '';
+    };
     environment.systemPackages = with pkgs; [
       reaperPackage
       (lib.hiPrio (pkgs.writeShellScriptBin "reaper" ''

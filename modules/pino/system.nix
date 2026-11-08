@@ -12,7 +12,7 @@ in
 {
   pino.subcommands = {
     os = {
-      description = "Rebuild NixOS and manage system generations";
+      description = "Install, populate and maintain this machine";
       commands = {
         rebuild.description = "Confirm, rebuild, and switch the flake";
         update.description = "Update flake inputs without rebuilding";

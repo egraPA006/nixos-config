@@ -1,6 +1,9 @@
 { config, lib, pkgs, ... }:
 let
-  manifest = pkgs.writeText "pino-artifacts.json" (builtins.toJSON config.pino.artifacts);
+  syncManifest = pkgs.writeText "pino-artifact-sync.json" (builtins.toJSON {
+    kind = "artifacts"; entries = config.pino.artifacts;
+  });
+  sync = "${pkgs.python3}/bin/python3 ${../../scripts/data_sync.py} ${syncManifest}";
 in {
   options.pino.artifacts = lib.mkOption {
     default = {};
@@ -16,21 +19,20 @@ in {
       };
     });
   };
-  config.pino.subcommands.artifacts = {
-    description = "Import saved installers from an unlocked external disk";
-    commands = {
-      list.description = "Show external folder names and local destinations";
-      import = {
-        description = "Copy installer folders; refuse conflicts and symlinks";
-        usage = "<external-artifacts-directory> [--dry-run]";
-      };
-    };
+  config.pino.subcommands.backup.commands.artifacts = lib.mkIf (config.pino.artifacts != {}) {
+    description = "Compare and back up installer folders to disk/pino/artifacts";
+    usage = "[name] <external-disk> [--mode update|mirror] [--dry-run]";
+    script = ''exec ${sync} backup "$@"'';
+  };
+  config.pino.subcommands.restore.commands.artifacts = lib.mkIf (config.pino.artifacts != {}) {
+    description = "Compare and restore available installer folders";
+    usage = "[name] <external-disk> [--dry-run]";
     helpText = ''
-      The external directory contains one folder per active declaration.
-      Run list to see the mapping. Import checks every folder before copying;
-      identical files are skipped and different existing files are never replaced.
-      Run as the normal desktop user. Install applications separately afterwards.
+      Reads pino/artifacts below the disk root. Missing folders are reported;
+      available folders are processed. Conflicts require a choice and the final
+      plan requires confirmation. Local extras are never deleted.
+      Use pino os populate to also provision secrets and set up applications.
     '';
-    script = ''exec ${pkgs.python3}/bin/python3 ${../../scripts/artifacts.py} ${manifest} "$@"'';
+    script = ''exec ${sync} restore --allow-missing "$@"'';
   };
 }

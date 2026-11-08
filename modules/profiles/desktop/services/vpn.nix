@@ -157,7 +157,7 @@ in
     };
     helpText = ''
       Store complete configs as uniquely named Bitwarden Secure Notes, then run
-      `pino provision install` to install the files declared by this profile.
+      `pino os provision install` to install the files declared by this profile.
       Pino selects one full-route connection at a time to avoid route conflicts.
       `share` only affects the dedicated `${share.connection}` connection. A hotspot
       created normally in GNOME keeps NetworkManager's normal routing behaviour.

@@ -109,7 +109,7 @@ let
       ${function}() {
         local command="''${1:-}"
         case "$command" in
-          help)
+          help|-h|--help)
             shift || true
             if [ -n "''${1:-}" ]; then
               echo "${commandPath path}: 'help' must be the final argument" >&2
@@ -122,7 +122,7 @@ let
             ${if names != [ ] || effectiveScript == null then helpBody path node else delegatedInvocation}
             ;;
           *)
-            ${if effectiveScript != null then delegatedInvocation else ''
+            ${if effectiveScript != null && node.usage != "" then delegatedInvocation else ''
               echo "${commandPath path}: unknown command '$command'" >&2
               echo "Run '${commandPath path} help' for usage." >&2
               return 1
@@ -174,6 +174,29 @@ let
 
   pinoText = ''
     ${dispatcher}
+    # Compatibility entry points do not clutter help or completions.
+    case "''${1:-}" in
+      populate|profile|provision)
+        old="$1"; shift
+        echo "Use pino os $old instead." >&2
+        set -- os "$old" "$@"
+        ;;
+      bootstrap)
+        shift
+        case "''${1:-}" in
+          prepare) shift; set -- os provision prepare "$@" ;;
+          install|rescue) set -- os "$@" ;;
+          ""|help|-h|--help) set -- os help ;;
+          *) echo "Use pino os install or pino os rescue." >&2; exit 1 ;;
+        esac
+        echo "Server installation is now under pino os; credentials under pino os provision." >&2
+        ;;
+      artifacts)
+        echo "Use pino restore artifacts <disk-root> or pino backup artifacts <disk-root>." >&2
+        echo "Both use pino/artifacts below the disk root; --dry-run shows the mapping and plan." >&2
+        exit 1
+        ;;
+    esac
     pino_dispatch_root "$@"
   '';
 

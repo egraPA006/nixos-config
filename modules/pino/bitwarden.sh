@@ -25,7 +25,7 @@ stream_note() {
 }
 
 install_note() {
-  local item="$1" target="$2" payload
+  local item="$1" target="$2" payload unit
   shift 2
   [[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid Bitwarden item name." >&2; return 1; }
   validate_target "$target" || return 1
@@ -35,6 +35,25 @@ install_note() {
     return 1
   fi
   [ -n "$payload" ] || { echo "Bitwarden Secure Note '$item' is empty." >&2; return 1; }
+  if sudo test -L "$target"; then
+    echo "Refusing a symlink secret destination." >&2
+    return 1
+  fi
+  if printf '%s\n' "$payload" | sudo @cmp@ -s -- - "$target"; then
+    sudo chown root:root "$target" || return 1
+    sudo chmod 0600 "$target" || return 1
+    # A previous attempt may have written the file but failed to start its
+    # service. Check each unit: is-active with several units succeeds when
+    # only one of them is active.
+    for unit in "$@"; do
+      if ! sudo systemctl is-active --quiet "$unit"; then
+        sudo systemctl restart "$@" || return 1
+        break
+      fi
+    done
+    echo "Already provisioned '$item' at $target."
+    return 0
+  fi
   printf '%s\n' "$payload" | sudo install -D -o root -g root -m 0600 /dev/stdin "$target" || return 1
   if [ "$#" -gt 0 ]; then sudo systemctl restart "$@" || return 1; fi
   echo "Provisioned '$item' at $target."
@@ -70,8 +89,18 @@ install_ssh_key() {
     return 1
   }
   install -d -m 0700 "$HOME/.ssh" || return 1
-  printf '%s\n' "$private_key" | install -m 0600 /dev/stdin "$target" || return 1
-  printf '%s\n' "$public_key" | install -m 0644 /dev/stdin "$target.pub" || return 1
+  if [ -L "$target" ] || [ -L "$target.pub" ]; then
+    echo "Refusing a symlink SSH key destination." >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$private_key" | @cmp@ -s -- - "$target"; then
+    printf '%s\n' "$private_key" | install -m 0600 /dev/stdin "$target" || return 1
+  fi
+  if ! printf '%s\n' "$public_key" | @cmp@ -s -- - "$target.pub"; then
+    printf '%s\n' "$public_key" | install -m 0644 /dev/stdin "$target.pub" || return 1
+  fi
+  chmod 0600 "$target" || return 1
+  chmod 0644 "$target.pub" || return 1
 }
 
 provision_step() {
@@ -123,7 +152,7 @@ elif [ "$operation" = host ] && [ "$#" -ge 2 ] && [ "$#" -le 3 ]; then
     echo "No runtime secrets declared for $2."; exit 0
   }
 else
-  echo "Run 'pino provision help' for usage." >&2
+  echo "Run 'pino os provision help' for usage." >&2
   exit 1
 fi
 
@@ -165,7 +194,7 @@ if [ "$mode" = host ]; then
     item="$(jq -r '.item' <<< "$declaration")"
     target="$(jq -r '.target' <<< "$declaration")"
     mapfile -t units < <(jq -r '.units[]' <<< "$declaration")
-    pino provision send "$item" "$remote_host" "$target" "${units[@]}"
+    pino os provision send "$item" "$remote_host" "$target" "${units[@]}"
   done < <(jq -c '.[]' <<< "$manifest")
   echo "Runtime secrets provisioned on $remote_host."
   exit 0

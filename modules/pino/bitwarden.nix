@@ -41,7 +41,7 @@ in
   config = {
     environment.systemPackages = [ pkgs.bitwarden-cli ];
 
-    pino.subcommands.provision = {
+    pino.subcommands.os.commands.provision = {
       description = "Provision runtime configuration from Bitwarden Secure Notes";
       commands = {
         install = {
@@ -69,8 +69,8 @@ in
         sends them using the SSH alias, and restarts their declared services.
         An optional SSH target overrides the alias. SSH private keys are not sent.
       '';
-      script = builtins.replaceStrings [ "@declaredCount@" "@declaredSecrets@" "@afterDeclared@" "@configDir@" ]
-        [ (toString (builtins.length secrets + builtins.length sshKeys)) installCommands afterInstall (lib.escapeShellArg config.pino.configDir) ]
+      script = builtins.replaceStrings [ "@declaredCount@" "@declaredSecrets@" "@afterDeclared@" "@configDir@" "@cmp@" ]
+        [ (toString (builtins.length secrets + builtins.length sshKeys)) installCommands afterInstall (lib.escapeShellArg config.pino.configDir) "${pkgs.diffutils}/bin/cmp" ]
         (builtins.readFile ./bitwarden.sh);
     };
   };

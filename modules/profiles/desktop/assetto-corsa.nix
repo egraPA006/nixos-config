@@ -114,6 +114,12 @@ in {
 
   config = {
     pino.artifacts.assetto-corsa.target = "${cfg.stateDir}/installs";
+    pino.populate.steps.assetto-corsa = {
+      command = [ "pino" "desktop" "assetto-corsa" "setup" ];
+      requiresSession = true;
+      requiredMount = config.pino.artifacts.assetto-corsa.requiredMount;
+      prerequisite = ''exec ${runner}/bin/assetto-corsa-setup check'';
+    };
     # Defaults belong on individual keys so selecting a filter does not replace
     # the rest of the base preset through the attrsOf option's default priority.
     pino.profiles.assettoCorsa.videoSettings = lib.mapAttrs (_: lib.mapAttrs (_: lib.mkDefault)) {
@@ -128,6 +134,7 @@ in {
       description = "Content Manager, CSP and declared mods for the Steam game";
       commands = {
         status.description = "Find the Steam installation and show declared archives";
+        check.description = "Check setup prerequisites without changing files";
         setup.description = "Install dependencies, mods and declared settings";
         apply.description = "Install declared archives, backing up changed files";
         deps.description = "Install missing .NET/DirectX runtimes, core fonts and enable CSP";

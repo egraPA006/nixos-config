@@ -9,9 +9,38 @@ One small flake for four machines:
 
 There is no Disko, Btrfs, mail server, or Git mirror. GitHub stores only the
 public configuration. Bitwarden stores passwords, SSH keys, and runtime
-configuration. A 10 GiB local LUKS2 container mounted at `~/Secrets` stores
-recovery codes and document copies only. An external LUKS2 disk is compared
-and merged manually; Pino has no automatic backup or dataset layer.
+configuration. An unlocked external LUKS2 disk holds one current copy of declared artifacts,
+personal datasets and a portable encrypted Bitwarden export. Pino previews
+changes and asks before applying them; backups have no version history.
+
+## CLI layout
+
+- `pino os`: rebuild/update, generations, packages, profiles, populate and diagnostics.
+  On desktops it also provides remote `install` / `rescue`; `os provision` manages
+  delivery and preparation of Bitwarden credentials.
+- `pino backup` / `pino restore`: explicit transfers to/from an unlocked disk.
+- `pino host <host> ...`: execute Pino on a remote server.
+- `pino desktop` / `pino server`: profile-specific application/service commands.
+- `pino vpn`: client connections, WiFi sharing and client creation.
+- `pino env`: development environments.
+
+Use `help`, `--help` or `-h` at a command node. Unknown commands and extra arguments
+on no-argument commands are rejected. Old root `populate`, `profile`, `provision`
+and `bootstrap` entry points redirect with a migration message, but are absent
+from help and completion. `files`, `secret`/`recovery` and the old `artifacts`
+branch are removed. No personal files are deleted by this CLI reorganization.
+
+Profile enable only rebuilds; `pino os populate` handles application setup using
+the same declared prerequisites on first installation and later profile changes.
+Profile disable retains data; only explicit, confirmed `profile purge` cleans it.
+
+Server services are enabled declaratively by the host's active profiles and
+NixOS modules. Pino exposes inspection commands, not duplicate service
+start/stop/restart wrappers. Change the configuration and rebuild for persistent
+changes; provisioning restarts affected services after credential updates.
+Use ordinary `sudo systemctl restart <unit>` for one-off troubleshooting.
+The VPN mode command remains an intentional runtime control for switching
+private/egress/full without distributing new client configurations.
 
 ## Fresh installation
 
@@ -24,7 +53,7 @@ export files, log in to the CLI once with `bw login`, then run from this checkou
 
 ```bash
 nix run path:.#server-secrets -- mosk --bitwarden
-# After rebuilding the desktop: pino bootstrap prepare mosk --bitwarden
+# After rebuilding the desktop: pino os provision prepare mosk --bitwarden
 ```
 
 This unlocks the vault when necessary, generates a 32-character Galene password
@@ -62,8 +91,8 @@ deploying. Rotating records does not alter the running server. Deploy from the
 desktop using its configured SSH alias (or `vincent@IP`):
 
 ```bash
-pino provision send pino-galene-mosk-main mosk /etc/pino/galene/main.json galene.service
-pino provision send pino-vpn-server-mosk mosk /etc/pino/vpn/awg0.conf amneziawg-server.service pino-vpn-mode.service
+pino os provision send pino-galene-mosk-main mosk /etc/pino/galene/main.json galene.service
+pino os provision send pino-vpn-server-mosk mosk /etc/pino/vpn/awg0.conf amneziawg-server.service pino-vpn-mode.service
 ```
 
 Keep the recovery snapshot until the server and clients have been verified.
@@ -77,9 +106,9 @@ for Galene, prefer `--repair-galene` to avoid generating another password.
 Alternatively, prepare local files for manual import:
 
 ```bash
-pino bootstrap prepare mosk
+pino os provision prepare mosk
 # VPN only:
-pino bootstrap prepare halos
+pino os provision prepare halos
 ```
 
 `prepare` prompts twice for the Galene `admin` password on Mosk and stores only
@@ -114,18 +143,18 @@ by the provider. Create Bitwarden SSH Key items named `pino-ssh-server-mosk`
 and `pino-ssh-server-halos`. Give the provider only the public half of the
 matching item. Before initial bootstrap, save that public key locally as a
 selector, for example `~/.ssh/mosk.pub`. On an installed desktop,
-`pino provision install` installs both halves locally as `~/.ssh/mosk` and
+`pino os provision install` installs both halves locally as `~/.ssh/mosk` and
 `~/.ssh/mosk.pub`.
 
 Provision the SSH key, make sure this checkout is clean and pushed to
 `origin/main`, then run:
 
 ```bash
-pino provision install
-pino bootstrap install mosk ubuntu@203.0.113.10 ~/.ssh/mosk.pub
+pino os provision install
+pino os install mosk ubuntu@203.0.113.10 ~/.ssh/mosk.pub
 ```
 
-`pino bootstrap` unlocks and synchronizes Bitwarden itself when needed.
+`pino os install` / `pino os rescue` unlock and synchronizes Bitwarden itself when needed.
 
 `install` requires an x86_64 Linux VPS with passwordless root or `sudo`, enough
 RAM for the pinned NixOS kexec installer, working DHCP, and Secure Boot disabled.
@@ -136,7 +165,7 @@ If the provider has already booted a NixOS installer or rescue image, skip
 kexec:
 
 ```bash
-pino bootstrap rescue halos root@203.0.113.11 ~/.ssh/halos.pub
+pino os rescue halos root@203.0.113.11 ~/.ssh/halos.pub
 ```
 
 Both commands verify the required Bitwarden Secure Notes, generate the public
@@ -152,48 +181,45 @@ does not return, use the rescue flow instead.
 
 ### Installer console
 
-Boot a NixOS installer, clone the repository, inspect the disks, then run the
-host-specific partition command:
+Boot a NixOS installer, obtain Git if it is not already available, and clone:
 
 ```bash
-nix-shell -p git
+# Only if git is missing; this works without legacy Nix channels:
+nix --extra-experimental-features 'nix-command flakes' shell github:NixOS/nixpkgs/20b1ddd1aa5ace70c9468305030aa4f9ef79671b#git
 git clone https://github.com/egraPA006/nixos-config.git
 cd nixos-config
 lsblk -o NAME,PATH,SIZE,MODEL,SERIAL,FSTYPE,MOUNTPOINTS
 ```
 
-```bash
-# Desktop: EFI + ext4 root, then two ext4 data disks
-sudo scripts/partition.sh re-1 /dev/system /dev/fast /dev/slow
-
-# Laptop: EFI + LUKS2 container + ext4 root
-sudo scripts/partition.sh la1n /dev/nvme0n1
-
-# Mosk: BIOS boot + ext4 root using the remaining disk (suitable for 20 GB VPS)
-sudo scripts/partition.sh mosk /dev/vda
-
-# Halos: BIOS boot + ext4 root
-sudo scripts/partition.sh halos /dev/vda
-```
-
-The server configurations currently target the provider's `/dev/vda`. Change
-both the host storage file and this safety check before using another device.
-
-Install after the script mounts everything below `/mnt`:
+Select actual device paths, then run **one** installer command:
 
 ```bash
-sudo scripts/install.sh <host>
+# Fresh desktop: formats ALL THREE selected disks after confirmation.
+sudo scripts/install.sh re-1 --disk /dev/system --disk /dev/fast --disk /dev/slow
+
+# Reinstall desktop: format only system; preserve existing labelled ext4 data disks.
+sudo scripts/install.sh re-1 --disk /dev/system --disk /dev/fast --disk /dev/slow --keep-data
+
+# Laptop: EFI + LUKS2-encrypted ext4 root.
+sudo scripts/install.sh la1n --disk /dev/nvme0n1
+
+# Already in the server installer console (BIOS, /dev/vda).
+sudo scripts/install.sh mosk --disk /dev/vda --ssh-key-file /path/to/admin.pub
 ```
 
-The installer generates `hosts/<host>/hardware.nix` from the mounted target,
-installs the bootloader, copies the Git checkout, optionally installs one SSH
-public key, and asks for the local user password on desktops. Servers require
-the public key and intentionally have no local password.
+`/dev/system`, `/dev/fast` and `/dev/slow` are placeholders, not device names to
+copy blindly. `--keep-data` requires the existing `pino-fast` and `pino-slow`
+partition and filesystem labels; it refuses incompatible layouts before erasing
+anything. It still erases the selected system disk. For manual/custom mounts,
+prepare `/mnt` yourself and omit all `--disk` options. `repair` never partitions.
+The existing `partition.sh` and remote `server-stage.sh` entry points still work.
 
-A desktop or laptop installation performs no secret provisioning. After the
-first boot, use the copied checkout (or a normal HTTPS `git clone` on an
-already installed host), then run `pino provision install` to log in to
-Bitwarden and install the runtime files declared by active profiles.
+The installer generates hardware configuration, installs NixOS including Pino,
+copies the checkout, installs an optional public SSH key and asks for the desktop
+user password. Servers require a public key. No Bitwarden login or application
+setup happens in the live installer. Reboot, log in as the configured user, unlock
+the external disk and run `pino os populate /path/to/disk` without sudo. For hosts
+without local artifacts, `pino os populate` is sufficient.
 
 ### Reinstalling re-1 and preparing another desktop
 
@@ -202,64 +228,73 @@ declarations, Bitwarden supplies declared runtime credentials, and an unlocked
 external disk supplies saved installers and libraries. Installing NixOS does not
 install those local Windows applications or restore personal documents.
 
-After booting the new `re-1`, log in as `egrapa` and run:
+After booting the new `re-1`, log in as `egrapa`, unlock the existing external
+disk in GNOME, then run:
 
 ```bash
-pino provision install
-sudo nmcli connection reload
-pino artifacts list
-pino artifacts import /run/media/$USER/pino-external/artifacts --dry-run
-pino artifacts import /run/media/$USER/pino-external/artifacts
-pino desktop music-full plugins apply
-pino desktop guitar-pro install
+pino os populate /run/media/$USER/pino-external
 ```
 
-The new `artifacts` command becomes available after installing this revision or
-running `pino os rebuild` on an existing system. Run it without sudo. Unlock the
-existing external disk in GNOME first; **do not run encrypted-disk-init.sh again**.
-The source directory is explicit, so a different mount name works too.
+This logs in to/unlocks Bitwarden, installs declared credentials, compares and
+imports `pino/artifacts/` from the disk, and runs available application setup.
+Run it again after following any `action required` instructions. A pending or
+failed profile does not block unrelated profiles. Existing commands check their
+state; identical secrets do not restart healthy services. Exit codes are 0 for
+complete, 2 for pending prerequisites and 1 for failures. `--skip-secrets` skips
+the vault explicitly; without a disk, setup uses existing local installers.
+Personal datasets are never implicitly restored by populate.
 
-Prepare this layout on the external disk before erasing the old system:
+These commands become available after installing this revision or rebuilding the
+existing host. **Do not run encrypted-disk-init.sh again on an existing disk.**
+Before reinstalling, create/update the artifact copy with:
 
-| External folder below `artifacts/` | Local destination on re-1 | Contents |
+```bash
+pino backup artifacts /run/media/$USER/pino-external
+```
+
+| External folder below `pino/artifacts/` | Local destination on re-1 | Contents |
 | --- | --- | --- |
-| `music-full/` | `/data/fast/music-full/installs/` | Entire installer tree, FabFilter installers, linked EZX/Nucleus libraries, and any hook assets; preserve names and subfolders |
-| `guitar-pro/` | `/data/fast/guitar-pro/installs/` | Complete GP8 EXE and the configured `replacement/GuitarPro.exe` |
-| `assetto-corsa/` | `/data/fast/assetto-corsa/installs/` | Declared CSP/Pure/Hakone/Moscow Raceway/NOLA ZIPs; retaining cached public downloads is optional |
+| `music-full/` | `/data/fast/music-full/installs/` | Entire installer tree, FabFilter installers, linked EZX/Nucleus libraries and hook assets |
+| `guitar-pro/` | `/data/fast/guitar-pro/installs/` | Complete GP8 EXE and configured `replacement/GuitarPro.exe` |
+| `assetto-corsa/` | `/data/fast/assetto-corsa/installs/` | Declared local ZIPs; cached public downloads may also be retained |
 
-Use `pino files merge <external-folder> <local-folder>` for each row to prepare
-or update the external copy, explicitly choosing the copy direction in Meld.
-The import command copies files from those external folders into destinations
-declared by active profiles. It checks all declared folders before copying,
-skips identical files, rejects different existing files and symlinks, and never
-deletes files. Missing folders or the unmounted `/data/fast` filesystem fail the
-preflight. Extra external folders are ignored. Interrupted copies can be retried;
-completed files remain. This is an installer import, not a full backup restore.
-Do not modify the source or destination while importing. Application installers
-perform their own declared checksum checks; importing does not establish that
-an archive is the release expected by the application configuration.
+The transfer shows file sizes, modification timestamps and SHA-256 hashes for
+conflicts, asks which version to keep, then asks to apply the final plan. It does
+not print file contents or merge them. Missing artifact folders are reported;
+available folders are still processed. A required unmounted filesystem is an
+error. Do not modify or unmount either side during a transfer. Copies are atomic
+per file, not a transaction for the whole tree; after an interrupted transfer,
+rerun the command to compare what remains. Application setup still verifies its
+own configured checksums.
+
+Use `pino restore artifacts /path/to/disk --dry-run` to inspect destinations
+without setting up applications. All artifact commands now take the disk root
+and use `pino/artifacts/` below it. The old artifact import/list interface has
+been removed. If an existing disk uses `artifacts/` at its root, move that folder
+to `pino/artifacts/` once; Pino does not move or delete it automatically.
 
 Keep the imported library directories locally: plugins using `method = "link"`
 link into them. They must work after unplugging the external disk. Do not copy
 only the EXEs, rename the saved directories, or import old installation stamps
 instead of running the installation commands. Licensing/login is separate and
-may require manual activation. `pino provision install` does not retrieve music,
+may require manual activation. `pino os provision install` does not retrieve music,
 Guitar Pro or Content Manager license keys automatically.
 
 For Assetto Corsa, log into Steam, install the game and required DLC, select
 Proton-GE, start the original game once, then close the game and Steam:
 
 ```bash
-pino desktop assetto-corsa setup
+pino os populate
 ```
 
+The dedicated `pino desktop assetto-corsa setup` command also remains available.
 CM and the declared public shader archive can download over HTTPS; the local ZIPs
 must already be imported. Configure CM's game directory and AppID starter as
 described below. Activate CM manually with your own key stored in Bitwarden.
-The fresh install creates the active profile directly, so it does not run the
-interactive `pino profile enable assetto-corsa` setup hook for you.
+Populate invokes the declared setup once prerequisites are ready; manual
+licensing and the initial Steam login/game launch remain your actions.
 
-For `re-1`, `pino provision install` currently retrieves these records:
+For `re-1`, `pino os provision install` currently retrieves these records:
 
 | Bitwarden item | Destination |
 | --- | --- |
@@ -299,8 +334,8 @@ Authorize the new GitHub public key; give each VPN client its own private key
 and address and add the matching peer on each server before deploying. Adapt
 the hotspot interface in its Secure Note too. Server SSH items are currently
 shared between desktops by design. Then use exactly the same provision/import/
-application-install sequence. `pino artifacts list` shows that computer's local
-destinations; the external folder names remain unchanged. If local paths use a
+application-install sequence. `pino restore artifacts /path/to/disk --dry-run`
+shows that computer's local destinations; the external folder names remain unchanged. If local paths use a
 separate filesystem, declare `pino.artifacts.<name>.requiredMount` for it.
 Custom archive paths outside the declared `installs` directory require separate
 handling; keep local archives inside that directory for the common import flow.
@@ -334,14 +369,14 @@ confirmation. `repair` is not destructive to filesystems.
 Enabled profiles are plain lists in `hosts/<host>/active-profiles.nix`.
 
 ```bash
-pino profile list
-pino profile enable server-web
-pino profile disable torrent
-pino provision install
+pino os profile list
+pino os profile enable server-web
+pino os profile disable torrent
+pino os provision install
 ```
 
 The profile catalog in `modules/profiles/default.nix` exposes user-facing roles;
-small implementation modules are composed inside them. `pino profile list`
+small implementation modules are composed inside them. `pino os profile list`
 shows their purpose.
 
 Desktop profiles are:
@@ -360,13 +395,13 @@ Steam-installed Assetto Corsa. It discovers the game in native Steam libraries,
 including secondary SSD/HDD libraries. Steam still owns and installs the game.
 
 ```bash
-pino profile enable assetto-corsa
+pino os profile enable assetto-corsa
 ```
 
-Enabling the profile runs setup after rebuilding. Enabling it again reapplies
-the declared mods and settings without rebuilding; ordinary rebuilds preserve
-manual in-game changes. Setup failures leave the profile enabled so setup can
-be retried. Disabling this profile preserves Steam's game, mods and saves.
+Enabling the profile rebuilds the system. Run `pino os populate` afterwards to
+check prerequisites and set up the game. Repeat populate after completing any
+requested manual actions; ordinary rebuilds preserve manual in-game changes.
+Disabling this profile preserves Steam's game, mods and saves.
 For diagnostics or partial restoration, the following commands remain available:
 
 ```bash
@@ -477,7 +512,7 @@ The `latex` profile is optional and independent of `development`. After rebuildi
 once to register the new profile, enable it with:
 
 ```bash
-pino profile enable latex
+pino os profile enable latex
 ```
 
 It installs the full TeX Live distribution (several GB), including `latexmk`,
@@ -553,7 +588,9 @@ PipeWire graph without restarting it; `auto` releases the forced value.
 Use 64 for lower latency if the current project runs without xruns, or 128/256
 for more processing headroom. `pino desktop music-full quantum` shows current settings.
 
-`pino profile disable <name>` rebuilds the system and then deletes that
+`pino os profile disable <name>` rebuilds while preserving all application data.
+Use `pino os profile purge <name>` to review and confirm deletion. Purge disables
+the profile, rebuilds the system and then deletes that
 profile's declared mutable state. This includes settings, caches and application
 data: `music-full` removes its Wine prefixes, installed plugins, installation
 stamps, yabridge files and REAPER settings; `torrent` removes downloads and
@@ -570,7 +607,7 @@ Ownership and cleanup paths are declared in `modules/profiles/cleanup.nix`.
 
 Close the affected applications first. Log out of GNOME and use a TTY to disable
 the GNOME profile. Cleanup only runs after a successful rebuild; if it fails or
-is interrupted, rerun the same disable command to finish. A system rollback
+is interrupted, rerun the same purge command to finish. A system rollback
 does not restore deleted application data. Nix generations/store objects,
 shared system logs and files outside the declared application directories are
 not erased by this command.
@@ -617,10 +654,10 @@ using the provider's SSH-key option. The initial user needs root or passwordless
 sudo. From the trusted desktop, after rebuilding Pino:
 
 ```bash
-pino provision install
-pino bootstrap prepare mosk --bitwarden
+pino os provision install
+pino os provision prepare mosk --bitwarden
 # Substitute the actual initial user/IP; verify the provider's SSH fingerprint:
-pino bootstrap install mosk root@203.0.113.10 ~/.ssh/mosk.pub
+pino os install mosk root@203.0.113.10 ~/.ssh/mosk.pub
 ```
 
 Use `ubuntu@…` or `debian@…` instead if appropriate. Bootstrap checks every Secure
@@ -653,13 +690,13 @@ or refresh existing URIs. When endpoints change, update the shared public manife
 and existing client URIs together.
 
 ```bash
-pino provision host mosk
+pino os provision host mosk
 # Or update a single service:
-pino provision send pino-xray-mosk mosk /etc/pino/xray/users.json xray.service
-pino provision send pino-telemt-mosk mosk /etc/pino/telemt/users.json telemt.service
+pino os provision send pino-xray-mosk mosk /etc/pino/xray/users.json xray.service
+pino os provision send pino-telemt-mosk mosk /etc/pino/telemt/users.json telemt.service
 pino host mosk server status
 pino host mosk server xray status
-pino host mosk server telemt restart
+pino host mosk server telemt status
 pino host mosk server galene status
 pino host mosk server vpn mode set private
 pino host mosk os rebuild
@@ -691,7 +728,7 @@ refreshes the server key and AWG settings, and keeps the client address when
 available. Other server peers are preserved. Import/install the updated client
 file afterwards. `--force` does not overwrite local files or rotate device keys.
 If deployment fails after saving, retry the command with a new directory
-(and `--force` if the server peer address still needs updating), then run `pino provision host
+(and `--force` if the server peer address still needs updating), then run `pino os provision host
 mosk`. Remove the local export after importing and keep the Bitwarden note.
 This command currently supports Mosk only; it does not create Xray credentials.
 
@@ -716,7 +753,7 @@ complete group definition in a Bitwarden Secure Note named
 `pino-galene-mosk-main`, then provision it without exposing its contents:
 
 ```bash
-pino provision send pino-galene-mosk-main mosk \
+pino os provision send pino-galene-mosk-main mosk \
   /etc/pino/galene/main.json galene.service
 ```
 
@@ -740,26 +777,15 @@ instead of storing a plaintext password:
 
 ## Local secrets, Bitwarden, and SSH
 
-On `re-1` and `la1n`, `~/Secrets` is an ext4 filesystem inside a 10 GiB LUKS2
-container file on the normal root filesystem. It is not a partition and is not
-mounted at boot. It contains recovery codes, encrypted authenticator exports,
-document copies, and other emergency material only. The first unlock creates
-the container and asks for a new LUKS passphrase:
-
-```bash
-pino secret unlock
-pino secret lock
-```
-
-The encrypted file is `~/.local/share/pino/secrets.luks`. Synchronization is a
-manual folder comparison while both the local container and external disk are
-unlocked. Do not keep live VPN or server configuration there, and never add
-`~/Secrets`, a LUKS container, or a Bitwarden export to Git.
+Pino no longer manages a local recovery container. An existing
+`~/.local/share/pino/secrets.luks` and its contents are left untouched; use standard
+LUKS tools if you still need it. No container is created, mounted or deleted by
+Pino. Never add recovery material or a Bitwarden export to Git.
 
 All working secrets live in Bitwarden. On a new host, run:
 
 ```bash
-pino provision install
+pino os provision install
 ```
 
 Pino prompts for CLI login on the first run and unlocks the vault on later
@@ -788,7 +814,7 @@ Bitwarden Desktop or its SSH Agent.
 Install every file declared by active profiles on the current host:
 
 ```bash
-pino provision install
+pino os provision install
 ```
 
 Each profile declares its Bitwarden item name and destination in its Nix module.
@@ -804,13 +830,13 @@ declarations.
 Install one locally without printing it or creating a plaintext temporary file:
 
 ```bash
-pino provision install pino-vpn-client-re-1-mosk /etc/amneziawg/mosk.conf
+pino os provision install pino-vpn-client-re-1-mosk /etc/amneziawg/mosk.conf
 ```
 
 Or send it directly from Bitwarden to a server over SSH:
 
 ```bash
-pino provision send pino-vpn-server-mosk mosk \
+pino os provision send pino-vpn-server-mosk mosk \
   /etc/pino/vpn/awg0.conf \
   amneziawg-server.service pino-vpn-mode.service
 ```
@@ -832,7 +858,7 @@ Desktop systems install Bitwarden Desktop and the Bitwarden Chromium extension.
 SSH uses the provisioned local private keys directly. After provisioning, Pino
 tests SSH access to the GitHub repository and changes an HTTPS `origin` to SSH
 if the check succeeds. If the key is missing or access fails, the remote stays
-on HTTPS; rerun `pino provision install` after fixing the SSH key.
+on HTTPS; rerun `pino os provision install` after fixing the SSH key.
 
 Bitwarden keeps vault lock settings per account and app. In Bitwarden Desktop,
 open File → Settings → Account security, set Vault timeout to 1 minute and
@@ -865,18 +891,85 @@ partition containing ext4:
 sudo scripts/encrypted-disk-init.sh /dev/sdX
 ```
 
-Reconnect the disk, unlock it with the desktop disk prompt, enter either local
-folder, and open a two-way comparison:
+Reconnect and unlock the disk using GNOME Disks or standard LUKS tools.
+Pino does not manage disk unlocking or provide a manual folder comparison UI.
+Use the planned backup and restore commands below for declared data.
+
+## Planned backups and personal datasets
+
+Run as your normal user with an unlocked external disk. Each destination holds
+one current copy; there is no dated retention or recovery of an overwritten
+version. Keep the Git checkout separately too (including `.git` for offline
+history). None of these commands backs up `/nix/store` or discovers personal
+folders automatically.
 
 ```bash
-cd ~/Pictures
-pino files merge /run/media/$USER/pino-external/Pictures
+pino backup artifacts /path/to/disk --dry-run
+pino backup artifacts /path/to/disk
+pino backup artifacts guitar-pro /path/to/disk
+pino backup bitwarden /path/to/disk
+pino backup datasets /path/to/disk
+pino restore datasets documents /path/to/disk
 ```
 
-Meld shows additions, changes, and deletions in both directions and applies
-only the operations selected in its UI. The same command can compare an
-unlocked `~/Secrets` with its folder on the encrypted disk. There are no
-snapshots, automatic synchronization, retention rules, or Pino metadata.
+Declare datasets explicitly in the host configuration, then rebuild. No personal
+dataset is enabled by default. For example, inside a module accepting `config`:
+
+```nix
+pino.datasets = {
+  documents.target = "${config.pino.user.home}/Documents";
+  projects = {
+    target = "/data/fast/projects";
+    requiredMount = "/data/fast";
+    exclude = [ "*/node_modules" "*/.venv" "*/build" ];
+  };
+};
+```
+
+Use directories that actually exist and names that identify their contents;
+include the host name when two machines have different datasets. Data goes to
+`pino/datasets/<name>/`. Exclusions match relative paths on both sides; an excluded
+directory prunes its subtree. Symlinks, special files, overlapping roots and
+unreadable directories are refused. Exclude intentional symlinks or declare their
+real target separately. These are user-file copies, preserving file modes and
+mtimes, not system backups preserving ownership, ACLs or extended attributes.
+
+Dataset backup asks whether to update (keep destination-only files) or mirror
+(list their deletion). `--mode update` or `--mode mirror` selects that explicitly.
+Artifact backup defaults to update; mirror is opt-in. Missing sources abort a
+backup, including mirror, before any copying. Restore/populate only add or update;
+they never delete local extras. All conflicts require source/destination selection
+before final confirmation. `--dry-run` never prompts or writes; with no explicit
+mode it previews update. Empty directory creation/removal is included in the plan.
+
+Bitwarden backup writes `pino/bitwarden/vault.encrypted.json`. It synchronizes the
+vault and asks for a separate export password through the CLI's hidden prompt;
+the password never appears in process arguments. It validates a portable
+password-encrypted JSON export before atomically replacing the old file (0600).
+Cancellation or an invalid export leaves the old backup intact. Save the export
+password independently; restore by importing the file as Bitwarden JSON into
+an account and entering that password. Normal populate reads the existing online
+vault, not this recovery export.
+
+**Scope:** the export contains active personal vault items. Attachments,
+organization-owned items, trash, Sends and account/2FA recovery settings are
+excluded; the command reports detected exclusion counts and asks you to accept
+that scope. Back up those separately if used. This is not a complete account
+backup. See the [Bitwarden CLI export documentation](https://bitwarden.com/help/cli/#export).
+
+Server installation still uses `pino os install|rescue` from the desktop:
+it installs and provisions in one flow. To retry only provisioning, run
+`pino os provision host mosk`; on the server itself, `pino os populate` reads that
+server's declared Bitwarden secrets. Reinstallation reuses existing server keys
+and peer lists; it does not generate or rotate VPN/proxy credentials. With the
+same endpoint and vault records, client profiles remain valid.
+
+The new personal dataset copier does **not** back up privileged server state.
+Preserve `/var/lib/galene` (including invitations/extra rooms), `/var/lib/pino/vpn`
+(selected mode), and `/etc/ssh/ssh_host_*` separately with ownership intact before
+erasing a server if those must survive. Otherwise SSH identity changes, VPN mode
+returns to its configured default, and runtime Galene invitations are lost.
+Bitwarden still restores the declared room and service credentials.
 
 ## Development environments and packages
 

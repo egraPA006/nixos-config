@@ -149,7 +149,7 @@ class WineCleanupTests(unittest.TestCase):
 
 
 class ProfileCommandTests(unittest.TestCase):
-    def test_assetto_enable_setup_and_retry(self):
+    def test_enable_only_rebuilds_and_defers_setup_to_populate(self):
         for enabled, rebuild_fails, setup_fails in [(False, False, False), (True, False, False),
                                                      (False, True, False), (False, False, True)]:
             with self.subTest(enabled=enabled, rebuild_fails=rebuild_fails, setup_fails=setup_fails), tempfile.TemporaryDirectory() as temporary:
@@ -184,15 +184,15 @@ class ProfileCommandTests(unittest.TestCase):
                 env = dict(os.environ, PATH=str(binary) + ":" + os.environ["PATH"])
                 env.pop("NIXOS_CONFIG_DIR", None)
                 result = subprocess.run(["bash", str(script), "enable", "assetto-corsa"], env=env, capture_output=True)
-                self.assertEqual(result.returncode != 0, rebuild_fails or setup_fails)
-                self.assertEqual(events.read_text().splitlines(),
-                                 ["setup"] if enabled else ["rebuild"] if rebuild_fails else ["rebuild", "setup"])
+                self.assertEqual(result.returncode != 0, rebuild_fails and not enabled)
+                self.assertEqual(events.read_text().splitlines() if events.exists() else [],
+                                 [] if enabled else ["rebuild"])
                 if rebuild_fails:
                     self.assertEqual(profiles.read_text(), initial)
                 else:
                     self.assertIn('"assetto-corsa"', profiles.read_text())
 
-    def run_scenario(self, rebuild_fails=False, check_fails=False, cleanup_fails=False, enabled=True):
+    def run_scenario(self, rebuild_fails=False, check_fails=False, cleanup_fails=False, enabled=True, operation="purge", answer="purge music-full\n"):
         with tempfile.TemporaryDirectory(prefix="pino-disable-") as temporary:
             root = Path(temporary)
             config = root / "config"
@@ -225,10 +225,21 @@ case "$1" in check) exit {int(check_fails)} ;; apply) exit {int(cleanup_fails)} 
             script.write_text("set -euo pipefail\n" + source)
             env = dict(os.environ, PATH=str(binary) + ":" + os.environ["PATH"])
             env.pop("NIXOS_CONFIG_DIR", None)
-            result = subprocess.run(["bash", str(script), "disable", "music-full"], env=env, capture_output=True, text=True)
+            result = subprocess.run(["bash", str(script), operation, "music-full"], env=env, input=answer, capture_output=True, text=True)
+            events = log.read_text().splitlines() if log.exists() else []
+            if operation == "disable":
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(events, ["rebuild"] if enabled else [])
+                self.assertNotIn('"music-full"', profiles.read_text())
+                return
+            if answer != "purge music-full\n":
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(len(events), 1)
+                self.assertTrue(events[0].startswith("check "))
+                self.assertEqual(profiles.read_text(), initial)
+                return
             failed = rebuild_fails or check_fails or cleanup_fails
             self.assertEqual(result.returncode != 0, failed, result.stderr)
-            events = log.read_text().splitlines()
             self.assertTrue(events[0].startswith("check music-full "))
             self.assertTrue(events[0].endswith(" guitar-pro"))
             if check_fails or rebuild_fails:
@@ -238,6 +249,13 @@ case "$1" in check) exit {int(check_fails)} ;; apply) exit {int(cleanup_fails)} 
                 self.assertTrue(events[-1].startswith("apply music-full "))
                 self.assertNotIn('"music-full"', profiles.read_text())
             self.assertEqual("rebuild" in events, enabled and not check_fails)
+
+    def test_disable_preserves_data(self):
+        self.run_scenario(operation="disable")
+        self.run_scenario(operation="disable", enabled=False)
+
+    def test_purge_cancellation_precedes_rebuild_and_cleanup(self):
+        self.run_scenario(answer="no\n")
 
     def test_success(self):
         self.run_scenario()

@@ -5,6 +5,15 @@ RUNUSER=@runuser@
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 HOST_NAME="$(hostname)"
 
+case "${1:-}" in
+  rebuild|update) [ "$#" -eq 1 ] || { echo "Unexpected arguments for pino os $1." >&2; exit 1; } ;;
+  generation)
+    case "${2:-}" in
+      list|clean) [ "$#" -eq 2 ] || { echo "Unexpected generation arguments." >&2; exit 1; } ;;
+      switch) [ "$#" -ge 2 ] && [ "$#" -le 3 ] || { echo "Usage: pino os generation switch [generation]" >&2; exit 1; } ;;
+    esac ;;
+esac
+
 # Git checkout and flake updates belong to the configured user. When invoked
 # from a recovery root console, delegate first and let individual operations
 # elevate only the system mutation they require.

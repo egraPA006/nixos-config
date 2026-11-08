@@ -194,7 +194,7 @@ def main():
             "/etc/pino/vpn/awg0.conf", "amneziawg-server.service", "pino-vpn-mode.service",
         ], env=vault.env)
         if result.returncode:
-            raise ValueError("Client saved, but deployment failed. Retry: pino provision host mosk")
+            raise ValueError("Client saved, but deployment failed. Retry: pino os provision host mosk")
         print("Server peer deployed. Import the .conf into AmneziaWG. All IPv4 traffic uses Mosk.")
         print("Server mode private blocks IPv4 Internet; full enables it. IPv6 is not routed by this profile.")
         return 0

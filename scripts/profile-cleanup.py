@@ -138,7 +138,7 @@ def main():
     check_mounts(paths, keep)
     check_running(resources, account.pw_uid)
     if args.operation == "check":
-        print("Disabling removes application data and settings:")
+        print("Purging removes application data and settings:")
         for path in paths:
             print(f"  {path}")
         print("Saved install artifacts and data owned by remaining profiles are preserved.")

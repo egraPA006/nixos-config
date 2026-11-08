@@ -26,6 +26,25 @@ let
 in
 {
   pino.artifacts.guitar-pro.target = installersDir;
+  pino.populate.steps.guitar-pro = {
+    command = [ "pino" "desktop" "guitar-pro" "install" ];
+    requiresSession = true;
+    requiredMount = config.pino.artifacts.guitar-pro.requiredMount;
+    prerequisite = ''
+      shopt -s nullglob
+      installers=(${lib.escapeShellArg installersDir}/*.exe)
+      if [ "''${#installers[@]}" -ne 1 ]; then
+        printf '%s\n' ${lib.escapeShellArg "Keep exactly one complete Guitar Pro installer .exe in ${installersDir}, then repeat populate."}
+        exit 2
+      fi
+      ${lib.optionalString (cfg.replacementExe != null) ''
+        if [ ! -f ${lib.escapeShellArg cfg.replacementExe} ]; then
+          printf '%s\n' ${lib.escapeShellArg "Restore the declared replacement executable: ${cfg.replacementExe}"}
+          exit 2
+        fi
+      ''}
+    '';
+  };
   assertions = [{
     assertion = cfg.winePrefix != config.pino.profiles.musicFull.winePrefix
       && cfg.winePrefix != "${user.home}/.wine";

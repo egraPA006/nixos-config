@@ -76,7 +76,7 @@ in
     helpText = ''
       Store the complete group JSON in the `pino-galene-mosk-main` Bitwarden Secure Note, then run:
 
-        pino provision send pino-galene-mosk-main mosk /etc/pino/galene/main.json galene.service
+        pino os provision send pino-galene-mosk-main mosk /etc/pino/galene/main.json galene.service
 
       The room is available at https://${domain}/group/main/. Galene remains
       stopped until the group file exists.

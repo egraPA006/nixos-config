@@ -2,6 +2,12 @@
 
 let
   cfg = config.pino.bootstrap;
+  runBootstrap = operation: ''
+    set -- ${lib.escapeShellArg operation} "$@"
+    BOOTSTRAP_CONFIG_DIR=${lib.escapeShellArg config.pino.configDir}
+    BOOTSTRAP_REPOSITORY=https://github.com/egraPA006/nixos-config.git
+    ${builtins.readFile ./bootstrap.sh}
+  '';
   prepareSecrets = pkgs.writeShellScript "pino-server-secrets" ''
     export PINO_PROXY_SETTINGS=${../../resources/mosk-proxies.json}
     export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ]}:"$PATH"
@@ -14,43 +20,28 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = with pkgs; [ git openssh ];
 
-    pino.subcommands.bootstrap = {
-      description = "Install a Pino server over SSH";
-      commands = {
-        prepare = {
-          description = "Prepare VPN, Galene, Xray and telemt secrets locally or in Bitwarden";
-          usage = "<mosk|halos> [new-output-directory] [--bitwarden] [--rotate galene|vpn | --repair-galene]";
-        };
-        install = {
-          description = "Replace an existing Linux VPS using a kexec installer";
-          usage = "<mosk|halos> <user@address> <public-key-file>";
-        };
-        rescue = {
-          description = "Install from an already running NixOS rescue system";
-          usage = "<mosk|halos> <root@address> <public-key-file>";
-        };
+    pino.subcommands.os.commands = {
+      provision.commands.prepare = {
+        description = "Prepare or explicitly rotate server credentials";
+        usage = "<mosk|halos> [new-output-directory] [--bitwarden] [--rotate galene|vpn | --repair-galene]";
+        script = ''exec ${prepareSecrets} "$@"'';
       };
-      helpText = ''
-        The public key file selects a matching private key beside it, installed
-        earlier by `pino provision install`. The private key is never copied to
-        the installer or committed to Git.
-
-        `install` starts from Ubuntu or another x86_64 Linux VPS, boots the pinned
-        NixOS installer through kexec, installs /dev/vda, reboots, and provisions
-        the enabled server services from Bitwarden Secure Notes.
-
-        `rescue` performs the same installation after the provider has already
-        booted a NixOS installer. Both flows erase /dev/vda after confirmation.
-      '';
-      script = ''
-        if [ "''${1:-}" = prepare ]; then
-          shift
-          exec ${prepareSecrets} "$@"
-        fi
-        BOOTSTRAP_CONFIG_DIR=${lib.escapeShellArg config.pino.configDir}
-        BOOTSTRAP_REPOSITORY=https://github.com/egraPA006/nixos-config.git
-        ${builtins.readFile ./bootstrap.sh}
-      '';
+      install = {
+        description = "Install a server from Ubuntu/Debian over SSH";
+        usage = "<mosk|halos> <user@address> <public-key-file>";
+        helpText = ''
+          Boots the pinned NixOS RAM installer, installs /dev/vda after
+          confirmation, reboots and provisions existing Bitwarden secrets.
+          The public key selects its matching private key beside it.
+        '';
+        script = runBootstrap "install";
+      };
+      rescue = {
+        description = "Install a server from an already running NixOS rescue";
+        usage = "<mosk|halos> <root@address> <public-key-file>";
+        helpText = "Erases /dev/vda after confirmation and provisions existing Bitwarden secrets.";
+        script = runBootstrap "rescue";
+      };
     };
   };
 }

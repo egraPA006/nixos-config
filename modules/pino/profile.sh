@@ -7,11 +7,12 @@ PROFILE_GROUPS=(@profileGroups@)
 CLEANUP=@cleanup@
 
 usage() {
-  echo "Usage: pino profile <command> [profile]"
+  echo "Usage: pino os profile <command> [profile]"
   echo
   echo "Commands:"
   echo "  enable <profile>   Enable a profile and rebuild"
-  echo "  disable <profile>  Disable, rebuild and remove profile data"
+  echo "  disable <profile>  Disable and rebuild, preserving data"
+  echo "  purge <profile>    Disable and delete declared data after confirmation"
   echo "  list               List profiles with enabled markers"
   echo "  list --enabled     Print enabled profile names only"
 }
@@ -63,7 +64,7 @@ get_active() {
 
 write_profiles() {
   {
-    printf '# Managed by pino profile. Do not edit manually.\n'
+    printf '# Managed by pino os profile. Do not edit manually.\n'
     if [ "$#" -eq 0 ]; then
       printf '[]\n'
     else
@@ -93,11 +94,9 @@ apply_profiles() {
 }
 
 command="${1:-}"
-setup_profile() {
-  case "$1" in
-    assetto-corsa) /run/current-system/sw/bin/assetto-corsa-setup setup ;;
-  esac
-}
+case "$command" in
+  enable|disable|purge) [ "$#" -eq 2 ] || { usage; exit 1; } ;;
+esac
 
 case "$command" in
   enable)
@@ -106,13 +105,16 @@ case "$command" in
     is_valid "$profile" || { echo "Unknown profile: $profile"; exit 1; }
     mapfile -t active < <(get_active)
     for candidate in "${active[@]}"; do
-      [ "$candidate" = "$profile" ] && { echo "Profile '$profile' is already enabled"; setup_profile "$profile"; exit $?; }
+      [ "$candidate" = "$profile" ] && {
+        echo "Profile '$profile' is already enabled. Run pino os populate to finish application setup."
+        exit 0
+      }
     done
     active+=("$profile")
     apply_profiles "${active[@]}" || exit 1
-    setup_profile "$profile"
+    echo "Profile enabled. Run pino os populate to finish application setup."
     ;;
-  disable)
+  disable|purge)
     profile="${2:-}"
     [ -n "$profile" ] || { usage; exit 1; }
     is_valid "$profile" || { echo "Unknown profile: $profile"; exit 1; }
@@ -126,26 +128,34 @@ case "$command" in
         remaining+=("$candidate")
       fi
     done
-    sudo "$CLEANUP" check "$profile" "$CONFIG_DIR" "${remaining[@]}" || exit 1
+    if [ "$command" = purge ]; then
+      sudo "$CLEANUP" check "$profile" "$CONFIG_DIR" "${remaining[@]}" || exit 1
+      read -r -p "Type 'purge $profile' to disable it and delete the listed data: " answer
+      [ "$answer" = "purge $profile" ] || { echo "Cancelled; no profile or data changed."; exit 1; }
+    fi
     if [ "$found" = true ]; then
       apply_profiles "${remaining[@]}" || exit 1
     else
       echo "Profile '$profile' is not enabled"
     fi
-    sudo "$CLEANUP" apply "$profile" "$CONFIG_DIR" "${remaining[@]}" || {
-      echo "Profile is disabled, but cleanup failed; retry: pino profile disable $profile" >&2
-      exit 1
-    }
+    if [ "$command" = purge ]; then
+      sudo "$CLEANUP" apply "$profile" "$CONFIG_DIR" "${remaining[@]}" || {
+        echo "Profile is disabled, but cleanup failed; retry: pino os profile purge $profile" >&2
+        exit 1
+      }
+    else
+      echo "Profile data preserved. Use pino os profile purge $profile for explicit cleanup."
+    fi
     ;;
   list)
     mapfile -t active < <(get_active)
-    [ "$#" -le 2 ] || { echo "Usage: pino profile list [--enabled]" >&2; exit 1; }
+    [ "$#" -le 2 ] || { echo "Usage: pino os profile list [--enabled]" >&2; exit 1; }
     case "${2:-}" in
       "") list_profiles "${active[@]}" ;;
       --enabled)
         [ "${#active[@]}" -eq 0 ] || printf '%s\n' "${active[@]}"
         ;;
-      *) echo "Usage: pino profile list [--enabled]" >&2; exit 1 ;;
+      *) echo "Usage: pino os profile list [--enabled]" >&2; exit 1 ;;
     esac
     ;;
   *)

@@ -15,7 +15,7 @@
       search = { description = "Search top-level nixpkgs packages"; usage = "<query>"; };
       locate = { description = "Find packages containing a file"; usage = "<pattern>"; };
       index.description = "Rebuild the local nix-locate database";
-      install = { description = "Install a temporary package"; usage = "<name>"; };
+      install = { description = "Install a persistent user package"; usage = "<name>"; };
       remove = { description = "Remove an ad-hoc package"; usage = "<name>"; };
     };
     helpText = ''
