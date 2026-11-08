@@ -18,8 +18,9 @@
             monitors = [{ connector = "DP-3"; width = 2560; height = 1440; refresh = 59.951; }];
           }
           {
-            x = 2560; y = 234; scale = 1.0; transform = 0; primary = false;
-            monitors = [{ connector = "HDMI-1"; width = 1920; height = 1080; refresh = 60.0; }];
+            x = 2560; y = 234; scale = 2.0; transform = 0; primary = false;
+            # NU7100 requires HDMI UHD Color for 4K/60 RGB input.
+            monitors = [{ connector = "HDMI-1"; width = 3840; height = 2160; refresh = 60.0; }];
           }
         ];
       });
@@ -62,7 +63,7 @@
           <logicalmonitor>
             <x>2560</x>
             <y>234</y>
-            <scale>1</scale>
+            <scale>2</scale>
             <monitor>
               <monitorspec>
                 <connector>HDMI-1</connector>
@@ -71,8 +72,8 @@
                 <serial>0x01000e00</serial>
               </monitorspec>
               <mode>
-                <width>1920</width>
-                <height>1080</height>
+                <width>3840</width>
+                <height>2160</height>
                 <rate>60.000</rate>
               </mode>
             </monitor>
