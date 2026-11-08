@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo $0 [install|repair] <host> [--ssh-key-file <public-key>] [--keep-hardware]" >&2
+  echo "Usage: sudo $0 [install|repair] <host> [--disk <disk> ...] [--keep-data] [--ssh-key-file <public-key>] [--keep-hardware]" >&2
 }
 
 [ "$(id -u)" -eq 0 ] || { echo "Run this script as root." >&2; exit 1; }
@@ -15,6 +15,8 @@ host="${1:-}"
 shift || true
 ssh_key_file=""
 keep_hardware=false
+keep_data=false
+disks=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --ssh-key-file)
@@ -26,6 +28,15 @@ while [ "$#" -gt 0 ]; do
       keep_hardware=true
       shift
       ;;
+    --disk)
+      [ "$#" -ge 2 ] || { usage; exit 1; }
+      disks+=("$2")
+      shift 2
+      ;;
+    --keep-data)
+      keep_data=true
+      shift
+      ;;
     *) usage; exit 1 ;;
   esac
 done
@@ -33,20 +44,18 @@ done
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 host_dir="$repo_dir/hosts/$host"
 [ -d "$host_dir" ] || { echo "Unknown host: $host" >&2; exit 1; }
-findmnt --mountpoint /mnt >/dev/null || {
-  echo "/mnt is not mounted. Run scripts/partition.sh or mount the system first." >&2
-  exit 1
+[ "$keep_data" = false ] || { [ "$host" = re-1 ] && [ "${#disks[@]}" -eq 3 ]; } || {
+  echo "--keep-data requires re-1 and three --disk arguments (system, fast, slow)." >&2; exit 1;
 }
-
-if [ "$operation" = install ] && [ "$keep_hardware" = false ]; then
-  echo "Generating $host_dir/hardware.nix from the mounted target..."
-  hardware_owner="$(stat -c '%u:%g' "$host_dir/hardware.nix")"
-  hardware_tmp="$(mktemp "$host_dir/hardware.nix.XXXXXX")"
-  trap 'rm -f "$hardware_tmp"' EXIT
-  nixos-generate-config --root /mnt --show-hardware-config --no-filesystems > "$hardware_tmp"
-  mv "$hardware_tmp" "$host_dir/hardware.nix"
-  chown "$hardware_owner" "$host_dir/hardware.nix"
-  trap - EXIT
+if [ "${#disks[@]}" -gt 0 ]; then
+  [ "$operation" = install ] || { echo "repair never partitions disks." >&2; exit 1; }
+  if findmnt --mountpoint /mnt >/dev/null; then
+    echo "/mnt is already mounted; omit --disk to install into it." >&2; exit 1
+  fi
+else
+  findmnt --mountpoint /mnt >/dev/null || {
+    echo "/mnt is not mounted. Supply --disk arguments or mount the system first." >&2; exit 1;
+  }
 fi
 
 flake="path:$repo_dir#nixosConfigurations.$host.config"
@@ -71,6 +80,23 @@ if [ "$operation" = install ]; then
     ""|ssh-ed25519\ *|ssh-rsa\ *|sk-ssh-ed25519@openssh.com\ *) ;;
     *) echo "Unsupported SSH public key." >&2; exit 1 ;;
   esac
+fi
+
+if [ "${#disks[@]}" -gt 0 ]; then
+  partition_args=("$host")
+  [ "$keep_data" = false ] || partition_args+=(--keep-data)
+  "$repo_dir/scripts/partition.sh" "${partition_args[@]}" "${disks[@]}"
+fi
+
+if [ "$operation" = install ] && [ "$keep_hardware" = false ]; then
+  echo "Generating $host_dir/hardware.nix from the mounted target..."
+  hardware_owner="$(stat -c '%u:%g' "$host_dir/hardware.nix")"
+  hardware_tmp="$(mktemp "$host_dir/hardware.nix.XXXXXX")"
+  trap 'rm -f "$hardware_tmp"' EXIT
+  nixos-generate-config --root /mnt --show-hardware-config --no-filesystems > "$hardware_tmp"
+  mv "$hardware_tmp" "$host_dir/hardware.nix"
+  chown "$hardware_owner" "$host_dir/hardware.nix"
+  trap - EXIT
 fi
 
 echo "Installing $host from $repo_dir..."
@@ -106,3 +132,4 @@ if [ "$operation" = install ]; then
 fi
 
 echo "$host $operation complete. The bootloader was installed from the current configuration."
+echo "After boot, log in as $pino_user and run: pino os populate [external-disk-directory]"
