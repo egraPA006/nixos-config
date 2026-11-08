@@ -7,3 +7,6 @@ Secrets/
 secrets/
 bitwarden_export*
 hosts/*/active-profiles.nix.backup.*
+
+__pycache__/
+*.py[cod]
