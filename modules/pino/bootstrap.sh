@@ -130,8 +130,10 @@ if [ "$operation" = install ]; then
   "
 
   echo "Building the pinned NixOS kexec installer locally..."
+  kexec_attribute=kexec-installer
+  if [ "$host" = halos ]; then kexec_attribute=kexec-installer-small; fi
   kexec_output="$(nix build --no-link --print-out-paths \
-    "path:$BOOTSTRAP_CONFIG_DIR#kexec-installer")"
+    "path:$BOOTSTRAP_CONFIG_DIR#$kexec_attribute")"
   kexec_image="$kexec_output/nixos-kexec-installer-noninteractive-x86_64-linux.tar.gz"
   [ -f "$kexec_image" ] || { echo "The kexec installer archive is missing." >&2; exit 1; }
   scp_to "$kexec_image" "$initial_target:/tmp/pino-kexec.tar.gz"

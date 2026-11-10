@@ -53,6 +53,19 @@
     };
     packages.x86_64-linux.kexec-installer =
       nixos-images.packages.x86_64-linux.kexec-installer-nixos-unstable-noninteractive;
+    # The kernel limits kexec segments to half of RAM. Keep an ext4 installer
+    # for 1 GiB VPS hosts instead of loading the universal filesystem toolset.
+    packages.x86_64-linux.kexec-installer-small =
+      (nixos-images.inputs.nixos-unstable.legacyPackages.x86_64-linux.nixos [
+        nixos-images.nixosModules.kexec-installer
+        nixos-images.nixosModules.noninteractive
+        ({ lib, ... }: {
+          system.kexec-installer.name = "nixos-kexec-installer-noninteractive";
+          boot.supportedFilesystems = lib.mkForce [ "ext4" "vfat" ];
+          boot.initrd.supportedFilesystems = lib.mkForce [ "ext4" "vfat" "squashfs" "overlay" ];
+          netboot.squashfsCompression = "xz -Xdict-size 100%";
+        })
+      ]).config.system.build.kexecInstallerTarball;
 
     devShells.x86_64-linux.cpp = pkgs.mkShell {
       packages = with pkgs; [
