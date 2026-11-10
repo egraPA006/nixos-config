@@ -59,8 +59,43 @@
       (nixos-images.inputs.nixos-unstable.legacyPackages.x86_64-linux.nixos [
         nixos-images.nixosModules.kexec-installer
         nixos-images.nixosModules.noninteractive
-        ({ lib, ... }: {
+        ({ config, lib, pkgs, ... }:
+        let
+          modules = [
+            "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi"
+            "virtio_console" "virtio_balloon" "virtio_gpu"
+            "af_packet"
+            "ata_piix" "ahci" "sd_mod" "sr_mod"
+            "ext4" "vfat" "squashfs" "overlay" "loop" "erofs" "autofs4"
+            "nls_cp437" "nls_iso8859-1" "nls_utf8"
+            "usbhid" "hid_generic" "atkbd" "psmouse"
+            "dm_mod" "xhci_pci" "uhci_hcd" "ehci_pci" "i8042"
+          ];
+          kernelModules = lib.getOutput "modules" config.boot.kernelPackages.kernel;
+          minimalModules = pkgs.makeModulesClosure {
+            kernel = kernelModules;
+            firmware = pkgs.emptyDirectory;
+            rootModules = modules;
+            allowMissing = false;
+          };
+          moduleTree = pkgs.runCommand "halos-installer-modules" { } ''
+            cp -a ${minimalModules} "$out"
+            for directory in "$out"/lib/modules/*; do
+              chmod u+w "$directory"
+              version="''${directory##*/}"
+              # Stage 1 derives another closure and needs the ordering hints
+              # that makeModulesClosure normally removes from its output.
+              cp ${kernelModules}/lib/modules/"$version"/modules.{order,builtin,builtin.modinfo} "$directory/"
+            done
+          '';
+        in {
           system.kexec-installer.name = "nixos-kexec-installer-noninteractive";
+          system.tools.nixos-rebuild.enable = false;
+          # This installer targets the checked QEMU/KVM hardware, not arbitrary
+          # machines. A full kernel module tree otherwise dominates its RAM use.
+          system.modulesTree = lib.mkForce [ moduleTree ];
+          boot.initrd.availableKernelModules = lib.mkForce modules;
+          boot.kernelModules = lib.mkForce [ "virtio_pci" "virtio_net" "virtio_blk" ];
           boot.supportedFilesystems = lib.mkForce [ "ext4" "vfat" ];
           boot.initrd.supportedFilesystems = lib.mkForce [ "ext4" "vfat" "squashfs" "overlay" ];
           netboot.squashfsCompression = "xz -Xdict-size 100%";

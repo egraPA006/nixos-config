@@ -662,8 +662,13 @@ pino vpn add-client halos phone ~/halos-phone
 The Halos secret records are `pino-vpn-server-halos`, `pino-xray-halos` and
 `pino-telemt-halos`; proxy connection links are hidden fields in their notes.
 The bootstrap selects `kexec-installer-small` for Halos: an ext4/VFAT installer
-with XZ-compressed storage, sized for the kernel's half-RAM kexec limit on 1 GiB
-VPS instances. The universal `kexec-installer` remains available for other hosts.
+with XZ-compressed storage and a reduced module set for its QEMU/KVM hardware.
+It fits the kernel's half-RAM kexec limit and boots with networking and SSH in a
+1 GiB VM. The universal `kexec-installer` remains available for other hosts.
+For Halos, Ubuntu also gets a temporary 1 GiB swap file and the bootstrap uses
+legacy kexec to avoid exhausting RAM during loading. The swap file lives on the
+old system disk and disappears during installation; a failed pre-install attempt
+can leave it active until reboot or manual cleanup.
 The VPN starts in `private` mode until explicitly changed. Both VPNs currently
 use `10.77.0.0/24`; select one full-route desktop connection at a time.
 

@@ -141,13 +141,28 @@ if [ "$operation" = install ]; then
   ssh_to "$initial_target" \
     "$elevate tar -xzf /tmp/pino-kexec.tar.gz -C '$remote_kexec_dir'"
 
+  kexec_flags=""
+  if [ "$host" = halos ]; then
+    # On 1 GiB Ubuntu, file-based kexec can exhaust RAM while retaining both
+    # copies of the initrd. Legacy kexec plus temporary swap avoids this.
+    kexec_flags="--kexec-extra-flags --kexec-syscall"
+    ssh_to "$initial_target" "$elevate sh -eu -c '
+      swapfile=\$(mktemp /var/tmp/pino-bootstrap-swap.XXXXXX)
+      chmod 0600 \"\$swapfile\"
+      fallocate -l 1G \"\$swapfile\"
+      mkswap \"\$swapfile\" >/dev/null
+      swapon \"\$swapfile\"
+    '"
+    echo "Temporary installer swap enabled; it disappears when the old system disk is formatted."
+  fi
+
   echo "Booting the RAM installer; SSH will disconnect briefly..."
   set +e
   # Retry inside the same SSH connection: a transport disconnect must not
   # trigger a second boot attempt. Restore the archive because run appends
   # machine state to the initrd on each invocation.
   ssh_to "$initial_target" "
-    if $elevate '$remote_kexec_dir/kexec/run'; then
+    if $elevate '$remote_kexec_dir/kexec/run' ${kexec_flags:-}; then
       exit 0
     else
       echo 'Automatic kexec load failed; retrying with --kexec-syscall.' >&2
