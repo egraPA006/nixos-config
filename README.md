@@ -301,6 +301,7 @@ For `re-1`, `pino os provision install` currently retrieves these records:
 | SSH Key `pino-ssh-re-1-github` | `~/.ssh/github` and `.pub` |
 | SSH Key `pino-ssh-server-mosk` | `~/.ssh/mosk` and `.pub` |
 | SSH Key `pino-ssh-server-halos` | `~/.ssh/halos` and `.pub` |
+| SSH Key `pino-ssh-re-1-winlaptop` | `~/.ssh/winlaptop` and `.pub` |
 | Secure Note `pino-vpn-client-re-1-mosk` | `/etc/amneziawg/mosk.conf` |
 | Secure Note `pino-vpn-client-re-1-halos` | `/etc/amneziawg/halos.conf` |
 | Secure Note `pino-hotspot-re-1` | `/etc/NetworkManager/system-connections/pino-vpn-share.nmconnection` |
@@ -715,8 +716,13 @@ pino vpn add-client mosk phone ~/mosk-phone
 
 This unlocks Bitwarden, creates or reuses `pino-vpn-client-phone-mosk`, adds its
 public peer to `pino-vpn-server-mosk`, exports `mosk-phone.conf` into the new
-private directory, and deploys the server note. Import that file in AmneziaWG
-on the phone. New profiles route all IPv4 traffic (`AllowedIPs = 0.0.0.0/0`):
+private directory, and deploys the server note. It also creates or updates the
+separate Secure Note `pino-vpn-client-phone-mosk-amnezia` containing an AmneziaVPN
+`vpn://` link and exports that link as `mosk-phone.vpn`. Import the `.conf` in
+AmneziaWG, or paste the link into AmneziaVPN. Both contain the same client private
+key: keep both exports private. Existing clients get the link on their next
+`add-client` run without rotating their keys.
+New profiles route all IPv4 traffic (`AllowedIPs = 0.0.0.0/0`):
 server mode `private` blocks IPv4 Internet, while `full` enables Internet and
 the VPN network. IPv6 is not routed. Creating a client does not change the
 server mode or the desktop's active VPN. Deployment restarts AWG, briefly interrupting
@@ -731,6 +737,21 @@ If deployment fails after saving, retry the command with a new directory
 (and `--force` if the server peer address still needs updating), then run `pino os provision host
 mosk`. Remove the local export after importing and keep the Bitwarden note.
 This command currently supports Mosk only; it does not create Xray credentials.
+
+To revoke a device and remove both client records:
+
+```bash
+pino vpn remove-client mosk phone
+# For noninteractive use, explicitly confirm with --yes.
+```
+
+Removal asks for confirmation, removes only the peer identified by the client's
+private key, saves and deploys the server note, then moves the link and client
+config to Bitwarden trash. AWG restarts briefly during deployment. If deployment
+or deletion fails, rerun the same removal command; the canonical client record
+is kept until the last step so retries retain the peer identity. Local exports
+and imported device profiles are not deleted, but the revoked peer cannot
+connect. Restoring a Bitwarden trash item alone does not restore server access.
 
 Use client `AllowedIPs = 10.77.0.0/24` (or your actual private subnet) to retain
 ordinary Internet access through the client's local connection. `egress` enables

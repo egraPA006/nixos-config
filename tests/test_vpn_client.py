@@ -1,10 +1,13 @@
 import copy
+import base64
 import importlib.util
 import io
+import json
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import zlib
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("vpn_client", Path(__file__).resolve().parents[1] / "scripts/vpn-client.py")
@@ -29,8 +32,17 @@ class Vault:
         name = next(name for name, item in self.items.items() if item == original)
         self.items[name] = updated
 
+    def delete(self, original):
+        name = next(name for name, item in self.items.items() if item == original)
+        del self.items[name]
+
 
 class ClientTests(unittest.TestCase):
+    def remove(self, vault, name):
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
+             redirect_stdout(io.StringIO()):
+            client.remove_client(vault, "mosk", name)
+
     def prepare(self, vault, name, force=False):
         with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
              patch.object(client.subprocess, "run", return_value=SimpleNamespace(stdout="client-secret\n")), \
@@ -141,3 +153,125 @@ class ClientTests(unittest.TestCase):
         vault.items["pino-vpn-server-mosk"]["notes"] += "PresharedKey = synthetic-psk\n"
         config = self.prepare(vault, "phone", force=True)
         self.assertIn("PresharedKey = synthetic-psk", config)
+
+    def test_amnezia_link_matches_import_schema_and_qcompress(self):
+        vault = Vault()
+        config = self.prepare(vault, "phone")
+        link = vault.items["pino-vpn-client-phone-mosk-amnezia"]["notes"]
+        self.assertTrue(link.startswith("vpn://"))
+        encoded = link[6:]
+        packed = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        raw = zlib.decompress(packed[4:])
+        self.assertEqual(int.from_bytes(packed[:4], "big"), len(raw))
+        payload = json.loads(raw)
+        self.assertEqual(payload["defaultContainer"], "amnezia-awg")
+        protocol = payload["containers"][0]["awg"]
+        self.assertTrue(protocol["isThirdPartyConfig"])
+        last = json.loads(protocol["last_config"])
+        self.assertEqual(last["config"], config)
+        self.assertEqual(last["client_priv_key"], "client-secret")
+        self.assertEqual(last["hostName"], "vpn.egrapa.com")
+        self.assertEqual(last["port"], 585)
+        self.assertEqual(last["allowed_ips"], ["0.0.0.0/0"])
+        self.assertEqual(last["S1"], "50")
+        self.assertEqual(last["persistent_keep_alive"], "25")
+        self.assertNotIn("PrivateKey = server-secret", raw.decode())
+
+    def test_existing_client_backfills_link(self):
+        vault = Vault()
+        config = self.prepare(vault, "phone")
+        del vault.items["pino-vpn-client-phone-mosk-amnezia"]
+        self.assertEqual(self.prepare(vault, "phone"), config)
+        self.assertIn("pino-vpn-client-phone-mosk-amnezia", vault.items)
+
+    def test_force_refreshes_link(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        before = vault.items["pino-vpn-client-phone-mosk-amnezia"]["notes"]
+        vault.items["pino-vpn-server-mosk"]["notes"] += "PresharedKey = synthetic-psk\n"
+        self.prepare(vault, "phone", force=True)
+        self.assertNotEqual(vault.items["pino-vpn-client-phone-mosk-amnezia"]["notes"], before)
+
+    def test_removal_preserves_unrelated_peer_and_deploys_before_deleting(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        other = "[Peer] # unrelated\nPublicKey = other\nAllowedIPs = 10.77.0.3/32\n"
+        vault.items["pino-vpn-server-mosk"]["notes"] += other
+        def deploy(vault, host):
+            self.assertIn("pino-vpn-client-phone-mosk", vault.items)
+            self.assertIn("pino-vpn-client-phone-mosk-amnezia", vault.items)
+            self.assertNotIn("public-client-secret", vault.items["pino-vpn-server-mosk"]["notes"])
+        with patch.object(client, "deploy_server", side_effect=deploy) as deployment:
+            self.remove(vault, "phone")
+            deployment.assert_called_once_with(vault, "mosk")
+        self.assertEqual(set(vault.items), {"pino-vpn-server-mosk"})
+        self.assertIn(other, vault.items["pino-vpn-server-mosk"]["notes"])
+
+    def test_failed_removal_deployment_retains_records_and_can_retry(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        with patch.object(client, "deploy_server", side_effect=ValueError("fixture")):
+            with self.assertRaises(ValueError):
+                self.remove(vault, "phone")
+        self.assertIn("pino-vpn-client-phone-mosk", vault.items)
+        self.assertIn("pino-vpn-client-phone-mosk-amnezia", vault.items)
+        with patch.object(client, "deploy_server") as deployment:
+            self.remove(vault, "phone")
+            deployment.assert_called_once()
+
+    def test_partial_vault_removal_can_retry(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        delete = vault.delete
+        def fail_canonical(item):
+            if item == vault.items["pino-vpn-client-phone-mosk"]:
+                raise ValueError("fixture")
+            delete(item)
+        with patch.object(client, "deploy_server"), patch.object(vault, "delete", side_effect=fail_canonical):
+            with self.assertRaises(ValueError):
+                self.remove(vault, "phone")
+        self.assertIn("pino-vpn-client-phone-mosk", vault.items)
+        self.assertNotIn("pino-vpn-client-phone-mosk-amnezia", vault.items)
+        with patch.object(client, "deploy_server"):
+            self.remove(vault, "phone")
+            self.remove(vault, "phone")
+
+    def test_orphan_link_is_not_deleted_without_peer_identity(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        del vault.items["pino-vpn-client-phone-mosk"]
+        before = copy.deepcopy(vault.items)
+        with self.assertRaises(ValueError):
+            self.remove(vault, "phone")
+        self.assertEqual(vault.items, before)
+
+    def test_deploy_uses_current_pino_namespace(self):
+        vault = SimpleNamespace(env={})
+        with patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+            client.deploy_server(vault, "mosk")
+        self.assertEqual(run.call_args.args[0][:4], ["pino", "os", "provision", "send"])
+
+    def test_duplicate_peer_removal_fails_without_changes(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        vault.items["pino-vpn-server-mosk"]["notes"] += "[Peer]\nPublicKey = public-client-secret\nAllowedIPs = 10.77.0.9/32\n"
+        before = copy.deepcopy(vault.items)
+        with patch.object(client, "deploy_server") as deployment:
+            with self.assertRaises(ValueError):
+                self.remove(vault, "phone")
+            deployment.assert_not_called()
+        self.assertEqual(vault.items, before)
+
+    def test_link_creation_failure_can_retry_without_new_device(self):
+        vault = Vault()
+        create = vault.create
+        def fail_link(name, kind, **fields):
+            if name.endswith("-amnezia"):
+                raise ValueError("fixture")
+            create(name, kind, **fields)
+        with patch.object(vault, "create", side_effect=fail_link):
+            with self.assertRaises(ValueError):
+                self.prepare(vault, "phone")
+        config = vault.items["pino-vpn-client-phone-mosk"]["notes"]
+        self.assertEqual(self.prepare(vault, "phone"), config)
+        self.assertEqual(vault.items["pino-vpn-server-mosk"]["notes"].count("[Peer]"), 1)

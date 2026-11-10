@@ -38,6 +38,17 @@ class FakeVault:
 
 
 class ServerSecretsTests(unittest.TestCase):
+    def test_delete_checks_revision_before_trashing_item(self):
+        vault = setup.Bitwarden.__new__(setup.Bitwarden)
+        item = {"id": "fixture", "name": "client", "type": 2, "notes": "synthetic", "revisionDate": "one"}
+        with patch.object(vault, "json_call", return_value=dict(item)), patch.object(vault, "call") as call:
+            vault.delete(item)
+            call.assert_called_once_with("delete", "item", "fixture")
+        with patch.object(vault, "json_call", return_value=dict(item, revisionDate="two")), patch.object(vault, "call") as call:
+            with self.assertRaises(ValueError):
+                vault.delete(item)
+            call.assert_not_called()
+
     def test_proxy_links_match_credentials_and_are_hidden_fields(self):
         records = setup.proxy_records()
         for name, record in records.items():

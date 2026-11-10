@@ -133,6 +133,10 @@ in
         description = "Create an AWG client in Bitwarden, export it and deploy the server peer";
         usage = "<mosk> <client-name> <new-export-directory> [--force]";
       };
+      remove-client = {
+        description = "Revoke a server peer and trash its Bitwarden config and AmneziaVPN link";
+        usage = "<mosk> <client-name> [--yes]";
+      };
       list.description = "List installed named VPN connections";
       connect = {
         description = "Select, start, and autostart a connection";
@@ -165,8 +169,10 @@ in
       run `sudo nmcli connection reload`.
     '';
     script = ''
-      if [ "''${1:-}" = add-client ]; then
+      if [ "''${1:-}" = add-client ] || [ "''${1:-}" = remove-client ]; then
+        operation="$1"
         shift
+        if [ "$operation" = remove-client ]; then set -- --remove "$@"; fi
         export PINO_SERVER_SECRETS=${../../../../scripts/server-secrets.py}
         export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ]}:"$PATH"
         exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/vpn-client.py} "$@"

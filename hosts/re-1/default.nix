@@ -15,6 +15,10 @@
   };
   pino.configDir = "${config.pino.user.home}/nixos-config";
 
+  pino.provision.sshKeys = [
+    { item = "pino-ssh-re-1-winlaptop"; target = "${config.pino.user.home}/.ssh/winlaptop"; }
+  ];
+
   pino.profiles = {
     vpn.share.wifiInterface = "wlp8s0";
     musicLite.localDir = "/data/fast/music-lite";

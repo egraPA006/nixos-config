@@ -86,6 +86,13 @@ class Bitwarden:
         encoded = base64.b64encode(json.dumps(updated).encode()).decode()
         self.call("edit", "item", original["id"], payload=encoded)
 
+    def delete(self, original):
+        current = self.json_call("get", "item", original["id"])
+        for field in ("revisionDate", "name", "type", "notes", "login", "fields"):
+            if current.get(field) != original.get(field):
+                raise ValueError("Bitwarden item changed before deletion; retry after reviewing it")
+        self.call("delete", "item", original["id"])
+
 
 def replace_vpn_key(config, private):
     section = None

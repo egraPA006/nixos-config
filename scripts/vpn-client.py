@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Create a full-IPv4 AWG client in Bitwarden and deploy its peer."""
+"""Manage AWG clients, AmneziaVPN links and server peers in Bitwarden."""
 import argparse
+import base64
 import copy
 import importlib.util
 import ipaddress
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import zlib
 
 source = Path(os.environ.get("PINO_SERVER_SECRETS", Path(__file__).with_name("server-secrets.py")))
 spec = importlib.util.spec_from_file_location("server_secrets", source)
@@ -66,9 +69,51 @@ def update_peer_address(config, public, address):
     raise ValueError("Could not locate the existing peer address")
 
 
-def prepare_client(vault, host, name, force=False):
+def amnezia_link(config, description):
+    # Match AmneziaVPN's extractWireGuardConfig and Qt qCompress framing.
+    interface, peers = sections(config)
+    if len(peers) != 1:
+        raise ValueError("AmneziaVPN export requires exactly one server peer")
+    peer = peers[0]
+    endpoint, port = peer["Endpoint"].rsplit(":", 1)
+    if not endpoint or not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
+        raise ValueError("Invalid client Endpoint")
+    last = {
+        "config": config, "hostName": endpoint.strip("[]"), "port": int(port),
+        "client_priv_key": interface["PrivateKey"], "client_ip": interface["Address"],
+        "server_pub_key": peer["PublicKey"],
+        "allowed_ips": [value.strip() for value in peer["AllowedIPs"].split(",")],
+        "mtu": interface.get("MTU", "1280"),
+    }
+    for key, value in interface.items():
+        if re.fullmatch(r"Jc|Jmin|Jmax|S[1-4]|H[1-4]|I[1-5]", key):
+            last[key] = value
+    for source, target in (("PresharedKey", "psk_key"), ("PersistentKeepalive", "persistent_keep_alive")):
+        if source in peer:
+            last[target] = peer[source]
+    payload = {
+        "containers": [{"container": "amnezia-awg", "awg": {
+            "last_config": json.dumps(last), "isThirdPartyConfig": True,
+            "port": port, "transport_proto": "udp",
+        }}],
+        "defaultContainer": "amnezia-awg", "description": description,
+        "hostName": last["hostName"],
+    }
+    dns = [value.strip() for value in interface.get("DNS", "").split(",") if value.strip()]
+    for index, value in enumerate(dns[:2], 1):
+        payload[f"dns{index}"] = value
+    encoded = json.dumps(payload, separators=(",", ":")).encode()
+    compressed = len(encoded).to_bytes(4, "big") + zlib.compress(encoded, 8)
+    return "vpn://" + base64.urlsafe_b64encode(compressed).decode().rstrip("=")
+
+
+def validate_client(host, name):
     if host != "mosk" or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name):
         raise ValueError("Use host mosk and a client name of 1–32 letters, digits, hyphens or underscores")
+
+
+def prepare_client(vault, host, name, force=False):
+    validate_client(host, name)
     server = vault.find(f"pino-vpn-server-{host}", 2)
     if not server:
         raise ValueError("Prepare the server Bitwarden note first")
@@ -152,6 +197,10 @@ def prepare_client(vault, host, name, force=False):
         updated["notes"] = server["notes"].rstrip() + (
             f"\n\n[Peer]\n# {name}\nPublicKey = {public}\nAllowedIPs = {client_address}\n")
 
+    link_name = f"{item_name}-amnezia"
+    existing_link = vault.find(link_name, 2)
+    link = amnezia_link(config, f"{host}-{name}")
+
     # Finish all validation before the first vault mutation. Save the client
     # first so that a failed server edit can be recovered by rerunning.
     if not existing:
@@ -162,18 +211,88 @@ def prepare_client(vault, host, name, force=False):
         vault.edit(existing, updated_client)
     if updated != server:
         vault.edit(server, updated)
+    if not existing_link:
+        vault.create(link_name, 2, notes=link)
+    elif existing_link.get("notes") != link:
+        updated_link = copy.deepcopy(existing_link)
+        updated_link["notes"] = link
+        vault.edit(existing_link, updated_link)
     return config
+
+
+def deploy_server(vault, host):
+    result = subprocess.run([
+        "pino", "os", "provision", "send", f"pino-vpn-server-{host}", host,
+        "/etc/pino/vpn/awg0.conf", "amneziawg-server.service", "pino-vpn-mode.service",
+    ], env=vault.env)
+    if result.returncode:
+        raise ValueError("Server deployment failed; vault state retained. Retry the same client command.")
+
+
+def remove_client(vault, host, name):
+    validate_client(host, name)
+    item_name = f"pino-vpn-client-{name}-{host}"
+    client = vault.find(item_name, 2)
+    link = vault.find(f"{item_name}-amnezia", 2)
+    if not client:
+        if link:
+            raise ValueError("Client config missing; cannot identify its peer safely. Restore it before removal.")
+        print("Client records are already absent; no server peer was changed.")
+        return
+    server = vault.find(f"pino-vpn-server-{host}", 2)
+    if not server:
+        raise ValueError("Server note missing; client records preserved")
+    interface, _ = sections(client["notes"])
+    public = public_key(interface["PrivateKey"])
+    _, peers = sections(server["notes"])
+    if sum(peer.get("PublicKey") == public for peer in peers) > 1:
+        raise ValueError("Duplicate server peers; resolve them before removal")
+    lines = server["notes"].splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines)
+              if line.split("#", 1)[0].strip() == "[Peer]"]
+    updated = copy.deepcopy(server)
+    for start, end in zip(starts, starts[1:] + [len(lines)]):
+        _, block = sections("[Interface]\n" + "".join(lines[start:end]))
+        if block[0].get("PublicKey") == public:
+            updated["notes"] = "".join(lines[:start] + lines[end:])
+            break
+    if updated != server:
+        vault.edit(server, updated)
+    # Keep the canonical client until deployment and companion deletion succeed,
+    # so every partial failure can be retried with the same device identity.
+    deploy_server(vault, host)
+    if link:
+        vault.delete(link)
+    vault.delete(client)
+    print("Server peer revoked; client config and AmneziaVPN link moved to Bitwarden trash.")
+    print("Previously exported local files are not removed.")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", choices=["mosk"])
     parser.add_argument("name")
-    parser.add_argument("output", type=Path, help="New export directory outside Git")
+    parser.add_argument("output", type=Path, nargs="?", help="New export directory outside Git")
+    parser.add_argument("--remove", action="store_true", help="Revoke the peer and trash both Bitwarden client records")
+    parser.add_argument("--yes", action="store_true", help="Confirm removal without prompting")
     parser.add_argument("--force", action="store_true", help="Replace an existing Bitwarden client profile, preserving its device key; export directory must still be new")
     args = parser.parse_args()
     os.umask(0o077)
     try:
+        validate_client(args.host, args.name)
+        if args.remove:
+            if args.output or args.force:
+                raise ValueError("Removal does not accept an export directory or --force")
+            if not args.yes:
+                if not sys.stdin.isatty():
+                    raise ValueError("Removal requires an interactive confirmation or --yes")
+                if input(f"Revoke {args.name} on {args.host} and trash its Bitwarden records? Type yes: ") != "yes":
+                    print("Removal cancelled")
+                    return 0
+            remove_client(secrets.Bitwarden(), args.host, args.name)
+            return 0
+        if not args.output or args.yes:
+            raise ValueError("Creation requires an export directory; --yes is only for removal")
         output = args.output.expanduser().resolve()
         if output.exists():
             raise ValueError("Choose a new export directory; existing files are never overwritten")
@@ -188,14 +307,10 @@ def main():
         config = prepare_client(vault, args.host, args.name, force=args.force)
         output.mkdir(mode=0o700, parents=True)
         secrets.write_private(output / f"{args.host}-{args.name}.conf", config)
+        secrets.write_private(output / f"{args.host}-{args.name}.vpn", amnezia_link(config, f"{args.host}-{args.name}") + "\n")
         print(f"Client saved in Bitwarden and exported to {output}")
-        result = subprocess.run([
-            "pino", "provision", "send", f"pino-vpn-server-{args.host}", args.host,
-            "/etc/pino/vpn/awg0.conf", "amneziawg-server.service", "pino-vpn-mode.service",
-        ], env=vault.env)
-        if result.returncode:
-            raise ValueError("Client saved, but deployment failed. Retry: pino os provision host mosk")
-        print("Server peer deployed. Import the .conf into AmneziaWG. All IPv4 traffic uses Mosk.")
+        deploy_server(vault, args.host)
+        print("Server peer deployed. Import .conf into AmneziaWG or paste the .vpn link into AmneziaVPN. All IPv4 traffic uses Mosk.")
         print("Server mode private blocks IPv4 Internet; full enables it. IPv6 is not routed by this profile.")
         return 0
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
