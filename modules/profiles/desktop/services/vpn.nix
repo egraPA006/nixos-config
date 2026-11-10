@@ -2,6 +2,7 @@
   pkgs,
   config,
   lib,
+  pinoTunnel,
   ...
 }:
 
@@ -54,6 +55,7 @@ EOF
   '';
 in
 {
+  imports = [ ./tunnel.nix ];
   pino.provision.secrets = [
     { item = "pino-vpn-client-${config.networking.hostName}-mosk"; target = "/etc/amneziawg/mosk.conf"; }
     { item = "pino-vpn-client-${config.networking.hostName}-halos"; target = "/etc/amneziawg/halos.conf"; }
@@ -180,6 +182,7 @@ in
       VPN_SHARE_WIFI=${lib.escapeShellArg (if share.wifiInterface == null then "" else share.wifiInterface)}
       VPN_SHARE_CONNECTION=${lib.escapeShellArg share.connection}
       VPN_GUARD=${vpnGuard}
+      PINO_TUNNEL=${pinoTunnel}
       ${builtins.readFile ../../../pino/vpn.sh}
     '';
   };

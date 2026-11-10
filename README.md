@@ -770,6 +770,80 @@ mosk`. Remove the local export after importing and keep the Bitwarden note.
 Both `add-client` and `remove-client` support `mosk` and `halos`; they do not
 create Xray credentials. Halos client profiles use `halos.egrapa.com:585`.
 
+Xray has matching client management commands on desktops with `vpn-client`:
+
+```bash
+pino xray add-client halos ari
+pino xray add-client halos pa
+pino xray add-client halos re-1 ~/halos-xray-re-1
+pino xray remove-client halos ari
+```
+
+Each client gets its own UUID. `add-client` stores the client JSON in
+`pino-xray-client-<name>-<host>` and its VLESS/XHTTP/TLS URI in the separate Secure
+Note `pino-xray-client-<name>-<host>-link`, then deploys `pino-xray-<host>`.
+The optional new directory exports `.json` and `.uri` files outside Git with
+private permissions. Without a directory, no local export is written. Retrying
+without an export directory preserves the UUID and redeploys saved records,
+including after a Bitwarden/network failure. Removal deploys revocation before
+trashing client records and can be retried. The last server user cannot be removed.
+Server deployment briefly restarts Xray; existing sessions reconnect.
+
+After rebuilding the desktop, install its named Xray configuration and connect:
+
+```bash
+pino os provision install pino-xray-client-re-1-halos /etc/pino/xray-client/halos.json
+pino xray connect halos
+pino xray status
+pino xray disconnect
+```
+
+`pino os provision install` also declares Xray notes for the current hostname
+on both Mosk and Halos. `pino xray list` shows locally provisioned connections.
+Only one Pino system tunnel is selected at a time: `pino vpn connect halos`
+selects AWG and `pino xray connect halos` selects Xray. The selected connection
+autostarts after reboot; disconnect disables autostart. Existing legacy AWG
+autostart is migrated when the connection is next selected with `pino vpn connect`.
+
+Both connections use the same application split policy, with all local TCP/UDP
+traffic through VPN by default:
+
+```bash
+pino vpn split add direct firefox
+pino vpn split add direct Telegram
+pino vpn split list
+pino vpn split remove firefox
+# Alternatively, send only selected applications through the tunnel:
+pino vpn split default direct
+pino vpn split add vpn firefox
+# Restore all-applications-through-VPN as the default:
+pino vpn split default vpn
+```
+
+`pino xray split` is the same policy. Rules match the actual executable basename
+or an absolute executable path, not destination IPs. Nix `.name-wrapped` binaries
+also match `name`; rules are case-sensitive. For applications with separate
+network helper processes, add those executables too. A path rule uses the actual
+executable path (`readlink /proc/<pid>/exe`), not a symlink or desktop launcher.
+Changes restart the tunnel; restart existing application connections as well.
+
+The shared TUN routes application traffic through AWG or a loopback-only Xray
+SOCKS listener. The system resolver and configured DNS servers are preserved;
+port 53 uses the direct network path without interception or forced DoH. AWG
+continues applying the DNS field from its profile through awg-quick, as before.
+Bootstrap resolution of the server name happens before connection. AWG profiles are IPv4-only, so IPv6 for their
+VPN-routed applications is rejected instead of leaking directly. Direct apps
+may use native IPv6; Xray carries IPv6 if the server has IPv6 connectivity.
+Xray is a TCP/UDP proxy, not an arbitrary-IP tunnel. There is no persistent kill
+switch after the tunnel stops or fails. Reconnect after changing the physical
+network interface. Ordinary hotspot traffic is excluded from this host's TUN;
+explicit `pino vpn share start` remains AWG-only.
+
+`tests/check_tunnel_runtime.py` runs under `unshare -Urn` with the built sing-box,
+Xray, curl and awg binaries. It uses an actual AmneziaWG kernel tunnel with
+synthetic credentials and an Xray SOCKS listener in an isolated network to
+check process splitting to the same destination, DNS, IPv6 and route cleanup.
+
 To revoke a device and remove both client records:
 
 ```bash
@@ -785,7 +859,7 @@ is kept until the last step so retries retain the peer identity. Local exports
 and imported device profiles are not deleted, but the revoked peer cannot
 connect. Restoring a Bitwarden trash item alone does not restore server access.
 
-Use client `AllowedIPs = 10.77.0.0/24` (or your actual private subnet) to retain
+For manually imported profiles, use client `AllowedIPs = 10.77.0.0/24` (or your actual private subnet) to retain
 ordinary Internet access through the client's local connection. `egress` enables
 Internet only; `full` enables both. These are interface-wide IPv4 policies, not
 per-peer roles. IPv6 VPN routing is not configured. Mode changes replace nftables

@@ -54,6 +54,7 @@ guard_restore() {
 }
 
 active_connection() {
+  if sudo "$PINO_TUNNEL" active-awg 2>/dev/null; then return; fi
   local unit name
   mapfile -t units < <(systemctl list-units --type=service --state=active --plain --no-legend 'amneziawg@*.service' | awk '{print $1}')
   [ "${#units[@]}" -eq 1 ] || { echo "VPN sharing requires exactly one active connection." >&2; return 1; }
@@ -101,6 +102,10 @@ share_start() {
   printf '%s\n' "$previous" | sudo tee "$share_state/ip_forward" >/dev/null
   sudo nft -f - <<EOF
 table inet $share_table {
+  chain prerouting {
+    type filter hook prerouting priority mangle; policy accept;
+    iifname "$wifi" meta mark set 2025
+  }
   chain forward {
     type filter hook forward priority -20; policy accept;
     iifname "$wifi" oifname "$vpn" accept
@@ -124,24 +129,14 @@ EOF
 
 case "${1:-}" in
   list)
-    selected="$(sudo cat "$marker" 2>/dev/null || true)"
-    printf '%-18s %-10s %s\n' CONNECTION ACTIVE AUTOSTART
-    while IFS= read -r name; do
-      active=no
-      autostart=no
-      systemctl is-active --quiet "amneziawg@$name.service" && active=yes
-      [ "$selected" = "$name" ] && autostart=yes
-      printf '%-18s %-10s %s\n' "$name" "$active" "$autostart"
-    done < <(connections)
+    exec sudo "$PINO_TUNNEL" list awg
     ;;
   connect)
     name="$(select_name "${2:-}")"
     share_stop
     stop_active
-    sudo install -d -m 0700 /var/lib/amneziawg
-    printf '%s\n' "$name" | sudo tee "$marker" >/dev/null
-    sudo chmod 0600 "$marker"
-    sudo systemctl start "amneziawg@$name.service"
+    sudo rm -f "$marker"
+    sudo "$PINO_TUNNEL" connect awg "$name"
     guard_apply "$name"
     echo "VPN connection active: $name"
     ;;
@@ -149,10 +144,12 @@ case "${1:-}" in
     name="${2:-all}"
     share_stop
     if [ "$name" = all ]; then
+      sudo "$PINO_TUNNEL" disconnect
       sudo rm -f "$marker"
       stop_active
     else
       valid_name "$name" || { echo "Invalid VPN connection name: $name" >&2; exit 1; }
+      sudo "$PINO_TUNNEL" disconnect awg "$name"
       selected="$(sudo cat "$marker" 2>/dev/null || true)"
       [ "$selected" != "$name" ] || sudo rm -f "$marker"
       sudo systemctl stop "amneziawg@$name.service"
@@ -160,15 +157,20 @@ case "${1:-}" in
     guard_restore
     ;;
   status)
+    sudo "$PINO_TUNNEL" status
     name="${2:-}"
     if [ -n "$name" ]; then
       valid_name "$name" || { echo "Invalid VPN connection name: $name" >&2; exit 1; }
-      systemctl status "amneziawg@$name.service" --no-pager
+      systemctl status pino-tunnel.service --no-pager
     else
       systemctl list-units --all --plain 'amneziawg@*.service'
       echo
       sudo awg show
     fi
+    ;;
+  split)
+    shift
+    exec sudo "$PINO_TUNNEL" split "$@"
     ;;
   share)
     case "${2:-}" in

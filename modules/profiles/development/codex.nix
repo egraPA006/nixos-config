@@ -1,8 +1,18 @@
-{ config, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   home-manager.users.${config.pino.user.name}.programs.codex = {
     enable = true;
+
+    # New cargo setup hooks require system AWS-LC, but codex only supplies
+    # OpenSSL. Build the crate's bundled, matching AWS-LC after that hook.
+    package = if lib.versionAtLeast pkgs.codex.version "0.167.0" then
+      pkgs.codex.overrideAttrs (old: {
+        preBuild = (old.preBuild or "") + ''
+          export AWS_LC_SYS_USE_SYSTEM=0
+        '';
+      })
+    else pkgs.codex;
 
     settings = {
       model_reasoning_effort = "medium";

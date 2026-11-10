@@ -20,9 +20,9 @@ nix() {
 bw() {
   case "$1" in
     sync) return 0 ;;
-    get)
-      [ "$3" != "$MISSING" ] || return 1
-      printf '%s' '{"type":2,"notes":"synthetic fixture"}' ;;
+    list)
+      [ "$4" != "$MISSING" ] || { printf '[]'; return; }
+      printf '[{"name":"%s","type":2,"notes":"synthetic fixture"}]' "$4" ;;
     *) return 99 ;;
   esac
 }

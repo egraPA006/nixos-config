@@ -99,10 +99,11 @@ let
       })
       ((resource [ "vpn-client" ] [
         "/etc/amneziawg" "/var/lib/amneziawg" "/run/pino-vpn-share"
+        "/etc/pino/xray-client" "/var/lib/pino/tunnel" "/run/pino-tunnel"
         "/etc/NetworkManager/system-connections/${cfg.vpn.share.connection}.nmconnection"
         "${c}/AmneziaVPN" "${d}/AmneziaVPN" "${cache}/AmneziaVPN"
       ]) // {
-        services = [ "amneziawg-autostart.service" "pino-vpn-client-guard.service" "amneziawg@*.service" ];
+        services = [ "pino-tunnel.service" "amneziawg-autostart.service" "pino-vpn-client-guard.service" "amneziawg@*.service" ];
         vpnShare = cfg.vpn.share.connection;
       })
       ((resource [ "server-vpn" ] [ config.pino.server.vpn.configFile "/var/lib/pino/vpn" ]) // {

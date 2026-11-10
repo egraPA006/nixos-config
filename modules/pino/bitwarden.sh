@@ -18,9 +18,20 @@ validate_units() {
   done
 }
 
-stream_note() {
+exact_item() {
   local item="$1"
-  bw get item "$item" \
+  # bw get item NAME uses a broad search: companion -link/-amnezia records
+  # make it ambiguous. Match exactly, ignore trash, and reject duplicates.
+  bw list items --search "$item" \
+    | jq -e --arg name "$item" '
+      [.[] | select(.name == $name and (.deletedDate == null))]
+      | if length == 1 then .[0]
+        elif length == 0 then error("No active Bitwarden item with the exact name")
+        else error("Multiple active Bitwarden items with the exact name") end'
+}
+
+stream_note() {
+  exact_item "$1" \
     | jq -er 'select(.type == 2 and (.notes | type == "string")) | .notes'
 }
 
@@ -68,7 +79,7 @@ install_ssh_key() {
     echo "SSH key target must be below ~/.ssh." >&2
     return 1
   }
-  if ! item_json="$(bw get item "$item")" ||
+  if ! item_json="$(exact_item "$item")" ||
      ! private_key="$(jq -er 'select(.type == 5) | .sshKey.privateKey | select(type == "string" and length > 0)' <<< "$item_json")" ||
      ! public_key="$(jq -er 'select(.type == 5) | .sshKey.publicKey | select(type == "string")' <<< "$item_json")"; then
     echo "Could not read '$item' as a Bitwarden SSH Key." >&2
@@ -186,7 +197,7 @@ if [ "$mode" = host ]; then
   # Validate the complete list before sending anything to the server.
   while IFS= read -r declaration; do
     item="$(jq -er '.item' <<< "$declaration")"
-    bw get item "$item" | jq -e 'select(.type == 2 and (.notes | type == "string") and (.notes | length > 0))' >/dev/null || {
+    exact_item "$item" | jq -e 'select(.type == 2 and (.notes | type == "string") and (.notes | length > 0))' >/dev/null || {
       echo "Missing or invalid Bitwarden Secure Note: $item" >&2; exit 1
     }
   done < <(jq -c '.[]' <<< "$manifest")
