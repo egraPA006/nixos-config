@@ -131,11 +131,11 @@ in
     commands = {
       add-client = {
         description = "Create an AWG client in Bitwarden, export it and deploy the server peer";
-        usage = "<mosk> <client-name> <new-export-directory> [--force]";
+        usage = "<mosk|halos> <client-name> <new-export-directory> [--force]";
       };
       remove-client = {
         description = "Revoke a server peer and trash its Bitwarden config and AmneziaVPN link";
-        usage = "<mosk> <client-name> [--yes]";
+        usage = "<mosk|halos> <client-name> [--yes]";
       };
       list.description = "List installed named VPN connections";
       connect = {

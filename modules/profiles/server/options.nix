@@ -8,7 +8,7 @@ in
     domain = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Public base domain served by Mosk";
+      description = "Public base domain served by this host";
     };
     acmeEmail = lib.mkOption {
       type = lib.types.nullOr lib.types.str;

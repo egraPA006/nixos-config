@@ -93,7 +93,39 @@ class ServerSecretsTests(unittest.TestCase):
     def test_halos_has_no_room(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(setup.subprocess, "run", side_effect=self.tool):
             output = setup.prepare("halos", Path(directory) / "notes")
-            self.assertEqual({p.name for p in output.iterdir()}, {"server.pub", "pino-vpn-server-halos.conf"})
+            self.assertEqual({p.name for p in output.iterdir()}, {
+                "server.pub", "pino-vpn-server-halos.conf", "pino-xray-halos.json",
+                "pino-xray-halos-client.txt", "pino-telemt-halos.json", "pino-telemt-halos-client.txt",
+            })
+            self.assertTrue(all(p.stat().st_mode & 0o777 == 0o600 for p in output.iterdir()))
+
+    def test_halos_proxy_links_use_halos_endpoint(self):
+        records = setup.proxy_records(host="halos")
+        self.assertEqual(set(records), {"pino-xray-halos", "pino-telemt-halos"})
+        for name, record in records.items():
+            setup.validate_proxy_note(name, record["notes"])
+        link = urlparse(records["pino-xray-halos"]["fields"][0]["value"])
+        self.assertEqual(link.hostname, "halos.egrapa.com")
+        self.assertEqual(parse_qs(link.query)["sni"], ["halos.egrapa.com"])
+        self.assertEqual(link.fragment, "halos-owner")
+        telegram = urlparse(records["pino-telemt-halos"]["fields"][0]["value"])
+        self.assertEqual(parse_qs(telegram.query)["server"], ["halos.egrapa.com"])
+
+    def test_halos_bitwarden_creation_preserves_existing_records(self):
+        vault = FakeVault()
+        with patch.object(setup.subprocess, "run", side_effect=self.tool), redirect_stdout(io.StringIO()):
+            setup.prepare_bitwarden("halos", vault)
+            original = json.dumps(vault.items, sort_keys=True)
+            setup.prepare_bitwarden("halos", vault)
+        self.assertEqual(set(vault.items), {"pino-vpn-server-halos", "pino-xray-halos", "pino-telemt-halos"})
+        self.assertEqual(original, json.dumps(vault.items, sort_keys=True))
+
+    def test_invalid_halos_proxy_prevents_any_vault_write(self):
+        vault = FakeVault()
+        vault.create("pino-xray-halos", 2, notes='{"users":{"owner":"invalid"}}')
+        with self.assertRaises(ValueError):
+            setup.prepare_bitwarden("halos", vault)
+        self.assertEqual(vault.created, ["pino-xray-halos"])
 
     def test_git_checkout_rejected(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(setup.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "true\n", "")):

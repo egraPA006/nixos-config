@@ -38,6 +38,24 @@ class Vault:
 
 
 class ClientTests(unittest.TestCase):
+    def test_halos_client_and_removal_leave_mosk_untouched(self):
+        vault = Vault()
+        mosk = copy.deepcopy(vault.items["pino-vpn-server-mosk"])
+        vault.items["pino-vpn-server-halos"] = copy.deepcopy(mosk)
+        vault.items["pino-vpn-server-halos"]["notes"] = mosk["notes"].replace("server-secret", "halos-secret")
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
+             patch.object(client.subprocess, "run", return_value=SimpleNamespace(stdout="client-secret\n")), \
+             redirect_stdout(io.StringIO()):
+            config = client.prepare_client(vault, "halos", "phone")
+            self.assertIn("Endpoint = halos.egrapa.com:585", config)
+            self.assertIn("PublicKey = public-halos-secret", config)
+            self.assertIn("pino-vpn-client-phone-halos-amnezia", vault.items)
+            with patch.object(client, "deploy_server") as deploy:
+                client.remove_client(vault, "halos", "phone")
+                deploy.assert_called_once_with(vault, "halos")
+        self.assertEqual(vault.items["pino-vpn-server-mosk"], mosk)
+        self.assertNotIn("pino-vpn-client-phone-halos", vault.items)
+
     def remove(self, vault, name):
         with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
              redirect_stdout(io.StringIO()):

@@ -145,6 +145,13 @@
       IdentityAgent none
       IdentityFile ${config.pino.user.home}/.ssh/mosk
       IdentitiesOnly yes
+
+    Host halos
+      HostName halos.egrapa.com
+      User vincent
+      IdentityAgent none
+      IdentityFile ${config.pino.user.home}/.ssh/halos
+      IdentitiesOnly yes
   '';
 
   home-manager.users.${config.pino.user.name} = {

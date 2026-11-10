@@ -1,13 +1,16 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.pino.server;
   domain = cfg.web.domain;
   safeDomain = if domain == null then "invalid.local" else domain;
   safeEmail = if cfg.acmeEmail == null then "unset@example.invalid" else cfg.acmeEmail;
-  site = pkgs.runCommand "mosk-static-site" { } ''
+  host = config.networking.hostName;
+  siteTitle = lib.toUpper (builtins.substring 0 1 host) + builtins.substring 1 (builtins.stringLength host) host;
+  site = pkgs.runCommand "${config.networking.hostName}-static-site" { } ''
     mkdir -p "$out"
     cp ${./site/index.html} "$out/index.html"
+    substituteInPlace "$out/index.html" --replace-fail '@HOSTNAME@' ${lib.escapeShellArg siteTitle}
   '';
 in
 {

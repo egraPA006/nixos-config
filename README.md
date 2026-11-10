@@ -5,7 +5,7 @@ One small flake for four machines:
 - `re-1`: desktop, ext4 root plus `/data/fast` and `/data/slow`;
 - `la1n`: laptop, LUKS2-encrypted ext4 root;
 - `mosk`: private VPN/optional exit, website, Galene, Xray/XHTTP and telemt/FakeTLS;
-- `halos`: VPN only.
+- `halos`: AmneziaWG, Xray/XHTTP and telemt at `halos.egrapa.com`, without Galene.
 
 There is no Disko, Btrfs, mail server, or Git mirror. GitHub stores only the
 public configuration. Bitwarden stores passwords, SSH keys, and runtime
@@ -107,7 +107,7 @@ Alternatively, prepare local files for manual import:
 
 ```bash
 pino os provision prepare mosk
-# VPN only:
+# AmneziaWG, Xray and telemt, without Galene:
 pino os provision prepare halos
 ```
 
@@ -122,7 +122,7 @@ contents of `pino-vpn-server-<host>.conf` and, for Mosk,
 `pino-galene-mosk-main.json` into the Notes fields of Secure Notes with the
 matching names (without the file extension). Nothing is uploaded automatically,
 and existing SSH keys are not changed. Proxy preparation also writes matching
-`pino-xray-mosk.json` / `pino-telemt-mosk.json` note payloads and private
+`pino-xray-<host>.json` / `pino-telemt-<host>.json` note payloads and private
 `-client.txt` files with connection URIs; save those as hidden fields in the
 corresponding Bitwarden notes, without printing them in terminal logs.
 
@@ -534,7 +534,7 @@ The current host assignments are:
 - `la1n`: workstation, GNOME, development, VPN client, light gaming, and light music;
 - `re-1`: workstation, GNOME, development, VPN client, full gaming, Assetto Corsa, torrent, full music, Guitar Pro, and LaTeX;
 - `mosk`: VPN server, static website, Galene, Xray/XHTTP and telemt/FakeTLS;
-- `halos`: VPN server only.
+- `halos`: AmneziaWG, Xray/XHTTP, telemt and a static HTTPS landing page; no Galene.
 
 `music-full` is enabled on `re-1`. Its installers live under
 `/data/fast/music-full/installs`; `pino desktop music-full plugins apply` installs
@@ -641,6 +641,29 @@ Weekly GC removes generations older than 14 days, and journals are capped at
 | Xray/XHTTP | `https://egrapa.com/pino-xhttp`, TCP 443 | `pino-xray-mosk` → `/etc/pino/xray/users.json` |
 | telemt/FakeTLS | `vpn.egrapa.com:2443`, TCP | `pino-telemt-mosk` → `/etc/pino/telemt/users.json` |
 
+Halos uses `halos.egrapa.com` for SSH, HTTPS/Xray, AmneziaWG and telemt, with
+the same ports as Mosk. Its profiles exclude Galene and its media/TURN ports.
+Create a DNS-only A record pointing this name at the Halos public IPv4 address;
+allow TCP 22, 80, 443, 2443 and UDP 585 in the provider firewall.
+Only publish an AAAA record if the server has working IPv6.
+Create the Bitwarden SSH Key `pino-ssh-server-halos` and install its public half
+through the provider or bootstrap. Both desktops already provision that key to
+`~/.ssh/halos`, and the `halos` SSH alias uses `vincent@halos.egrapa.com`.
+
+```bash
+# Create missing VPN/Xray/telemt credentials without changing existing records:
+pino os provision prepare halos --bitwarden
+# After installing NixOS and configuring SSH access:
+pino os provision host halos
+pino host halos server vpn mode set full
+pino vpn add-client halos phone ~/halos-phone
+```
+
+The Halos secret records are `pino-vpn-server-halos`, `pino-xray-halos` and
+`pino-telemt-halos`; proxy connection links are hidden fields in their notes.
+The VPN starts in `private` mode until explicitly changed. Both VPNs currently
+use `10.77.0.0/24`; select one full-route desktop connection at a time.
+
 Galene additionally needs TCP/UDP 1194 for TURN and UDP 49152–65535 for media.
 Allow these ports both in NixOS and in any provider firewall. Point `egrapa.com`,
 `meet.egrapa.com` and `vpn.egrapa.com` at the VPS public IPv4 address. Remove stale
@@ -736,7 +759,8 @@ file afterwards. `--force` does not overwrite local files or rotate device keys.
 If deployment fails after saving, retry the command with a new directory
 (and `--force` if the server peer address still needs updating), then run `pino os provision host
 mosk`. Remove the local export after importing and keep the Bitwarden note.
-This command currently supports Mosk only; it does not create Xray credentials.
+Both `add-client` and `remove-client` support `mosk` and `halos`; they do not
+create Xray credentials. Halos client profiles use `halos.egrapa.com:585`.
 
 To revoke a device and remove both client records:
 

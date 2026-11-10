@@ -108,8 +108,8 @@ def amnezia_link(config, description):
 
 
 def validate_client(host, name):
-    if host != "mosk" or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name):
-        raise ValueError("Use host mosk and a client name of 1–32 letters, digits, hyphens or underscores")
+    if host not in ("mosk", "halos") or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name):
+        raise ValueError("Use host mosk or halos and a client name of 1–32 letters, digits, hyphens or underscores")
 
 
 def prepare_client(vault, host, name, force=False):
@@ -174,8 +174,9 @@ def prepare_client(vault, host, name, force=False):
         port = interface.get("ListenPort", "585")
         if not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
             raise ValueError("Invalid server ListenPort")
+        endpoint = "vpn.egrapa.com" if host == "mosk" else "halos.egrapa.com"
         config += (f"\n[Peer]\nPublicKey = {server_public}\n"
-                   f"Endpoint = vpn.egrapa.com:{port}\n"
+                   f"Endpoint = {endpoint}:{port}\n"
                    "AllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n")
         matching = [peer for peer in peers if peer.get("PublicKey") == public]
         if len(matching) > 1:
@@ -270,7 +271,7 @@ def remove_client(vault, host, name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("host", choices=["mosk"])
+    parser.add_argument("host", choices=["mosk", "halos"])
     parser.add_argument("name")
     parser.add_argument("output", type=Path, nargs="?", help="New export directory outside Git")
     parser.add_argument("--remove", action="store_true", help="Revoke the peer and trash both Bitwarden client records")
@@ -310,7 +311,7 @@ def main():
         secrets.write_private(output / f"{args.host}-{args.name}.vpn", amnezia_link(config, f"{args.host}-{args.name}") + "\n")
         print(f"Client saved in Bitwarden and exported to {output}")
         deploy_server(vault, args.host)
-        print("Server peer deployed. Import .conf into AmneziaWG or paste the .vpn link into AmneziaVPN. All IPv4 traffic uses Mosk.")
+        print(f"Server peer deployed. Import .conf into AmneziaWG or paste the .vpn link into AmneziaVPN. All IPv4 traffic uses {args.host}.")
         print("Server mode private blocks IPv4 Internet; full enables it. IPv6 is not routed by this profile.")
         return 0
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:

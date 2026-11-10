@@ -1,0 +1,12 @@
+{
+  "xray": {
+    "domain": "halos.egrapa.com",
+    "path": "/pino-xhttp",
+    "port": 10080
+  },
+  "telemt": {
+    "publicHost": "halos.egrapa.com",
+    "port": 2443,
+    "tlsDomain": "www.microsoft.com"
+  }
+}

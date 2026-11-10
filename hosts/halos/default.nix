@@ -16,4 +16,8 @@
   pino.configDir = "${config.pino.user.home}/nixos-config";
 
   system.stateVersion = "25.05";
+  pino.server = {
+    domain = "halos.egrapa.com";
+    acmeEmail = "admin@egrapa.com";
+  } // builtins.fromJSON (builtins.readFile ../../resources/halos-proxies.json);
 }

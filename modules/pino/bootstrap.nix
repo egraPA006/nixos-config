@@ -10,6 +10,7 @@ let
   '';
   prepareSecrets = pkgs.writeShellScript "pino-server-secrets" ''
     export PINO_PROXY_SETTINGS=${../../resources/mosk-proxies.json}
+    export PINO_HALOS_PROXY_SETTINGS=${../../resources/halos-proxies.json}
     export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ]}:"$PATH"
     exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../scripts/server-secrets.py} "$@"
   '';

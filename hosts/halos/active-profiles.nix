@@ -1,1 +1,6 @@
-[ "server-vpn" ]
+[
+  "server-vpn"
+  "server-web"
+  "server-xray"
+  "server-telemt"
+]

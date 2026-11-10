@@ -31,6 +31,13 @@
       IdentityAgent none
       IdentityFile ${config.pino.user.home}/.ssh/mosk
       IdentitiesOnly yes
+
+    Host halos
+      HostName halos.egrapa.com
+      User vincent
+      IdentityAgent none
+      IdentityFile ${config.pino.user.home}/.ssh/halos
+      IdentitiesOnly yes
   '';
 
   system.stateVersion = "25.05";
