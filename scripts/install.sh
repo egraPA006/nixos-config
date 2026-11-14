@@ -59,9 +59,15 @@ else
 fi
 
 flake="path:$repo_dir#nixosConfigurations.$host.config"
-pino_user="$(nix --extra-experimental-features 'nix-command flakes' eval --raw "$flake.pino.user.name")"
-pino_home="$(nix --extra-experimental-features 'nix-command flakes' eval --raw "$flake.pino.user.home")"
-config_dir="$(nix --extra-experimental-features 'nix-command flakes' eval --raw "$flake.pino.configDir")"
+nix_store_args=()
+if [[ "$host" = mosk || "$host" = halos ]] && findmnt --mountpoint /mnt >/dev/null; then
+  # server-stage has already mounted the target: keep flake inputs on disk,
+  # rather than exhausting the rescue system's RAM-backed Nix store.
+  nix_store_args=(--store /mnt)
+fi
+pino_user="$(nix --extra-experimental-features 'nix-command flakes' eval "${nix_store_args[@]}" --raw "$flake.pino.user.name")"
+pino_home="$(nix --extra-experimental-features 'nix-command flakes' eval "${nix_store_args[@]}" --raw "$flake.pino.user.home")"
+config_dir="$(nix --extra-experimental-features 'nix-command flakes' eval "${nix_store_args[@]}" --raw "$flake.pino.configDir")"
 
 ssh_key=""
 if [ "$operation" = install ]; then

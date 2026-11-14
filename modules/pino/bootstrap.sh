@@ -50,9 +50,11 @@ final_user="$(nix eval --raw "path:$BOOTSTRAP_CONFIG_DIR#nixosConfigurations.$ho
 final_target="$final_user@$address"
 known_hosts="$(mktemp)"
 hardware_tmp=""
+archive_tmp=""
 cleanup() {
   rm -f "$known_hosts"
   [ -z "$hardware_tmp" ] || rm -f "$hardware_tmp"
+  [ -z "$archive_tmp" ] || rm -f "$archive_tmp"
 }
 trap cleanup EXIT INT TERM
 
@@ -191,6 +193,15 @@ done
   exit 1
 }
 
+available_kib="$(ssh_to "$installer_target" "awk '/^MemAvailable:/ {print \$2}' /proc/meminfo")"
+[[ "$available_kib" =~ ^[0-9]+$ ]] || { echo 'Cannot inspect installer memory.' >&2; exit 1; }
+if [ "$available_kib" -lt 524288 ]; then
+  echo "Installer has less than 512 MiB available; stopping before disk changes." >&2
+  echo 'The temporary rescue Nix store may contain downloads from previous attempts.' >&2
+  echo 'Inspect it and, if appropriate, run nix-store --gc in the rescue before retrying.' >&2
+  exit 1
+fi
+
 echo "Refreshing the public hardware configuration before disk changes..."
 hardware_tmp="$(mktemp)"
 if ! ssh_to "$installer_target" \
@@ -209,15 +220,14 @@ if ! cmp -s "$hardware_tmp" "$BOOTSTRAP_CONFIG_DIR/hosts/$host/hardware.nix"; th
   echo "After installation, review and copy its hardware.nix into your checkout."
 fi
 
-echo "Cloning the pushed configuration in the installer..."
+echo "Transferring the pushed configuration to the installer..."
 install_revision="$(git -C "$BOOTSTRAP_CONFIG_DIR" rev-parse HEAD)"
-nixpkgs_revision="$(jq -er '.nodes.nixpkgs.locked.rev' "$BOOTSTRAP_CONFIG_DIR/flake.lock")"
-[[ "$nixpkgs_revision" =~ ^[0-9a-f]{40}$ ]] || {
-  echo "Invalid pinned nixpkgs revision." >&2
-  exit 1
-}
-ssh_to "$installer_target" \
-  "test ! -e /root/nixos-config && nix --extra-experimental-features 'nix-command flakes' shell 'github:NixOS/nixpkgs/$nixpkgs_revision#git' --command sh -c 'git clone --no-checkout $BOOTSTRAP_REPOSITORY /root/nixos-config && git -C /root/nixos-config checkout -B main $install_revision'"
+[[ "$install_revision" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid Git revision.' >&2; exit 1; }
+archive_tmp="$(mktemp)"
+git -C "$BOOTSTRAP_CONFIG_DIR" archive --format=tar.gz --output="$archive_tmp" "$install_revision"
+ssh_to "$installer_target" 'test ! -e /root/nixos-config && mkdir -m 0700 /root/nixos-config'
+scp_to "$archive_tmp" "$installer_target:/tmp/pino-config.tar.gz"
+ssh_to "$installer_target" 'tar -xzf /tmp/pino-config.tar.gz -C /root/nixos-config && rm -f /tmp/pino-config.tar.gz'
 scp_to "$hardware_tmp" "$installer_target:/root/nixos-config/hosts/$host/hardware.nix"
 printf '%s\n' "$public_key" | ssh_to "$installer_target" \
   'umask 077; cat > /root/pino-bootstrap.pub'
@@ -257,5 +267,11 @@ while IFS= read -r declaration; do
   "${PINO_PROVISION_SEND:?internal sender not configured}" send "$item" "$final_target" "$target" "${units[@]}"
 done < <(jq -c '.[]' <<< "$provision_manifest")
 
+echo "Restoring Git metadata on the installed server..."
+if ! ssh_to "$final_target" \
+  "cd ~/nixos-config && test ! -e .git && git init --initial-branch=main && git remote add origin '$BOOTSTRAP_REPOSITORY' && git fetch origin main && git reset --mixed '$install_revision' && git branch --set-upstream-to=origin/main main"; then
+  echo 'Services were provisioned, but Git metadata setup failed; repair the server checkout before using git pull.' >&2
+  exit 1
+fi
 ssh_to "$final_target" '/run/current-system/sw/bin/pino server status'
 echo "$host installation and provisioning complete at $address."

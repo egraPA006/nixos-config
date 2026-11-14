@@ -15,6 +15,23 @@ class BootstrapKexecTests(unittest.TestCase):
         self.assertNotIn('git -C "$BOOTSTRAP_CONFIG_DIR" push', source)
         self.assertIn('scp_to "$hardware_tmp" "$installer_target:/root/nixos-config/hosts/$host/hardware.nix"', source)
 
+    def test_installer_receives_committed_archive_without_downloading_git(self):
+        source = (ROOT / "modules/pino/bootstrap.sh").read_text()
+        self.assertIn('git -C "$BOOTSTRAP_CONFIG_DIR" archive --format=tar.gz', source)
+        self.assertIn('tar -xzf /tmp/pino-config.tar.gz -C /root/nixos-config', source)
+        self.assertNotIn("#git' --command", source)
+        self.assertIn("git reset --mixed '$install_revision'", source)
+
+    def test_low_installer_memory_aborts_before_disk_changes(self):
+        source = (ROOT / "modules/pino/bootstrap.sh").read_text()
+        block = source.split('available_kib="$(ssh_to', 1)[1].split('\necho "Refreshing', 1)[0]
+        block = 'available_kib="$(ssh_to' + block
+        prefix = 'installer_target=fixture\nssh_to() { printf "%s\\n" "$AVAILABLE"; }\n'
+        for available, expected in (("151688", 1), ("800000", 0), ("bad", 1)):
+            result = subprocess.run(["bash", "-c", prefix + block],
+                                    env=dict(os.environ, AVAILABLE=available), capture_output=True, text=True)
+            self.assertEqual(result.returncode, expected)
+
     def test_note_preflight_rejects_ambiguous_records(self):
         source = (ROOT / "modules/pino/bootstrap.sh").read_text()
         function = source.split("check_note() {", 1)[1].split("\n}\n", 1)[0]
