@@ -9,6 +9,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class BootstrapKexecTests(unittest.TestCase):
+    def test_low_memory_installer_enables_temporary_swap(self):
+        source = (ROOT / "scripts/server-stage.sh").read_text()
+        block = source.split("swap_file=/mnt/.pino-install.swap", 1)[1].split('if [ -n "$ssh_key_file" ]', 1)[0]
+        script = '''
+set -eu
+awk() { case "$1" in *MemTotal*) echo 2000000;; *SwapTotal*) echo 0;; *) echo 8000000;; esac; }
+df() { echo fixture; }
+fallocate() { echo allocated; }
+chmod() { :; }
+mkswap() { :; }
+swapon() { echo enabled; }
+swap_file="$SWAP_TEST_ROOT/.pino-install.swap"
+''' + block + '\n[ "$created_swap" = true ]\n'
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(["bash", "-c", script], env=dict(os.environ, SWAP_TEST_ROOT=directory), capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("allocated", result.stdout)
+        self.assertIn("enabled", result.stdout)
+
     def test_hardware_is_transferred_without_git_mutations(self):
         source = (ROOT / "modules/pino/bootstrap.sh").read_text()
         self.assertNotIn('git -C "$BOOTSTRAP_CONFIG_DIR" commit', source)
