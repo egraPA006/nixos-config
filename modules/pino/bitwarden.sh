@@ -205,7 +205,7 @@ if [ "$mode" = host ]; then
     item="$(jq -r '.item' <<< "$declaration")"
     target="$(jq -r '.target' <<< "$declaration")"
     mapfile -t units < <(jq -r '.units[]' <<< "$declaration")
-    pino os provision send "$item" "$remote_host" "$target" "${units[@]}"
+    "${PINO_PROVISION_SEND:?internal sender not configured}" send "$item" "$remote_host" "$target" "${units[@]}"
   done < <(jq -c '.[]' <<< "$manifest")
   echo "Runtime secrets provisioned on $remote_host."
   exit 0

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
 
@@ -26,13 +27,16 @@ bw() {
     *) return 99 ;;
   esac
 }
-pino() { printf 'SEND'; printf ' <%s>' "$@"; printf '\\n'; }
 '''
-        return subprocess.run(
-            ["bash", "-c", mocks + source, "fixture", "host", *args],
-            env=dict(os.environ, BW_SESSION="synthetic", MISSING=missing),
-            capture_output=True, text=True,
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            sender = Path(directory) / "send"
+            sender.write_text("#!/bin/sh\nprintf 'SEND'\nprintf ' <%s>' \"$@\"\nprintf '\\n'\n")
+            sender.chmod(0o755)
+            return subprocess.run(
+                ["bash", "-c", mocks + source, "fixture", "host", *args],
+                env=dict(os.environ, BW_SESSION="synthetic", MISSING=missing, PINO_PROVISION_SEND=str(sender)),
+                capture_output=True, text=True,
+            )
 
     def test_sends_declared_paths_and_all_units_to_alias(self):
         result = self.run_host("mosk")

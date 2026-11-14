@@ -123,6 +123,16 @@ EOF
 }
 
 case "${1:-}" in
+  server)
+    [ "${2:-}" = mode ] || { echo 'Usage: pino vpn server mode <mosk|halos> [private|egress|full]' >&2; exit 1; }
+    host="${3:-}"
+    case "$host" in mosk|halos) ;; *) echo 'Host must be mosk or halos.' >&2; exit 1 ;; esac
+    case "${4:-}" in
+      '') [ "$#" -eq 3 ] || exit 1; exec pino host "$host" server vpn mode status ;;
+      private|egress|full) [ "$#" -eq 4 ] || exit 1; exec pino host "$host" server vpn mode set "$4" ;;
+      *) echo 'Mode must be private, egress, or full.' >&2; exit 1 ;;
+    esac
+    ;;
   list)
     echo 'AWG:'
     selected="$(sudo cat "$marker" 2>/dev/null || true)"
@@ -201,6 +211,10 @@ case "${1:-}" in
     fi
     ;;
   split)
+    if active_connection >/dev/null 2>&1; then
+      echo 'Split modes apply to Xray only; AWG uses its own routes.' >&2
+      exit 1
+    fi
     proxy_marker="${XDG_CONFIG_HOME:-$HOME/.config}/pino/chromium-proxy"
     case "${2:-}" in
       on|chromium)

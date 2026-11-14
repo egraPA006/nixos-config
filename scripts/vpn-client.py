@@ -3,6 +3,7 @@
 import argparse
 import base64
 import copy
+import hashlib
 import importlib.util
 import ipaddress
 import json
@@ -110,6 +111,60 @@ def amnezia_link(config, description):
 def validate_client(host, name):
     if host not in ("mosk", "halos") or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name):
         raise ValueError("Use host mosk or halos and a client name of 1–32 letters, digits, hyphens or underscores")
+
+
+def list_users(vault, kind, host):
+    if kind not in ("awg", "xray") or host not in ("mosk", "halos"):
+        raise ValueError("Use awg or xray and host mosk or halos")
+    item = f"pino-vpn-server-{host}" if kind == "awg" else f"pino-xray-{host}"
+    note = vault.find(item, 2)
+    if not note:
+        raise ValueError("Server Bitwarden note is missing")
+    if kind == "awg":
+        text = note.get("notes") or ""
+        _, peers = sections(text)
+        blocks = re.split(r"(?m)^\s*\[Peer\]\s*$", text)[1:]
+        entries = []
+        for index, (block, peer) in enumerate(zip(blocks, peers), 1):
+            label = next((line.strip()[1:].strip() for line in block.splitlines()
+                          if line.strip().startswith("#") and line.strip()[1:].strip()), f"unnamed-{index}")
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", label):
+                label = f"unnamed-{index}"
+            entries.append((label, peer.get("PublicKey", "")))
+        remote_args = ["server", "vpn", "peers"]
+    else:
+        payload = json.loads(note.get("notes") or "")
+        secrets.validate_proxy_note(item, note.get("notes"))
+        entries = [(name, hashlib.sha256(value.encode()).hexdigest()) for name, value in payload["users"].items()]
+        remote_args = ["server", "xray", "users"]
+    result = subprocess.run(["pino", "host", host, *remote_args], capture_output=True, text=True)
+    if result.returncode:
+        print("SSH verification unavailable; showing Bitwarden entries only.", file=sys.stderr)
+        for name, _ in entries:
+            print(f"{name}\tunverified")
+        return
+    if kind == "xray":
+        rows = [line.split("\t", 1) for line in result.stdout.splitlines()]
+        if any(len(row) != 2 or not re.fullmatch(r"[0-9a-f]{64}", row[1]) for row in rows):
+            print("SSH verification returned an invalid response; showing Bitwarden entries only.", file=sys.stderr)
+            for name, _ in entries:
+                print(f"{name}\tunverified")
+            return
+        remote_users = dict(rows)
+        for name, digest in entries:
+            status = "vault only" if name not in remote_users else ("present" if remote_users[name] == digest else "different credential")
+            print(f"{name}\t{status}")
+        for index, name in enumerate(sorted(set(remote_users) - {name for name, _ in entries}), 1):
+            label = name if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name) else f"unknown-peer-{index}"
+            print(f"{label}\tserver only")
+        return
+    remote = set(re.findall(r"(?m)^peer:\s*(\S+)\s*$", result.stdout))
+    for name, key in entries:
+        print(f"{name}\t{'present' if key in remote else 'vault only'}")
+    missing = remote - {key for _, key in entries}
+    for index, name in enumerate(sorted(missing), 1):
+        label = name if kind == "xray" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", name) else f"unknown-peer-{index}"
+        print(f"{label}\tserver only")
 
 
 def prepare_client(vault, host, name, force=False):
@@ -223,7 +278,7 @@ def prepare_client(vault, host, name, force=False):
 
 def deploy_server(vault, host):
     result = subprocess.run([
-        "pino", "os", "provision", "send", f"pino-vpn-server-{host}", host,
+        os.environ["PINO_PROVISION_SEND"], "send", f"pino-vpn-server-{host}", host,
         "/etc/pino/vpn/awg0.conf", "amneziawg-server.service", "pino-vpn-mode.service",
     ], env=vault.env)
     if result.returncode:
@@ -272,14 +327,22 @@ def remove_client(vault, host, name):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", choices=["mosk", "halos"])
-    parser.add_argument("name")
+    parser.add_argument("name", nargs="?")
     parser.add_argument("output", type=Path, nargs="?", help="New export directory outside Git")
     parser.add_argument("--remove", action="store_true", help="Revoke the peer and trash both Bitwarden client records")
     parser.add_argument("--yes", action="store_true", help="Confirm removal without prompting")
     parser.add_argument("--force", action="store_true", help="Replace an existing Bitwarden client profile, preserving its device key; export directory must still be new")
+    parser.add_argument("--list", choices=["awg", "xray"], dest="list_kind")
     args = parser.parse_args()
     os.umask(0o077)
     try:
+        if args.list_kind:
+            if args.name or args.output or args.remove or args.force or args.yes:
+                raise ValueError("Listing accepts only kind and host")
+            list_users(secrets.Bitwarden(), args.list_kind, args.host)
+            return 0
+        if args.name is None:
+            raise ValueError("Client name is required")
         validate_client(args.host, args.name)
         if args.remove:
             if args.output or args.force:

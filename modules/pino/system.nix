@@ -15,6 +15,7 @@ in
       description = "Install, populate and maintain this machine";
       commands = {
         rebuild.description = "Confirm, rebuild, and switch the flake";
+        rebuild-test.description = "Build and activate until the next reboot";
         update.description = "Update flake inputs without rebuilding";
         generation = {
           description = "List, activate, and clean system generations";

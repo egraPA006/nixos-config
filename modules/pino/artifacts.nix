@@ -19,19 +19,19 @@ in {
       };
     });
   };
-  config.pino.subcommands.backup.commands.artifacts = lib.mkIf (config.pino.artifacts != {}) {
+  config.pino.subcommands.data.commands.backup.commands.artifacts = lib.mkIf (config.pino.artifacts != {}) {
     description = "Compare and back up installer folders to disk/pino/artifacts";
     usage = "[name] <external-disk> [--mode update|mirror] [--dry-run]";
     script = ''exec ${sync} backup "$@"'';
   };
-  config.pino.subcommands.restore.commands.artifacts = lib.mkIf (config.pino.artifacts != {}) {
+  config.pino.subcommands.data.commands.restore.commands.artifacts = lib.mkIf (config.pino.artifacts != {}) {
     description = "Compare and restore available installer folders";
     usage = "[name] <external-disk> [--dry-run]";
     helpText = ''
       Reads pino/artifacts below the disk root. Missing folders are reported;
       available folders are processed. Conflicts require a choice and the final
       plan requires confirmation. Local extras are never deleted.
-      Use pino os populate to also provision secrets and set up applications.
+      Use pino os populate to set up applications and pino os provision for secrets.
     '';
     script = ''exec ${sync} restore --allow-missing "$@"'';
   };

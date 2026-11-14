@@ -132,4 +132,4 @@ if [ "$operation" = install ]; then
 fi
 
 echo "$host $operation complete. The bootloader was installed from the current configuration."
-echo "After boot, log in as $pino_user and run: pino os populate [external-disk-directory]"
+echo "After boot, log in as $pino_user and run: pino os provision; pino os populate [external-disk-directory]"

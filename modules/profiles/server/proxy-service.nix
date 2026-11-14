@@ -64,11 +64,14 @@ in {
     commands = {
       status.description = "Show service state";
       logs.description = "Show systemd lifecycle events (proxy payload logging is disabled)";
+    } // lib.optionalAttrs (name == "xray") {
+      users.description = "List configured user names";
     };
     script = ''
       case "''${1:-}" in
         status) systemctl status ${name} --no-pager ;;
         logs) journalctl -u ${name} -n 100 --no-pager ;;
+        ${lib.optionalString (name == "xray") ''users) sudo ${pkgs.python3}/bin/python3 -c 'import hashlib,json,sys; data=json.load(open(sys.argv[1])); [print(name,hashlib.sha256(value.encode()).hexdigest(),sep="\t") for name,value in sorted(data["users"].items())]' ${credential} ;;''}
         *) echo "Run 'pino server ${name} help' for usage." >&2; exit 1 ;;
       esac
     '';

@@ -14,7 +14,6 @@
       list.description = "List installed ad-hoc packages";
       search = { description = "Search top-level nixpkgs packages"; usage = "<query>"; };
       locate = { description = "Find packages containing a file"; usage = "<pattern>"; };
-      index.description = "Rebuild the local nix-locate database";
       install = { description = "Install a persistent user package"; usage = "<name>"; };
       remove = { description = "Remove an ad-hoc package"; usage = "<name>"; };
     };
@@ -57,11 +56,6 @@
           nix-locate "$@"
           ;;
 
-        index)
-          echo "Rebuilding the nix-locate database …" >&2
-          nix-index
-          ;;
-
         install)
           pkg="''${1:-}"
           [ -z "$pkg" ] && { echo "Usage: pino os package install <name>"; exit 1; }
@@ -82,7 +76,6 @@
           echo "  list              List installed packages"
           echo "  search <query>    Search nixpkgs"
           echo "  locate <pattern>  Find packages containing a file"
-          echo "  index             Rebuild the nix-locate database"
           echo "  install <name>    Install nixpkgs#<name>"
           echo "  remove  <name>    Remove package by name"
           echo ""

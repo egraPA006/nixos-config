@@ -102,10 +102,10 @@ def prepare_client(vault, host, name):
 
 
 def deploy_server(vault, host):
-    result = subprocess.run(["pino", "os", "provision", "send", f"pino-xray-{host}", host,
+    result = subprocess.run([os.environ["PINO_PROVISION_SEND"], "send", f"pino-xray-{host}", host,
                              "/etc/pino/xray/users.json", "xray.service"], env=vault.env)
     if result.returncode:
-        raise ValueError("Deployment failed; saved records retained. Retry the same add-client/remove-client command without an export directory.")
+        raise ValueError("Deployment failed; saved records retained. Retry the same pino vpn users command without an export directory.")
 
 
 def remove_client(vault, host, name):
@@ -142,7 +142,7 @@ def remove_client(vault, host, name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["add-client", "remove-client"])
+    parser.add_argument("operation", choices=["add", "remove"])
     parser.add_argument("host", choices=["mosk", "halos"])
     parser.add_argument("name")
     parser.add_argument("output", nargs="?", type=Path)
@@ -151,7 +151,7 @@ def main():
     os.umask(0o077)
     try:
         validate(args.host, args.name)
-        if args.operation == "remove-client":
+        if args.operation == "remove":
             if args.output:
                 raise ValueError("Removal does not accept an export directory")
             if not args.yes:

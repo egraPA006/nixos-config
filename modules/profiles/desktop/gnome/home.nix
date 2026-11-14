@@ -92,15 +92,6 @@
     };
   };
 
-  xdg.desktopEntries.chromium-browser = {
-    name = "Chromium";
-    genericName = "Web Browser";
-    exec = "/run/current-system/sw/bin/chromium %U";
-    icon = "chromium";
-    categories = [ "Network" "WebBrowser" ];
-    mimeType = [ "text/html" "x-scheme-handler/http" "x-scheme-handler/https" ];
-  };
-
   dconf.settings = {
     "org/gnome/desktop/media-handling" = {
       automount = false;

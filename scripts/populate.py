@@ -18,21 +18,15 @@ def execute(command):
         return 1
 
 
-def populate(config, disk=None, skip_secrets=False, runner=execute):
+def populate(config, disk=None, runner=execute):
     results = []
 
     def record(name, status):
         results.append((name, status))
 
-    if config["provision"]:
-        if skip_secrets:
-            record("Bitwarden", "skipped (--skip-secrets)")
-        else:
-            print("\nBitwarden: installing declared secrets", flush=True)
-            record("Bitwarden", "ready" if runner(["pino", "os", "provision", "install"]) == 0 else "failed")
     if disk and config["artifacts"]:
         print("\nArtifacts: compare disk and local installers", flush=True)
-        status = runner(["pino", "restore", "artifacts", str(disk)])
+        status = runner(["pino", "data", "restore", "artifacts", str(disk)])
         record("Artifacts", "ready" if status == 0 else "pending" if status == 2 else "failed")
 
     for name, step in config["steps"].items():
@@ -68,11 +62,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     parser.add_argument("disk", nargs="?", type=Path)
-    parser.add_argument("--skip-secrets", action="store_true")
     args = parser.parse_args()
     config = json.loads(args.manifest.read_text())
     if pwd.getpwuid(os.getuid()).pw_name != config["user"]:
-        parser.error(f"Run as {config['user']}, without sudo; provisioning requests sudo when needed.")
+        parser.error(f"Run as {config['user']}, without sudo; setup requests sudo when needed.")
     if args.disk and not args.disk.is_dir():
         parser.error("The external disk directory does not exist; mount/unlock it first.")
     state = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "pino"
@@ -82,7 +75,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             parser.error("Another populate is running for this user.")
-        return populate(config, args.disk, args.skip_secrets)
+        return populate(config, args.disk)
 
 
 if __name__ == "__main__":

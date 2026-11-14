@@ -87,10 +87,10 @@ class XrayClientTests(unittest.TestCase):
         self.assertEqual(identifier, json.loads(vault.items["pino-xray-halos"]["notes"])["users"]["pa"])
 
     def test_deploy_failure_has_recovery_and_no_credentials(self):
-        with patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=1)) as run:
+        with patch.dict(client.os.environ, {"PINO_PROVISION_SEND": "/fixture/send"}), patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=1)) as run:
             with self.assertRaisesRegex(ValueError, "without an export directory"):
                 client.deploy_server(Vault(), "halos")
-            self.assertEqual(run.call_args.args[0], ["pino", "os", "provision", "send", "pino-xray-halos",
+            self.assertEqual(run.call_args.args[0], ["/fixture/send", "send", "pino-xray-halos",
                                                    "halos", "/etc/pino/xray/users.json", "xray.service"])
 
 

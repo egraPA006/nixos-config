@@ -17,6 +17,31 @@ spec.loader.exec_module(tunnel)
 
 
 class TunnelTests(unittest.TestCase):
+    def test_rebuild_test_activates_test_not_switch(self):
+        source = (ROOT / "modules/pino/os.sh").read_text().replace("@configDir@", "/fixture").replace("@pinoUser@", "fixture").replace("@runuser@", "/unused")
+        prefix = 'id() { printf "1000\\n"; }\nhostname() { printf "test-host\\n"; }\nsudo() { printf "CALL %s\\n" "$*"; }\n'
+        result = subprocess.run(["bash", "-c", prefix + source, "pino", "rebuild-test"],
+                                input="y\n", capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("CALL nixos-rebuild test --flake /fixture#test-host", result.stdout)
+        self.assertNotIn("nixos-rebuild switch", result.stdout)
+
+    def test_server_mode_cli_validates_and_dispatches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pino").write_text("#!/bin/sh\nprintf '%s\\n' \"$*\"\n")
+            (root / "pino").chmod(0o755)
+            env = {**os.environ, "PATH": directory + ":" + os.environ["PATH"]}
+            script = str(ROOT / "modules/pino/vpn.sh")
+            result = subprocess.run(["bash", script, "server", "mode", "mosk", "full"],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.strip(), "host mosk server vpn mode set full")
+            result = subprocess.run(["bash", script, "server", "mode", "mosk", "bad"],
+                                    env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("host mosk", result.stdout)
+
     def test_desktop_proxy_modes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

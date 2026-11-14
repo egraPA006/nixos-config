@@ -9,6 +9,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class BootstrapKexecTests(unittest.TestCase):
+    def test_hardware_is_transferred_without_git_mutations(self):
+        source = (ROOT / "modules/pino/bootstrap.sh").read_text()
+        self.assertNotIn('git -C "$BOOTSTRAP_CONFIG_DIR" commit', source)
+        self.assertNotIn('git -C "$BOOTSTRAP_CONFIG_DIR" push', source)
+        self.assertIn('scp_to "$hardware_tmp" "$installer_target:/root/nixos-config/hosts/$host/hardware.nix"', source)
+
+    def test_note_preflight_rejects_ambiguous_records(self):
+        source = (ROOT / "modules/pino/bootstrap.sh").read_text()
+        function = source.split("check_note() {", 1)[1].split("\n}\n", 1)[0]
+        script = '''
+check_note() {
+''' + function + '''
+}
+bw() { printf '%s' "$FIXTURE"; }
+check_note wanted
+'''
+        import json
+        note = {"name": "wanted", "type": 2, "notes": "fixture"}
+        for records, expected in (([note], 0), ([note, note], 1), ([], 1)):
+            result = subprocess.run(["bash", "-c", script],
+                                    env=dict(os.environ, FIXTURE=json.dumps(records)),
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, expected)
+            self.assertNotIn("fixture", result.stdout)
+
     def run_boot(self, first=0, fallback=0, transport=0, extract=0):
         source = (ROOT / "modules/pino/bootstrap.sh").read_text()
         block = source.split('  echo "Booting the RAM installer;', 1)[1]

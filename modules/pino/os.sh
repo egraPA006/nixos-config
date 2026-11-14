@@ -6,7 +6,7 @@ SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 HOST_NAME="$(hostname)"
 
 case "${1:-}" in
-  rebuild|update) [ "$#" -eq 1 ] || { echo "Unexpected arguments for pino os $1." >&2; exit 1; } ;;
+  rebuild|rebuild-test|update) [ "$#" -eq 1 ] || { echo "Unexpected arguments for pino os $1." >&2; exit 1; } ;;
   generation)
     case "${2:-}" in
       list|clean) [ "$#" -eq 2 ] || { echo "Unexpected generation arguments." >&2; exit 1; } ;;
@@ -121,6 +121,13 @@ gc_os() {
 
 case "${1:-}" in
   rebuild) rebuild_os ;;
+  rebuild-test)
+    echo "Host:   $HOST_NAME"
+    echo "Flake:  $CONFIG_DIR#$HOST_NAME"
+    echo "This activates services temporarily; reboot returns to the previous boot configuration."
+    confirm "Build and activate this configuration until reboot?" || exit 1
+    sudo nixos-rebuild test --flake "$CONFIG_DIR#$HOST_NAME"
+    ;;
   update) nix flake update --flake "$CONFIG_DIR" ;;
   generation)
     case "${2:-}" in

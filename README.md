@@ -16,19 +16,15 @@ changes and asks before applying them; backups have no version history.
 ## CLI layout
 
 - `pino os`: rebuild/update, generations, packages, profiles, populate and diagnostics.
-  On desktops it also provides remote `install` / `rescue`; `os provision` manages
-  delivery and preparation of Bitwarden credentials.
-- `pino backup` / `pino restore`: explicit transfers to/from an unlocked disk.
-- `pino host <host> ...`: execute Pino on a remote server.
+  `rebuild-test` activates temporarily; `provision` installs local Bitwarden credentials.
+- `pino data`: backup and restore using an unlocked disk.
+- `pino host`: list configured hosts; `pino host <host> ...` executes Pino over SSH.
 - `pino desktop` / `pino server`: profile-specific application/service commands.
 - `pino vpn`: client connections, WiFi sharing and client creation.
-- `pino env`: development environments.
+- `pino os env`: named local and declarative package environments.
 
 Use `help`, `--help` or `-h` at a command node. Unknown commands and extra arguments
-on no-argument commands are rejected. Old root `populate`, `profile`, `provision`
-and `bootstrap` entry points redirect with a migration message, but are absent
-from help and completion. `files`, `secret`/`recovery` and the old `artifacts`
-branch are removed. No personal files are deleted by this CLI reorganization.
+on no-argument commands are rejected. Legacy command paths are not supported.
 
 Profile enable only rebuilds; `pino os populate` handles application setup using
 the same declared prerequisites on first installation and later profile changes.
@@ -46,14 +42,13 @@ private/egress/full without distributing new client configurations.
 
 ### Remote servers
 
-Prepare server credentials before bootstrapping:
+Prepare server credentials before installation:
 
 To generate and save missing records directly in Bitwarden, without temporary
 export files, log in to the CLI once with `bw login`, then run from this checkout:
 
 ```bash
 nix run path:.#server-secrets -- mosk --bitwarden
-# After rebuilding the desktop: pino os provision prepare mosk --bitwarden
 ```
 
 This unlocks the vault when necessary, generates a 32-character Galene password
@@ -87,13 +82,8 @@ nix run path:.#server-secrets -- mosk --bitwarden --repair-galene
 
 VPN rotation changes only the server private key; peers, addresses and AWG
 parameters are preserved. Update the server public key on all clients when
-deploying. Rotating records does not alter the running server. Deploy from the
-desktop using its configured SSH alias (or `vincent@IP`):
-
-```bash
-pino os provision send pino-galene-mosk-main mosk /etc/pino/galene/main.json galene.service
-pino os provision send pino-vpn-server-mosk mosk /etc/pino/vpn/awg0.conf amneziawg-server.service pino-vpn-mode.service
-```
+deploying. Rotating records does not alter the running server. Log in to
+Bitwarden on the server and run `pino os provision` there.
 
 Keep the recovery snapshot until the server and clients have been verified.
 Restoring it means restoring each original record's fields from the snapshot
@@ -106,9 +96,9 @@ for Galene, prefer `--repair-galene` to avoid generating another password.
 Alternatively, prepare local files for manual import:
 
 ```bash
-pino os provision prepare mosk
+nix run path:.#server-secrets -- mosk
 # AmneziaWG, Xray and telemt, without Galene:
-pino os provision prepare halos
+nix run path:.#server-secrets -- halos
 ```
 
 `prepare` prompts twice for the Galene `admin` password on Mosk and stores only
@@ -138,46 +128,26 @@ Without rebuilding the local system, run the same generator from this checkout:
 nix run path:.#server-secrets -- mosk
 ```
 
-The normal VPS flow starts from the temporary Ubuntu or Debian image supplied
-by the provider. Create Bitwarden SSH Key items named `pino-ssh-server-mosk`
-and `pino-ssh-server-halos`. Give the provider only the public half of the
-matching item. Before initial bootstrap, save that public key locally as a
-selector, for example `~/.ssh/mosk.pub`. On an installed desktop,
-`pino os provision install` installs both halves locally as `~/.ssh/mosk` and
-`~/.ssh/mosk.pub`.
-
-Provision the SSH key, make sure this checkout is clean and pushed to
-`origin/main`, then run:
+To install remotely from a trusted desktop with SSH access, use:
 
 ```bash
-pino os provision install
-pino os install mosk ubuntu@203.0.113.10 ~/.ssh/mosk.pub
+pino host install mosk root@egrapa.com ~/.ssh/mosk.pub
+# If the provider has already booted a NixOS rescue:
+pino host rescue mosk root@egrapa.com ~/.ssh/mosk.pub
 ```
 
-`pino os install` / `pino os rescue` unlock and synchronizes Bitwarden itself when needed.
+Replace the user and address with those of the new server and verify its SSH
+fingerprint. The matching private key must be beside the public key. The local
+checkout must be clean and match the pushed `origin/main`; required Bitwarden
+notes are checked before installation. The installer needs BIOS boot and
+`/dev/vda`, which is erased only after the explicit `erase mosk` confirmation.
+It provisions the new server from the desktop's Bitwarden session after reboot.
+If generated hardware differs, the installed server uses it but no Git commit
+or push is made: review and copy its `hosts/mosk/hardware.nix` into the checkout.
 
-`install` requires an x86_64 Linux VPS with passwordless root or `sudo`, enough
-RAM for the pinned NixOS kexec installer, working DHCP, and Secure Boot disabled.
-It boots the installer in RAM, so no provider console is needed in the normal
-case.
-
-If the provider has already booted a NixOS installer or rescue image, skip
-kexec:
-
-```bash
-pino os rescue halos root@203.0.113.11 ~/.ssh/halos.pub
-```
-
-Both commands verify the required Bitwarden Secure Notes, generate the public
-`hardware.nix`, commit and push it if it changed, clone that exact GitHub state
-in the installer, and stop for the final disk-erasure confirmation. They then
-install `/dev/vda`, reboot, provision the server runtime files from Bitwarden,
-and show service status. The private SSH key and secret contents are never
-copied into Git or onto the installer.
-
-The first SSH connection uses the normal interactive host-fingerprint prompt.
-Check it against the provider console. If kexec is unsupported or networking
-does not return, use the rescue flow instead.
+To retry provisioning without reinstalling, run `pino host provision mosk`, or
+log in to Bitwarden CLI on the server and run `pino os provision` there. Manual
+installation from the installer console remains available below.
 
 ### Installer console
 
@@ -235,21 +205,19 @@ disk in GNOME, then run:
 pino os populate /run/media/$USER/pino-external
 ```
 
-This logs in to/unlocks Bitwarden, installs declared credentials, compares and
-imports `pino/artifacts/` from the disk, and runs available application setup.
-Run it again after following any `action required` instructions. A pending or
-failed profile does not block unrelated profiles. Existing commands check their
-state; identical secrets do not restart healthy services. Exit codes are 0 for
-complete, 2 for pending prerequisites and 1 for failures. `--skip-secrets` skips
-the vault explicitly; without a disk, setup uses existing local installers.
-Personal datasets are never implicitly restored by populate.
+This compares and imports `pino/artifacts/` from the disk and runs available
+application setup. Run `pino os provision` separately for Bitwarden secrets.
+Run populate again after following any `action required` instructions. A pending
+or failed profile does not block unrelated profiles. Exit codes are 0 for
+complete, 2 for pending prerequisites and 1 for failures. Without a disk, setup
+uses existing local installers. Personal datasets are restored separately.
 
 These commands become available after installing this revision or rebuilding the
 existing host. **Do not run encrypted-disk-init.sh again on an existing disk.**
 Before reinstalling, create/update the artifact copy with:
 
 ```bash
-pino backup artifacts /run/media/$USER/pino-external
+pino data backup artifacts /run/media/$USER/pino-external
 ```
 
 | External folder below `pino/artifacts/` | Local destination on re-1 | Contents |
@@ -267,7 +235,7 @@ per file, not a transaction for the whole tree; after an interrupted transfer,
 rerun the command to compare what remains. Application setup still verifies its
 own configured checksums.
 
-Use `pino restore artifacts /path/to/disk --dry-run` to inspect destinations
+Use `pino data restore artifacts /path/to/disk --dry-run` to inspect destinations
 without setting up applications. All artifact commands now take the disk root
 and use `pino/artifacts/` below it. The old artifact import/list interface has
 been removed. If an existing disk uses `artifacts/` at its root, move that folder
@@ -277,7 +245,7 @@ Keep the imported library directories locally: plugins using `method = "link"`
 link into them. They must work after unplugging the external disk. Do not copy
 only the EXEs, rename the saved directories, or import old installation stamps
 instead of running the installation commands. Licensing/login is separate and
-may require manual activation. `pino os provision install` does not retrieve music,
+may require manual activation. `pino os provision` does not retrieve music,
 Guitar Pro or Content Manager license keys automatically.
 
 For Assetto Corsa, log into Steam, install the game and required DLC, select
@@ -294,7 +262,7 @@ described below. Activate CM manually with your own key stored in Bitwarden.
 Populate invokes the declared setup once prerequisites are ready; manual
 licensing and the initial Steam login/game launch remain your actions.
 
-For `re-1`, `pino os provision install` currently retrieves these records:
+For `re-1`, `pino os provision` currently retrieves these records:
 
 | Bitwarden item | Destination |
 | --- | --- |
@@ -335,7 +303,7 @@ Authorize the new GitHub public key; give each VPN client its own private key
 and address and add the matching peer on each server before deploying. Adapt
 the hotspot interface in its Secure Note too. Server SSH items are currently
 shared between desktops by design. Then use exactly the same provision/import/
-application-install sequence. `pino restore artifacts /path/to/disk --dry-run`
+application-install sequence. `pino data restore artifacts /path/to/disk --dry-run`
 shows that computer's local destinations; the external folder names remain unchanged. If local paths use a
 separate filesystem, declare `pino.artifacts.<name>.requiredMount` for it.
 Custom archive paths outside the declared `installs` directory require separate
@@ -373,7 +341,7 @@ Enabled profiles are plain lists in `hosts/<host>/active-profiles.nix`.
 pino os profile list
 pino os profile enable server-web
 pino os profile disable torrent
-pino os provision install
+pino os provision
 ```
 
 The profile catalog in `modules/profiles/default.nix` exposes user-facing roles;
@@ -647,28 +615,22 @@ Create a DNS-only A record pointing this name at the Halos public IPv4 address;
 allow TCP 22, 80, 443, 2443 and UDP 585 in the provider firewall.
 Only publish an AAAA record if the server has working IPv6.
 Create the Bitwarden SSH Key `pino-ssh-server-halos` and install its public half
-through the provider or bootstrap. Both desktops already provision that key to
+through the provider or installer. Both desktops already provision that key to
 `~/.ssh/halos`, and the `halos` SSH alias uses `vincent@halos.egrapa.com`.
 
 ```bash
 # Create missing VPN/Xray/telemt credentials without changing existing records:
-pino os provision prepare halos --bitwarden
+nix run path:.#server-secrets -- halos --bitwarden
 # After installing NixOS and configuring SSH access:
-pino os provision host halos
+pino host halos os provision
 pino host halos server vpn mode set full
-pino vpn add-client halos phone ~/halos-phone
+pino vpn users add awg halos phone ~/halos-phone
 ```
 
 The Halos secret records are `pino-vpn-server-halos`, `pino-xray-halos` and
 `pino-telemt-halos`; proxy connection links are hidden fields in their notes.
-The bootstrap selects `kexec-installer-small` for Halos: an ext4/VFAT installer
-with XZ-compressed storage and a reduced module set for its QEMU/KVM hardware.
-It fits the kernel's half-RAM kexec limit and boots with networking and SSH in a
-1 GiB VM. The universal `kexec-installer` remains available for other hosts.
-For Halos, Ubuntu also gets a temporary 1 GiB swap file and the bootstrap uses
-legacy kexec to avoid exhausting RAM during loading. The swap file lives on the
-old system disk and disappears during installation; a failed pre-install attempt
-can leave it active until reboot or manual cleanup.
+The `kexec-installer-small` flake package provides an ext4/VFAT installer with
+a reduced module set for Halos's QEMU/KVM hardware.
 The VPN starts in `private` mode until explicitly changed. Both VPNs currently
 use `10.77.0.0/24`; select one full-route desktop connection at a time.
 
@@ -681,25 +643,8 @@ Website/Xray TLS issuance needs public DNS and access to ports 80/443. The FakeT
 masking domain is `www.microsoft.com`, distinct from the actual proxy endpoint;
 it must be reachable from Mosk.
 
-On the new Ubuntu/Debian, install the **public** half of `pino-ssh-server-mosk`
-using the provider's SSH-key option. The initial user needs root or passwordless
-sudo. From the trusted desktop, after rebuilding Pino:
-
-```bash
-pino os provision install
-pino os provision prepare mosk --bitwarden
-# Substitute the actual initial user/IP; verify the provider's SSH fingerprint:
-pino os install mosk root@203.0.113.10 ~/.ssh/mosk.pub
-```
-
-Use `ubuntu@…` or `debian@…` instead if appropriate. Bootstrap checks every Secure
-Note declared by the selected profiles before changing the VPS, boots a NixOS
-installer through kexec, and asks for `erase mosk` before partitioning `/dev/vda`.
-It installs the exact pushed revision (including generated hardware updates),
-then sends every declared note and restarts its services. This requires a clean
-checkout on `origin/main`. If kexec is unavailable, boot a NixOS rescue image and
-use `bootstrap rescue`. After reinstalling, verify the new SSH host fingerprint
-through the provider console before updating your normal known_hosts entry.
+After installing the server from the installer console, log in to its
+Bitwarden CLI and run `pino os provision` on the server.
 
 Proxy notes contain `{"users": {"owner": "credential"}}`. For Xray, use a canonical
 UUID; for telemt, a 32-character lowercase hex secret. The generator creates
@@ -722,10 +667,7 @@ or refresh existing URIs. When endpoints change, update the shared public manife
 and existing client URIs together.
 
 ```bash
-pino os provision host mosk
-# Or update a single service:
-pino os provision send pino-xray-mosk mosk /etc/pino/xray/users.json xray.service
-pino os provision send pino-telemt-mosk mosk /etc/pino/telemt/users.json telemt.service
+pino host mosk os provision
 pino host mosk server status
 pino host mosk server xray status
 pino host mosk server telemt status
@@ -734,15 +676,27 @@ pino host mosk server vpn mode set private
 pino host mosk os rebuild
 ```
 
-`pino host` uses the local SSH alias and allocates a TTY when invoked in a terminal.
+`pino host` discovers names from the checkout's `nixosConfigurations`. It uses
+the matching local SSH alias and allocates a TTY when invoked in a terminal.
 Ordinary `ssh mosk` remains available. Rebuild uses the server's checkout: pull
 the desired revision there first.
 
 VPN `private` mode allows the server and VPN peers but blocks Internet forwarding.
+Manage the server forwarding mode from a desktop over SSH:
+
+```bash
+pino vpn server mode mosk
+pino vpn server mode mosk full
+```
+
+The server can provision its own declared runtime secrets: log in to Bitwarden
+CLI on the server and run `pino os provision` there. Rebuild does not
+automatically provision secrets. A provisioning run replaces the declared
+runtime files with the corresponding Bitwarden notes and restarts their units.
 Create a separate device profile from a desktop with the `vpn-client` profile:
 
 ```bash
-pino vpn add-client mosk phone ~/mosk-phone
+pino vpn users add awg mosk phone ~/mosk-phone
 ```
 
 This unlocks Bitwarden, creates or reuses `pino-vpn-client-phone-mosk`, adds its
@@ -752,7 +706,7 @@ separate Secure Note `pino-vpn-client-phone-mosk-amnezia` containing an AmneziaV
 `vpn://` link and exports that link as `mosk-phone.vpn`. Import the `.conf` in
 AmneziaWG, or paste the link into AmneziaVPN. Both contain the same client private
 key: keep both exports private. Existing clients get the link on their next
-`add-client` run without rotating their keys.
+user creation without rotating their keys.
 New profiles route all IPv4 traffic (`AllowedIPs = 0.0.0.0/0`):
 server mode `private` blocks IPv4 Internet, while `full` enables Internet and
 the VPN network. IPv6 is not routed. Creating a client does not change the
@@ -765,21 +719,29 @@ refreshes the server key and AWG settings, and keeps the client address when
 available. Other server peers are preserved. Import/install the updated client
 file afterwards. `--force` does not overwrite local files or rotate device keys.
 If deployment fails after saving, retry the command with a new directory
-(and `--force` if the server peer address still needs updating), then run `pino os provision host
-mosk`. Remove the local export after importing and keep the Bitwarden note.
-Both `add-client` and `remove-client` support `mosk` and `halos`; they do not
+(and `--force` if the server peer address still needs updating), or run
+`pino os provision` on Mosk. Remove the local export after importing and keep the Bitwarden note.
+Both user add and remove commands support `mosk` and `halos`; they do not
 create Xray credentials. Halos client profiles use `halos.egrapa.com:585`.
 
 Xray has matching client management commands on desktops with `vpn-client`:
 
 ```bash
-pino xray add-client halos ari
-pino xray add-client halos pa
-pino xray add-client halos re-1 ~/halos-xray-re-1
-pino xray remove-client halos ari
+pino vpn users add xray halos ari
+pino vpn users add xray halos pa
+pino vpn users add xray halos re-1 ~/halos-xray-re-1
+pino vpn users remove xray halos ari
+pino vpn users list awg mosk
+pino vpn users list xray halos
 ```
 
-Each client gets its own UUID. `add-client` stores the client JSON in
+User listing compares the Bitwarden server note with the live AWG peer list or
+Xray's installed server user file over SSH. Xray verification requires the
+server configuration containing the `server xray users` helper. If SSH or that
+helper is unavailable, Bitwarden entries are shown as unverified. Unknown AWG
+peers are counted without displaying their public keys.
+
+Each client gets its own UUID. User creation stores the client JSON in
 `pino-xray-client-<name>-<host>` and its VLESS/XHTTP/TLS URI in the separate Secure
 Note `pino-xray-client-<name>-<host>-link`, then deploys `pino-xray-<host>`.
 The optional new directory exports `.json` and `.uri` files outside Git with
@@ -792,13 +754,13 @@ Server deployment briefly restarts Xray; existing sessions reconnect.
 After rebuilding the desktop, install its named Xray configuration and connect:
 
 ```bash
-pino os provision install pino-xray-client-re-1-halos /etc/pino/xray-client/halos.json
+pino os provision
 pino vpn connect xray halos
 pino vpn status
 pino vpn disconnect
 ```
 
-`pino os provision install` also declares Xray notes for the current hostname
+`pino os provision` also declares Xray notes for the current hostname
 on both Mosk and Halos. `pino vpn list` shows both connection types.
 Only one Pino system tunnel is selected at a time: `pino vpn connect awg halos`
 selects AWG and `pino vpn connect xray halos` selects Xray. The selected connection
@@ -824,7 +786,7 @@ IPv4-only AWG profiles. The proxy is not a network-wide VPN or kill switch.
 To revoke a device and remove both client records:
 
 ```bash
-pino vpn remove-client mosk phone
+pino vpn users remove awg mosk phone
 # For noninteractive use, explicitly confirm with --yes.
 ```
 
@@ -853,13 +815,8 @@ address restrictions using documentation IPs in an isolated network. Public
 DNS/ACME, Telegram connectivity and remote AWG handshakes require post-deploy tests.
 
 Galene is enabled on Mosk at `https://meet.egrapa.com/group/main/`. Store the
-complete group definition in a Bitwarden Secure Note named
-`pino-galene-mosk-main`, then provision it without exposing its contents:
-
-```bash
-pino os provision send pino-galene-mosk-main mosk \
-  /etc/pino/galene/main.json galene.service
-```
+complete group definition in the Bitwarden Secure Note `pino-galene-mosk-main`,
+then run `pino os provision` on Mosk.
 
 Galene stays stopped until that file exists. Generate a bcrypt password object
 with `pino server galene hash-password`, then place its output in that JSON
@@ -889,7 +846,7 @@ Pino. Never add recovery material or a Bitwarden export to Git.
 All working secrets live in Bitwarden. On a new host, run:
 
 ```bash
-pino os provision install
+pino os provision
 ```
 
 Pino prompts for CLI login on the first run and unlocks the vault on later
@@ -918,7 +875,7 @@ Bitwarden Desktop or its SSH Agent.
 Install every file declared by active profiles on the current host:
 
 ```bash
-pino os provision install
+pino os provision
 ```
 
 Each profile declares its Bitwarden item name and destination in its Nix module.
@@ -931,38 +888,12 @@ other items still install, and the command exits with an error after the full
 run. Rebuild after changing the active profile list so the command uses the new
 declarations.
 
-Install one locally without printing it or creating a plaintext temporary file:
-
-```bash
-pino os provision install pino-vpn-client-re-1-mosk /etc/amneziawg/mosk.conf
-```
-
-Or send it directly from Bitwarden to a server over SSH:
-
-```bash
-pino os provision send pino-vpn-server-mosk mosk \
-  /etc/pino/vpn/awg0.conf \
-  amneziawg-server.service pino-vpn-mode.service
-```
-
-As an explicit manual alternative, stream a file from any trusted unlocked
-folder to the same root-owned destination, then restart the service:
-
-```bash
-ssh mosk 'sudo install -D -o root -g root -m 0600 /dev/stdin /etc/pino/vpn/awg0.conf' \
-  < /trusted/folder/awg0.conf
-ssh mosk sudo systemctl restart amneziawg-server.service pino-vpn-mode.service
-```
-
-Pino synchronizes Bitwarden first. The destination is root-owned and mode
-`0600`. The server does not need a Bitwarden session when `send` is run from a
-trusted desktop.
+`pino os provision` installs all declared local records. Run the same command
+on a server to install that server's declared secrets from its own Bitwarden session.
 
 Desktop systems install Bitwarden Desktop and the Bitwarden Chromium extension.
-SSH uses the provisioned local private keys directly. After provisioning, Pino
-tests SSH access to the GitHub repository and changes an HTTPS `origin` to SSH
-if the check succeeds. If the key is missing or access fails, the remote stays
-on HTTPS; rerun `pino os provision install` after fixing the SSH key.
+SSH uses the provisioned local private keys directly. Provisioning does not
+change the checkout's Git remote.
 
 Bitwarden keeps vault lock settings per account and app. In Bitwarden Desktop,
 open File → Settings → Account security, set Vault timeout to 1 minute and
@@ -1008,12 +939,12 @@ history). None of these commands backs up `/nix/store` or discovers personal
 folders automatically.
 
 ```bash
-pino backup artifacts /path/to/disk --dry-run
-pino backup artifacts /path/to/disk
-pino backup artifacts guitar-pro /path/to/disk
-pino backup bitwarden /path/to/disk
-pino backup datasets /path/to/disk
-pino restore datasets documents /path/to/disk
+pino data backup artifacts /path/to/disk --dry-run
+pino data backup artifacts /path/to/disk
+pino data backup artifacts guitar-pro /path/to/disk
+pino data backup bitwarden /path/to/disk
+pino data backup datasets /path/to/disk
+pino data restore datasets documents /path/to/disk
 ```
 
 Declare datasets explicitly in the host configuration, then rebuild. No personal
@@ -1052,8 +983,8 @@ the password never appears in process arguments. It validates a portable
 password-encrypted JSON export before atomically replacing the old file (0600).
 Cancellation or an invalid export leaves the old backup intact. Save the export
 password independently; restore by importing the file as Bitwarden JSON into
-an account and entering that password. Normal populate reads the existing online
-vault, not this recovery export.
+an account and entering that password. `pino os provision` reads the online
+vault, not this recovery export; populate does not access Bitwarden.
 
 **Scope:** the export contains active personal vault items. Attachments,
 organization-owned items, trash, Sends and account/2FA recovery settings are
@@ -1061,12 +992,9 @@ excluded; the command reports detected exclusion counts and asks you to accept
 that scope. Back up those separately if used. This is not a complete account
 backup. See the [Bitwarden CLI export documentation](https://bitwarden.com/help/cli/#export).
 
-Server installation still uses `pino os install|rescue` from the desktop:
-it installs and provisions in one flow. To retry only provisioning, run
-`pino os provision host mosk`; on the server itself, `pino os populate` reads that
-server's declared Bitwarden secrets. Reinstallation reuses existing server keys
-and peer lists; it does not generate or rotate VPN/proxy credentials. With the
-same endpoint and vault records, client profiles remain valid.
+Provision server secrets explicitly on the server with `pino os provision`.
+Rebuild and populate do not access Bitwarden. Reinstallation can reuse existing
+server records and peer lists without generating or rotating credentials.
 
 The new personal dataset copier does **not** back up privileged server state.
 Preserve `/var/lib/galene` (including invitations/extra rooms), `/var/lib/pino/vpn`
@@ -1077,34 +1005,33 @@ Bitwarden still restores the declared room and service credentials.
 
 ## Development environments and packages
 
-Create a normal project-local development flake:
+Create and enter a persistent named package environment from any directory:
 
 ```bash
-pino env init cpp ./my-project
-cd ./my-project
-nix develop
-```
-
-For a persistent package-only environment, create and enter a named profile:
-
-```bash
-pino env create lab python
-pino env list
-pino env enter lab
-pino env add ripgrep
+pino os env create lab python
+pino os env templates
+pino os env list
+pino os env add lab ripgrep
+pino os env remove lab ripgrep
+pino os env enter lab
 exit
+pino os env delete lab
 ```
 
-Packages added inside `lab` remain there, but files, processes, and networking
-are not isolated. Delete the package profile without touching project files,
-or export it as a reusable dev-shell configuration:
+Local environments are stored under `~/.local/share/pino/envs`, independently of
+projects. Available presets are `empty`, `cpp`, `python`, and `verilog`. A
+system-declared environment can instead be configured per host in Nix:
 
-```bash
-pino env export lab ./lab-template
-pino env delete lab
+```nix
+pino.environments.cpp = with pkgs; [ gcc cmake gdb ];
 ```
 
-Available presets are `empty`, `cpp`, `python`, and `verilog`. One-off global
+Rebuild to apply declared packages. Declarative environments cannot be modified
+or deleted by the CLI. An existing local environment with the same name is not
+overwritten; resolve the name conflict before entering it. Environments isolate
+package paths, not files, processes or network access.
+
+One-off global
 user packages still do not require a system rebuild:
 
 ```bash

@@ -1,5 +1,5 @@
 { pkgs, ... }: {
-  pino.subcommands.backup.commands.bitwarden = {
+  pino.subcommands.data.commands.backup.commands.bitwarden = {
     description = "Back up personal Bitwarden items as portable encrypted JSON";
     usage = "<external-disk-directory>";
     helpText = ''

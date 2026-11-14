@@ -6,9 +6,9 @@ host="${2:-}"
 initial_target="${3:-}"
 identity_file="${4:-}"
 disk=/dev/vda
-[ "$#" -eq 4 ] || { echo "Usage: pino os install|rescue <mosk|halos> <user@address> <public-key-file>" >&2; exit 1; }
+[ "$#" -eq 4 ] || { echo "Usage: pino host install|rescue <mosk|halos> <user@address> <public-key-file>" >&2; exit 1; }
 
-case "$operation" in install|rescue) ;; *) echo "Run 'pino os help' for usage." >&2; exit 1 ;; esac
+case "$operation" in install|rescue) ;; *) echo "Run 'pino host help' for usage." >&2; exit 1 ;; esac
 case "$host" in mosk|halos) ;; *) echo "Host must be mosk or halos." >&2; exit 1 ;; esac
 [[ "$initial_target" =~ ^[A-Za-z_][A-Za-z0-9_-]*@[A-Za-z0-9.-]+$ ]] || {
   echo "SSH target must be user@IPv4-or-hostname." >&2
@@ -17,7 +17,7 @@ case "$host" in mosk|halos) ;; *) echo "Host must be mosk or halos." >&2; exit 1
 [ -f "$identity_file" ] || { echo "Public key file not found: $identity_file" >&2; exit 1; }
 [[ "$identity_file" == *.pub ]] || { echo "Pass a .pub identity selector." >&2; exit 1; }
 private_key="${identity_file%.pub}"
-[ -f "$private_key" ] || { echo "Private key not found; run 'pino os provision install' first." >&2; exit 1; }
+[ -f "$private_key" ] || { echo "Private key not found; run 'pino os provision' first." >&2; exit 1; }
 
 public_key="$(tr -d '\r' < "$identity_file")"
 [[ "$public_key" != *$'\n'* ]] || { echo "Public key file must contain exactly one key." >&2; exit 1; }
@@ -78,8 +78,8 @@ scp_to() { scp "${scp_options[@]}" "$@"; }
 
 check_note() {
   local item="$1"
-  bw get item "$item" \
-    | jq -e 'select(.type == 2 and (.notes | type == "string") and (.notes | length > 0))' \
+  bw list items --search "$item" \
+    | jq -e --arg name "$item" '[.[] | select(.name == $name and .deletedDate == null and .type == 2 and (.notes | type == "string") and (.notes | length > 0))] | length == 1' \
       >/dev/null || {
         echo "Missing non-empty Bitwarden Secure Note: $item" >&2
         exit 1
@@ -205,14 +205,9 @@ grep -q 'nixpkgs.hostPlatform' "$hardware_tmp" || {
   exit 1
 }
 if ! cmp -s "$hardware_tmp" "$BOOTSTRAP_CONFIG_DIR/hosts/$host/hardware.nix"; then
-  install -m 0644 "$hardware_tmp" "$BOOTSTRAP_CONFIG_DIR/hosts/$host/hardware.nix"
-  git -C "$BOOTSTRAP_CONFIG_DIR" add "hosts/$host/hardware.nix"
-  git -C "$BOOTSTRAP_CONFIG_DIR" commit -m "hosts($host): refresh generated hardware configuration"
-  git -C "$BOOTSTRAP_CONFIG_DIR" push origin main
-  echo "Pushed the generated $host hardware configuration."
+  echo "The generated hardware configuration differs; it will be used on the new server."
+  echo "After installation, review and copy its hardware.nix into your checkout."
 fi
-rm -f "$hardware_tmp"
-hardware_tmp=""
 
 echo "Cloning the pushed configuration in the installer..."
 install_revision="$(git -C "$BOOTSTRAP_CONFIG_DIR" rev-parse HEAD)"
@@ -223,6 +218,7 @@ nixpkgs_revision="$(jq -er '.nodes.nixpkgs.locked.rev' "$BOOTSTRAP_CONFIG_DIR/fl
 }
 ssh_to "$installer_target" \
   "test ! -e /root/nixos-config && nix --extra-experimental-features 'nix-command flakes' shell 'github:NixOS/nixpkgs/$nixpkgs_revision#git' --command sh -c 'git clone --no-checkout $BOOTSTRAP_REPOSITORY /root/nixos-config && git -C /root/nixos-config checkout -B main $install_revision'"
+scp_to "$hardware_tmp" "$installer_target:/root/nixos-config/hosts/$host/hardware.nix"
 printf '%s\n' "$public_key" | ssh_to "$installer_target" \
   'umask 077; cat > /root/pino-bootstrap.pub'
 
@@ -258,7 +254,7 @@ while IFS= read -r declaration; do
   item="$(jq -r '.item' <<< "$declaration")"
   target="$(jq -r '.target' <<< "$declaration")"
   mapfile -t units < <(jq -r '.units[]' <<< "$declaration")
-  pino os provision send "$item" "$final_target" "$target" "${units[@]}"
+  "${PINO_PROVISION_SEND:?internal sender not configured}" send "$item" "$final_target" "$target" "${units[@]}"
 done < <(jq -c '.[]' <<< "$provision_manifest")
 
 ssh_to "$final_target" '/run/current-system/sw/bin/pino server status'

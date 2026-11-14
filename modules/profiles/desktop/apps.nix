@@ -21,6 +21,7 @@ in
 
   environment.systemPackages = with pkgs; [
     telegram-desktop
+    chromium
     (lib.hiPrio chromiumLauncher)
     libreoffice
     imagemagick

@@ -3,6 +3,7 @@
   config,
   lib,
   pinoTunnel,
+  pinoProvisionSend,
   ...
 }:
 
@@ -143,15 +144,22 @@ in
   pino.subcommands.vpn = {
     description = "AWG and Xray VPN connections";
     commands = {
-      add-client = {
-        description = "Create an AWG client in Bitwarden, export it and deploy the server peer";
-        usage = "<mosk|halos> <client-name> <new-export-directory> [--force]";
-      };
-      remove-client = {
-        description = "Revoke a server peer and trash its Bitwarden config and AmneziaVPN link";
-        usage = "<mosk|halos> <client-name> [--yes]";
+      users = {
+        description = "Manage AWG and Xray users in Bitwarden and on servers";
+        commands = {
+          add = { description = "Create and deploy a user"; usage = "<awg|xray> <mosk|halos> <name> [export-directory]"; };
+          remove = { description = "Revoke a user"; usage = "<awg|xray> <mosk|halos> <name> [--yes]"; };
+          list = { description = "Compare users in Bitwarden and on the server"; usage = "<awg|xray> <mosk|halos>"; };
+        };
       };
       list.description = "List installed named VPN connections";
+      server = {
+        description = "Control server forwarding over SSH";
+        commands.mode = {
+          description = "Show or select the server VPN mode";
+          usage = "<mosk|halos> [private|egress|full]";
+        };
+      };
       connect = {
         description = "Select, start, and autostart a connection";
         usage = "[awg|xray] [name]";
@@ -175,7 +183,7 @@ in
     };
     helpText = ''
       Store complete configs as uniquely named Bitwarden Secure Notes, then run
-      `pino os provision install` to install the files declared by this profile.
+      `pino os provision` to install the files declared by this profile.
       Pino selects one connection at a time. Xray provides a local SOCKS proxy;
       AWG uses the routes in its profile.
       `share` only affects the dedicated `${share.connection}` connection. A hotspot
@@ -184,13 +192,28 @@ in
       run `sudo nmcli connection reload`.
     '';
     script = ''
-      if [ "''${1:-}" = add-client ] || [ "''${1:-}" = remove-client ]; then
-        operation="$1"
-        shift
-        if [ "$operation" = remove-client ]; then set -- --remove "$@"; fi
+      if [ "''${1:-}" = users ]; then
+        [ "$#" -ge 3 ] || { echo 'Usage: pino vpn users <list|add|remove> <awg|xray> <host> ...' >&2; exit 1; }
+        operation="''${2:-}"
+        kind="''${3:-}"
+        shift 3
         export PINO_SERVER_SECRETS=${../../../../scripts/server-secrets.py}
+        export PINO_PROVISION_SEND=${pinoProvisionSend}
+        export PINO_PROXY_SETTINGS=${../../../../resources/mosk-proxies.json}
+        export PINO_HALOS_PROXY_SETTINGS=${../../../../resources/halos-proxies.json}
         export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ]}:"$PATH"
-        exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/vpn-client.py} "$@"
+        if [ "$operation" = add ] && [ "$kind" = awg ] && [ "$#" -eq 2 ] && [ -t 0 ]; then
+          read -r -p 'New export directory: ' export_dir
+          [ -n "$export_dir" ] || { echo 'An export directory is required.' >&2; exit 1; }
+          set -- "$@" "$export_dir"
+        fi
+        case "$operation:$kind" in
+          list:awg|list:xray) exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/vpn-client.py} --list "$kind" "$@" ;;
+          add:awg) exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/vpn-client.py} "$@" ;;
+          remove:awg) exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/vpn-client.py} --remove "$@" ;;
+          add:xray|remove:xray) exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../../../scripts/xray-client.py} "$operation" "$@" ;;
+          *) echo 'Usage: pino vpn users <list|add|remove> <awg|xray> <host> ...' >&2; exit 1 ;;
+        esac
       fi
       VPN_SHARE_WIFI=${lib.escapeShellArg (if share.wifiInterface == null then "" else share.wifiInterface)}
       VPN_SHARE_CONNECTION=${lib.escapeShellArg share.connection}

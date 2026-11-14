@@ -24,6 +24,11 @@ let
         default = null;
         description = "Bash handler receiving arguments remaining after this command path";
       };
+      runWithoutArgs = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run this node's own handler when invoked without arguments.";
+      };
       commands = lib.mkOption {
         type = lib.types.attrsOf commandType;
         default = { };
@@ -42,6 +47,7 @@ let
     usage = "";
     helpText = "";
     script = null;
+    runWithoutArgs = false;
     commands = cfg.subcommands;
     fishCompletions = "";
   };
@@ -119,7 +125,7 @@ let
             ;;
           ${childCases}
           "")
-            ${if names != [ ] || effectiveScript == null then helpBody path node else delegatedInvocation}
+            ${if node.runWithoutArgs && ownScript != null then delegatedInvocation else if names != [ ] || effectiveScript == null then helpBody path node else delegatedInvocation}
             ;;
           *)
             ${if effectiveScript != null && node.usage != "" then delegatedInvocation else ''
@@ -174,29 +180,6 @@ let
 
   pinoText = ''
     ${dispatcher}
-    # Compatibility entry points do not clutter help or completions.
-    case "''${1:-}" in
-      populate|profile|provision)
-        old="$1"; shift
-        echo "Use pino os $old instead." >&2
-        set -- os "$old" "$@"
-        ;;
-      bootstrap)
-        shift
-        case "''${1:-}" in
-          prepare) shift; set -- os provision prepare "$@" ;;
-          install|rescue) set -- os "$@" ;;
-          ""|help|-h|--help) set -- os help ;;
-          *) echo "Use pino os install or pino os rescue." >&2; exit 1 ;;
-        esac
-        echo "Server installation is now under pino os; credentials under pino os provision." >&2
-        ;;
-      artifacts)
-        echo "Use pino restore artifacts <disk-root> or pino backup artifacts <disk-root>." >&2
-        echo "Both use pino/artifacts below the disk root; --dry-run shows the mapping and plan." >&2
-        exit 1
-        ;;
-    esac
     pino_dispatch_root "$@"
   '';
 

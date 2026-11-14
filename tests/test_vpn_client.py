@@ -1,8 +1,10 @@
 import copy
+import hashlib
 import base64
 import importlib.util
 import io
 import json
+import os
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +40,28 @@ class Vault:
 
 
 class ClientTests(unittest.TestCase):
+    def test_user_list_compares_awg_without_printing_keys(self):
+        vault = Vault()
+        vault.items["pino-vpn-server-mosk"]["notes"] += "\n[Peer]\n# phone\nPublicKey = public-fixture\nAllowedIPs = 10.77.0.2/32\n"
+        output = io.StringIO()
+        with patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="peer: public-fixture\npeer: unknown-fixture\n")), redirect_stdout(output):
+            client.list_users(vault, "awg", "mosk")
+        self.assertIn("phone\tpresent", output.getvalue())
+        self.assertIn("server only", output.getvalue())
+        self.assertNotIn("fixture", output.getvalue())
+
+    def test_user_list_compares_xray_names(self):
+        vault = Vault()
+        vault.items["pino-xray-mosk"] = {"notes": json.dumps({"users": {"alice": "a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1", "bob": "b2b2b2b2-b2b2-4b2b-8b2b-b2b2b2b2b2b2"}})}
+        output = io.StringIO()
+        digest = hashlib.sha256(b"a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1").hexdigest()
+        with patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=f"alice\t{digest}\ncarol\t{'0' * 64}\n")), redirect_stdout(output):
+            client.list_users(vault, "xray", "mosk")
+        self.assertIn("alice\tpresent", output.getvalue())
+        self.assertIn("bob\tvault only", output.getvalue())
+        self.assertIn("carol\tserver only", output.getvalue())
+        self.assertNotIn("a1a1a1a1", output.getvalue())
+
     def test_halos_client_and_removal_leave_mosk_untouched(self):
         vault = Vault()
         mosk = copy.deepcopy(vault.items["pino-vpn-server-mosk"])
@@ -265,9 +289,9 @@ class ClientTests(unittest.TestCase):
 
     def test_deploy_uses_current_pino_namespace(self):
         vault = SimpleNamespace(env={})
-        with patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+        with patch.dict(os.environ, {"PINO_PROVISION_SEND": "/fixture/send"}), patch.object(client.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
             client.deploy_server(vault, "mosk")
-        self.assertEqual(run.call_args.args[0][:4], ["pino", "os", "provision", "send"])
+        self.assertEqual(run.call_args.args[0][:2], ["/fixture/send", "send"])
 
     def test_duplicate_peer_removal_fails_without_changes(self):
         vault = Vault()

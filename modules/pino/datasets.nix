@@ -28,7 +28,7 @@ in {
     });
   };
   config.pino.subcommands = {
-    backup.commands.datasets = {
+    data.commands.backup.commands.datasets = {
       description = "Compare and back up configured personal directories";
       usage = "[name] <external-disk> [--mode update|mirror] [--dry-run]";
       helpText = ''
@@ -39,7 +39,7 @@ in {
       '';
       script = ''exec ${sync} backup "$@"'';
     };
-    restore.commands.datasets = {
+    data.commands.restore.commands.datasets = {
       description = "Compare and restore configured personal directories";
       usage = "[name] <external-disk> [--dry-run]";
       script = ''exec ${sync} restore "$@"'';

@@ -43,19 +43,19 @@ class PopulateTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertIn(["game-setup"], calls)
 
-    def test_failed_vault_and_incomplete_import_do_not_block_local_apps(self):
+    def test_incomplete_import_does_not_block_local_apps_or_provision_secrets(self):
         config = {"provision": True, "artifacts": True, "steps": {"app": {"command": ["install"]}}}
         status, calls = self.run_populate(config, {
-            ("pino", "os", "provision", "install"): 1,
-            ("pino", "restore", "artifacts", "/disk"): 2,
+            ("pino", "data", "restore", "artifacts", "/disk"): 2,
         }, disk=Path("/disk"))
-        self.assertEqual(status, 1)
+        self.assertEqual(status, 2)
+        self.assertNotIn(["pino", "os", "provision"], calls)
         self.assertEqual(calls[-1], ["install"])
 
-    def test_server_without_disk_provisions_only(self):
+    def test_server_without_steps_does_not_provision(self):
         config = {"provision": True, "artifacts": False, "steps": {}}
         status, calls = self.run_populate(config, {})
-        self.assertEqual((status, calls), (0, [["pino", "os", "provision", "install"]]))
+        self.assertEqual((status, calls), (0, []))
 
     def test_missing_mount_prevents_application_writes(self):
         config = {"provision": False, "artifacts": False, "steps": {
@@ -76,11 +76,6 @@ class PopulateTests(unittest.TestCase):
             "app": {"prerequisite": "broken-check", "command": ["install"]}}}
         status, calls = self.run_populate(config, {("broken-check",): 1})
         self.assertEqual((status, calls), (1, [["broken-check"]]))
-
-    def test_skip_vault_is_explicit_and_does_not_prompt(self):
-        config = {"provision": True, "artifacts": False, "steps": {}}
-        status, calls = self.run_populate(config, {}, skip_secrets=True)
-        self.assertEqual((status, calls), (0, []))
 
 
 class AssettoPrerequisiteTests(unittest.TestCase):

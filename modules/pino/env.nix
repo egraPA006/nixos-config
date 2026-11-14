@@ -1,207 +1,150 @@
-{ lib, pkgs, ... }:
-
+{ config, lib, pkgs, ... }:
 let
-  mkTemplate = name: packages: pkgs.writeText "pino-env-${name}-flake.nix" ''
-    {
-      description = "Pino ${name} development environment";
-      inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-      outputs = { nixpkgs, ... }: let
-        pkgs = nixpkgs.legacyPackages.x86_64-linux;
-      in {
-        devShells.x86_64-linux.default = pkgs.mkShell {
-          packages = with pkgs; [ ${lib.concatStringsSep " " packages} ];
-        };
-      };
-    }
-  '';
+  declared = config.pino.environments;
+  environments = lib.mapAttrs (name: packages: pkgs.buildEnv {
+    name = "pino-env-${name}";
+    paths = packages;
+  }) declared;
+  declaredCases = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: path:
+    "${lib.escapeShellArg name}) printf '%s\\n' ${lib.escapeShellArg (toString path)} ;;") environments);
+  declaredNames = lib.concatStringsSep " " (map lib.escapeShellArg (builtins.attrNames declared));
   presets = {
     empty = [ ];
     cpp = [ "gcc" "clang" "clang-tools" "cmake" "meson" "ninja" "pkg-config" "gdb" ];
     python = [ "python3" "python3Packages.pip" "python3Packages.virtualenv" ];
     verilog = [ "iverilog" "verilator" "gtkwave" ];
   };
-  templates = lib.mapAttrs (name: packages: mkTemplate name packages)
-    (lib.removeAttrs presets [ "empty" ]);
-  presetNames = builtins.attrNames presets;
-  projectPresetNames = builtins.attrNames templates;
   presetCases = lib.concatStringsSep "\n" (lib.mapAttrsToList
     (name: packages: "${name}) packages=(${lib.concatStringsSep " " packages}) ;;") presets);
-  templateCases = lib.concatStringsSep "\n" (lib.mapAttrsToList
-    (name: path: "${name}) template=${lib.escapeShellArg path} ;;") templates);
+  presetList = lib.concatStringsSep "\n" (lib.mapAttrsToList
+    (name: packages: "printf '%-12s %s\\n' ${lib.escapeShellArg name} ${lib.escapeShellArg (if packages == [ ] then "(empty)" else lib.concatStringsSep " " packages)}") presets);
 in
 {
-  pino.subcommands.env = {
-    description = "Manage isolated package environments and project dev shells";
-    commands = {
-      list.description = "List personal package environments";
-      create = {
-        description = "Create a persistent package environment";
-        usage = "<name> [empty|cpp|python|verilog]";
-      };
-      enter = {
-        description = "Enter a personal package environment";
-        usage = "<name>";
-      };
-      add = {
-        description = "Add a persistent package to an environment";
-        usage = "[name] <nixpkgs-package>";
-      };
-      delete = {
-        description = "Delete an environment and its packages";
-        usage = "<name>";
-      };
-      export = {
-        description = "Export an environment as a dev-shell flake";
-        usage = "<name> [path]";
-      };
-      init = {
-        description = "Create a preset project dev-shell flake";
-        usage = "<cpp|python|verilog> [path]";
-      };
-    };
-    helpText = ''
-      Personal environments isolate package profiles, not files, processes, or
-      networking. Inside one, `pino env add <package>` adds only to that
-      environment. Export writes its package list as a reusable flake.nix.
-    '';
-    script = ''
-      env_root="''${XDG_DATA_HOME:-$HOME/.local/share}/pino/envs"
+  options.pino.environments = lib.mkOption {
+    type = lib.types.attrsOf (lib.types.listOf lib.types.package);
+    default = { };
+    description = "Named, system-declared package environments; changes apply on rebuild.";
+    example = lib.literalExpression ''{ cpp = with pkgs; [ gcc cmake ]; }'';
+  };
 
-      valid_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]]; }
-      valid_package() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; }
-      env_path() { printf '%s/%s\n' "$env_root" "$1"; }
-      require_env() {
-        [ -d "$(env_path "$1")" ] || {
-          echo "Environment does not exist: $1" >&2
-          exit 1
+  config = {
+    assertions = lib.mapAttrsToList (name: _: {
+      assertion = builtins.match "[A-Za-z0-9][A-Za-z0-9_-]{0,63}" name != null;
+      message = "Invalid pino.environments name: ${name}";
+    }) declared;
+    pino.subcommands.os.commands.env = {
+      description = "Manage named user and declarative package environments";
+      commands = {
+        list.description = "List declarative and local environments";
+        templates.description = "List environment templates and their packages";
+        create = { description = "Create a local environment"; usage = "<name> [empty|cpp|python|verilog]"; };
+        enter = { description = "Enter an environment"; usage = "<name>"; };
+        add = { description = "Add a package to a local environment"; usage = "<name> <nixpkgs-package>"; };
+        remove = { description = "Remove a package from a local environment"; usage = "<name> <nixpkgs-package>"; };
+        delete = { description = "Delete a local environment"; usage = "<name>"; };
+      };
+      helpText = ''
+        Declare pino.environments.<name> as a list of Nix packages and rebuild.
+        Declarative environments cannot be changed with create/add/remove/delete.
+        Local environments live in ~/.local/share/pino/envs and do not require rebuild.
+        Environments change PATH; they do not isolate files, processes or networking.
+      '';
+      script = ''
+        env_root="''${XDG_DATA_HOME:-$HOME/.local/share}/pino/envs"
+        valid_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]]; }
+        valid_package() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; }
+        env_path() { printf '%s/%s\n' "$env_root" "$1"; }
+        declared_path() {
+          case "$1" in
+            ${declaredCases}
+            *) return 1 ;;
+          esac
         }
-      }
-      add_package() {
-        local name="$1" package="$2" target profile manifest
-        valid_name "$name" || { echo "Invalid environment name: $name" >&2; exit 1; }
-        valid_package "$package" || { echo "Invalid nixpkgs package: $package" >&2; exit 1; }
-        require_env "$name"
-        target="$(env_path "$name")"
-        profile="$target/profile"
-        manifest="$target/packages"
-        if ${pkgs.gnugrep}/bin/grep -qxF "$package" "$manifest"; then
-          echo "$package is already present in $name."
-          return
-        fi
-        ${pkgs.nix}/bin/nix profile add --profile "$profile" "nixpkgs#$package"
-        printf '%s\n' "$package" >> "$manifest"
-        echo "Added $package to $name."
-      }
-
-      case "''${1:-}" in
-        list)
-          if [ -d "$env_root" ]; then
-            ${pkgs.findutils}/bin/find "$env_root" -mindepth 1 -maxdepth 1 \
-              -type d -printf '%f\n' | ${pkgs.coreutils}/bin/sort
+        require_local() {
+          valid_name "$1" || { echo "Invalid environment name." >&2; exit 1; }
+          if declared_path "$1" >/dev/null; then
+            echo "Environment $1 is declarative; change pino.environments and rebuild." >&2; exit 1
           fi
-          ;;
-        create)
-          name="''${2:-}"
-          preset="''${3:-empty}"
-          valid_name "$name" || {
-            echo "Usage: pino env create <name> [${lib.concatStringsSep "|" presetNames}]" >&2
-            exit 1
-          }
-          case "$preset" in
-            ${presetCases}
-            *) echo "Unknown preset: $preset" >&2; exit 1 ;;
-          esac
+          [ -d "$(env_path "$1")" ] || { echo "Environment does not exist: $1" >&2; exit 1; }
+        }
+        add_package() {
+          local name="$1" package="$2" target
+          require_local "$name"
+          valid_package "$package" || { echo "Invalid nixpkgs package." >&2; exit 1; }
           target="$(env_path "$name")"
-          [ ! -e "$target" ] || { echo "Environment already exists: $name" >&2; exit 1; }
-          ${pkgs.coreutils}/bin/mkdir -p "$target"
-          : > "$target/packages"
-          for package in "''${packages[@]}"; do add_package "$name" "$package"; done
-          echo "Created $name. Enter it with: pino env enter $name"
-          ;;
-        enter)
-          name="''${2:-}"
-          valid_name "$name" || { echo "Usage: pino env enter <name>" >&2; exit 1; }
-          require_env "$name"
-          target="$(env_path "$name")"
-          export PINO_ENV="$name"
-          export PINO_ENV_ROOT="$target"
-          export PATH="$target/profile/bin:$PATH"
-          echo "Entering $name (package isolation only). Exit the shell to leave."
-          exec "''${SHELL:-${pkgs.bashInteractive}/bin/bash}"
-          ;;
-        add)
-          if [ -n "''${PINO_ENV:-}" ] && [ "$#" -eq 2 ]; then
-            name="$PINO_ENV"
-            package="$2"
-          else
+          if ${pkgs.gnugrep}/bin/grep -qxF "$package" "$target/packages"; then
+            echo "$package is already present in $name."; return
+          fi
+          ${pkgs.nix}/bin/nix profile add --profile "$target/profile" "nixpkgs#$package"
+          printf '%s\n' "$package" >> "$target/packages"
+          echo "Added $package to $name."
+        }
+        case "''${1:-}" in
+          templates)
+            ${presetList}
+            ;;
+          list)
+            for name in ${declaredNames}; do printf '%-20s %s\n' "$name" declarative; done
+            if [ -d "$env_root" ]; then
+              while IFS= read -r name; do
+                if declared_path "$name" >/dev/null; then
+                  printf '%-20s %s\n' "$name" 'local (name conflict)'
+                else
+                  printf '%-20s %s\n' "$name" local
+                fi
+              done < <(${pkgs.findutils}/bin/find "$env_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | ${pkgs.coreutils}/bin/sort)
+            fi
+            ;;
+          create)
+            name="''${2:-}"; preset="''${3:-empty}"
+            valid_name "$name" || { echo 'Usage: pino os env create <name> [preset]' >&2; exit 1; }
+            if declared_path "$name" >/dev/null; then echo "Environment $name is declarative." >&2; exit 1; fi
+            case "$preset" in ${presetCases} *) echo "Unknown preset: $preset" >&2; exit 1 ;; esac
+            target="$(env_path "$name")"
+            [ ! -e "$target" ] || { echo "Environment already exists: $name" >&2; exit 1; }
+            ${pkgs.coreutils}/bin/mkdir -p "$target"
+            : > "$target/packages"
+            for package in "''${packages[@]}"; do add_package "$name" "$package"; done
+            echo "Created $name. Enter it with: pino os env enter $name"
+            ;;
+          enter)
             name="''${2:-}"
-            package="''${3:-}"
-            [ "$#" -eq 3 ] || { echo "Usage: pino env add [name] <nixpkgs-package>" >&2; exit 1; }
-          fi
-          add_package "$name" "$package"
-          ;;
-        delete)
-          name="''${2:-}"
-          valid_name "$name" || { echo "Usage: pino env delete <name>" >&2; exit 1; }
-          require_env "$name"
-          target="$(env_path "$name")"
-          read -r -p "Type 'delete $name' to remove its package profile: " answer
-          [ "$answer" = "delete $name" ] || { echo "Cancelled."; exit 0; }
-          ${pkgs.coreutils}/bin/rm -rf -- "$target"
-          echo "Deleted $name. Project files were not touched."
-          ;;
-        export)
-          name="''${2:-}"
-          valid_name "$name" || { echo "Usage: pino env export <name> [path]" >&2; exit 1; }
-          require_env "$name"
-          source="$(env_path "$name")/packages"
-          target="''${3:-./$name-env}"
-          [ ! -e "$target/flake.nix" ] || {
-            echo "Refusing to overwrite $target/flake.nix" >&2
-            exit 1
-          }
-          ${pkgs.coreutils}/bin/mkdir -p "$target"
-          {
-            printf '{\n'
-            printf '  description = "Exported Pino environment %s";\n' "$name"
-            printf '  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";\n'
-            printf '  outputs = { nixpkgs, ... }: let\n'
-            printf '    pkgs = nixpkgs.legacyPackages.x86_64-linux;\n'
-            printf '  in {\n'
-            printf '    devShells.x86_64-linux.default = pkgs.mkShell {\n'
-            printf '      packages = with pkgs; [\n'
-            while IFS= read -r package; do printf '        %s\n' "$package"; done < "$source"
-            printf '      ];\n'
-            printf '    };\n'
-            printf '  };\n'
-            printf '}\n'
-          } > "$target/flake.nix"
-          echo "Exported $name to $target/flake.nix"
-          ;;
-        init)
-          preset="''${2:-}"
-          case "$preset" in
-            ${templateCases}
-            *) echo "Usage: pino env init <${lib.concatStringsSep "|" projectPresetNames}> [path]" >&2; exit 1 ;;
-          esac
-          target="''${3:-.}"
-          [ ! -e "$target/flake.nix" ] || {
-            echo "Refusing to overwrite $target/flake.nix" >&2
-            exit 1
-          }
-          ${pkgs.coreutils}/bin/mkdir -p "$target"
-          ${pkgs.coreutils}/bin/cp "$template" "$target/flake.nix"
-          echo "Created $preset dev shell at $target/flake.nix"
-          echo "Enter it with: nix develop $target"
-          ;;
-        *) echo "Run 'pino env help' for usage." >&2; exit 1 ;;
-      esac
-    '';
-    fishCompletions = ''
-      complete -c pino -f -n '__fish_pino_at_path env create' \
-        -a '${lib.concatStringsSep " " presetNames}' -d 'Environment preset'
-      complete -c pino -f -n '__fish_pino_at_path env init' \
-        -a '${lib.concatStringsSep " " projectPresetNames}' -d 'Development environment preset'
-    '';
+            valid_name "$name" || { echo 'Usage: pino os env enter <name>' >&2; exit 1; }
+            if target="$(declared_path "$name")"; then
+              [ ! -d "$(env_path "$name")" ] || { echo "Local and declarative environments share name $name; resolve the conflict." >&2; exit 1; }
+            else
+              require_local "$name"
+              target="$(env_path "$name")/profile"
+            fi
+            export PINO_ENV="$name"
+            export PATH="$target/bin:$PATH"
+            echo "Entering $name. Exit the shell to leave."
+            exec "''${SHELL:-${pkgs.bashInteractive}/bin/bash}"
+            ;;
+          add|remove)
+            [ "$#" -eq 3 ] || { echo 'Usage: pino os env <add|remove> <name> <package>' >&2; exit 1; }
+            name="$2"; package="$3"
+            if [ "$1" = add ]; then add_package "$name" "$package"; else
+              require_local "$name"
+              valid_package "$package" || { echo 'Invalid nixpkgs package.' >&2; exit 1; }
+              target="$(env_path "$name")"
+              ${pkgs.gnugrep}/bin/grep -qxF "$package" "$target/packages" || { echo "Package not in $name: $package" >&2; exit 1; }
+              ${pkgs.nix}/bin/nix profile remove --profile "$target/profile" "$package"
+              ${pkgs.gnugrep}/bin/grep -vxF "$package" "$target/packages" > "$target/packages.new" || true
+              ${pkgs.coreutils}/bin/mv "$target/packages.new" "$target/packages"
+              echo "Removed $package from $name."
+            fi
+            ;;
+          delete)
+            name="''${2:-}"; require_local "$name"
+            read -r -p "Type 'delete $name' to remove its local package profile: " answer
+            [ "$answer" = "delete $name" ] || { echo 'Cancelled.'; exit 0; }
+            ${pkgs.coreutils}/bin/rm -rf -- "$(env_path "$name")"
+            echo "Deleted $name."
+            ;;
+          *) echo "Run 'pino os env help' for usage." >&2; exit 1 ;;
+        esac
+      '';
+    };
   };
 }
