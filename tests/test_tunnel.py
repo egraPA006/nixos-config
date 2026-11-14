@@ -44,6 +44,7 @@ class TunnelTests(unittest.TestCase):
     def test_dns_preserves_system_resolver_and_awg_ipv6_cannot_fall_back(self):
         config = tunnel.router_config("awg", "halos", "eth0", {"default": "vpn", "apps": {"firefox": "direct"}})
         self.assertNotIn("dns", config)
+        self.assertEqual(config["inbounds"][0]["dns_mode"], "disabled")
         rules = config["route"]["rules"]
         self.assertEqual(rules[0], {"port": 53, "action": "route", "outbound": "direct"})
         self.assertEqual(rules[1]["outbound"], "direct")

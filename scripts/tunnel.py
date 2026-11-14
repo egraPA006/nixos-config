@@ -74,6 +74,7 @@ def router_config(kind, interface, physical, policy, profile_dns=False):
         "log": {"disabled": True},
         "inbounds": [{"type": "tun", "tag": "tun", "interface_name": "pino-tun",
                       "address": ["172.31.255.1/30", "fdfe:7069:6e6f::1/126"],
+                      "dns_mode": "disabled",
                       "auto_route": True, "strict_route": True, "stack": "mixed",
                       "iproute2_table_index": 2022, "iproute2_rule_index": 9000}],
         "outbounds": [direct, vpn],
