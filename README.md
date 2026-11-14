@@ -802,49 +802,24 @@ pino vpn disconnect
 on both Mosk and Halos. `pino vpn list` shows both connection types.
 Only one Pino system tunnel is selected at a time: `pino vpn connect awg halos`
 selects AWG and `pino vpn connect xray halos` selects Xray. The selected connection
-autostarts after reboot; disconnect disables autostart. Existing legacy AWG
-autostart is migrated when the connection is next selected with `pino vpn connect`.
+autostarts after reboot; disconnect disables autostart. AWG uses its ordinary
+`awg-quick` service. An AWG selection from the old tunnel supervisor is migrated
+to the ordinary AWG autostart at boot.
 
-Both connections use the same application split policy, with all local TCP/UDP
-traffic through VPN by default:
+Xray runs a local SOCKS5 proxy on `127.0.0.1:10808`; it does not change system routes.
+Select its use from a GNOME session after connecting Xray:
 
 ```bash
-pino vpn split add direct firefox
-pino vpn split add direct Telegram
-pino vpn split list
-pino vpn split remove firefox
-# Alternatively, send only selected applications through the tunnel:
-pino vpn split default direct
-pino vpn split add vpn firefox
-# Restore all-applications-through-VPN as the default:
-pino vpn split default vpn
+pino vpn split on        # GNOME system proxy for applications that honor it
+pino vpn split chromium  # only Chromium, using the Pino launcher
+pino vpn split off       # disable both
 ```
 
-`pino xray split` is the same policy. Rules match the actual executable basename
-or an absolute executable path, not destination IPs. Nix `.name-wrapped` binaries
-also match `name`; rules are case-sensitive. For applications with separate
-network helper processes, add those executables too. A path rule uses the actual
-executable path (`readlink /proc/<pid>/exe`), not a symlink or desktop launcher.
-Changes restart the tunnel; restart existing application connections as well.
-
-The shared TUN routes application traffic through AWG or a loopback-only Xray
-SOCKS listener. With full AWG routing, a DNS server specified in the AWG profile
-is used through the VPN. With split rules, the AWG DNS field is ignored and the
-system resolver is used directly. Without a profile DNS, and for Xray, the system
-resolver is used directly. DNS-over-HTTPS configured by applications follows their
-own application routing rules.
-Bootstrap resolution of the server name happens before connection. AWG profiles are IPv4-only, so IPv6 for their
-VPN-routed applications is rejected instead of leaking directly. Direct apps
-may use native IPv6; Xray carries IPv6 if the server has IPv6 connectivity.
-Xray is a TCP/UDP proxy, not an arbitrary-IP tunnel. There is no persistent kill
-switch after the tunnel stops or fails. Reconnect after changing the physical
-network interface. Ordinary hotspot traffic is excluded from this host's TUN;
-explicit `pino vpn share start` remains AWG-only.
-
-`tests/check_tunnel_runtime.py` runs under `unshare -Urn` with the built sing-box,
-Xray, curl and awg binaries. It uses an actual AmneziaWG kernel tunnel with
-synthetic credentials and an Xray SOCKS listener in an isolated network to
-check process splitting to the same destination, DNS, IPv6 and route cleanup.
+Completely close and reopen Chromium after changing modes. The GNOME setting may
+also affect other applications, while applications that ignore it remain direct.
+Chromium SOCKS proxies TCP URL traffic, not all UDP. AWG remains an independent
+`awg-quick` connection with its own routes and DNS; IPv6 is not blocked by the
+IPv4-only AWG profiles. The proxy is not a network-wide VPN or kill switch.
 
 To revoke a device and remove both client records:
 

@@ -1,4 +1,12 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
+let
+  chromiumLauncher = pkgs.writeShellScriptBin "chromium" ''
+    if [ -f "''${XDG_CONFIG_HOME:-$HOME/.config}/pino/chromium-proxy" ]; then
+      exec ${pkgs.chromium}/bin/chromium --proxy-server=socks5://127.0.0.1:10808 "$@"
+    fi
+    exec ${pkgs.chromium}/bin/chromium "$@"
+  '';
+in
 {
   programs.chromium = {
     enable = true;
@@ -13,7 +21,7 @@
 
   environment.systemPackages = with pkgs; [
     telegram-desktop
-    chromium
+    (lib.hiPrio chromiumLauncher)
     libreoffice
     imagemagick
     bitwarden-desktop

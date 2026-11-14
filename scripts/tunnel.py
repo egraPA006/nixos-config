@@ -187,17 +187,18 @@ def serve():
     selected = json.loads((STATE / "selected.json").read_text())
     kind, name = selected["kind"], selected["name"]
     validate_connection(kind, name)
+    if kind != "xray":
+        raise ValueError("AWG must use the direct AmneziaWG service")
     routes = json.loads(run("ip", "-j", "-4", "route", "show", "default").stdout)
     if not routes:
         raise ValueError("No physical IPv4 default route")
     physical = routes[0]["dev"]
-    check_router_resources()
-    if kind == "awg" and run("ip", "link", "show", name, check=False).returncode == 0:
-        raise ValueError("AWG interface already exists")
     RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
-    write_json(RUNTIME / "owned.json", selected)
-    children = []
-    awg_path = RUNTIME / f"{name}.conf"
+    config = xray_config(json.loads(Path(f"/etc/pino/xray-client/{name}.json").read_text()), physical)
+    write_json(RUNTIME / "xray.json", config)
+    run("xray", "run", "-test", "-config", str(RUNTIME / "xray.json"))
+    child = subprocess.Popen(["xray", "run", "-config", str(RUNTIME / "xray.json")],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     stopping = False
 
     def stop(_signum, _frame):
@@ -207,62 +208,28 @@ def serve():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     try:
-        # Marked transport sockets bypass TUN, including kernel AWG packets.
-        for family in ("-4", "-6"):
-            run("ip", family, "rule", "add", "priority", "100", "fwmark", str(DIRECT_MARK), "lookup", "main")
-        policy = read_policy()
-        profile_dns = False
-        if kind == "awg":
-            source = Path(f"/etc/amneziawg/{name}.conf").read_text()
-            profile_dns = has_profile_dns(source)
-            full_vpn = policy["default"] == "vpn" and not policy["apps"]
-            awg_path.write_text(awg_config(source, use_profile_dns=full_vpn))
-            awg_path.chmod(0o600)
-            run("awg-quick", "up", str(awg_path))
-            run("ip", "-4", "route", "add", "default", "dev", name, "table", str(VPN_MARK))
-            run("ip", "-4", "rule", "add", "priority", "101", "fwmark", str(VPN_MARK), "lookup", str(VPN_MARK))
-        else:
-            config = xray_config(json.loads(Path(f"/etc/pino/xray-client/{name}.json").read_text()), physical)
-            write_json(RUNTIME / "xray.json", config)
-            run("xray", "run", "-test", "-config", str(RUNTIME / "xray.json"))
-            children.append(subprocess.Popen(["xray", "run", "-config", str(RUNTIME / "xray.json")],
-                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-            for _ in range(100):
-                if children[0].poll() is not None:
-                    raise ValueError("Xray client exited during startup")
-                try:
-                    with socket.create_connection(("127.0.0.1", 10808), timeout=.1):
-                        break
-                except OSError:
-                    time.sleep(.05)
-            else:
-                raise ValueError("Xray SOCKS listener did not start")
-        write_json(RUNTIME / "router.json", router_config(kind, name, physical, policy, profile_dns))
-        run("sing-box", "check", "-c", str(RUNTIME / "router.json"))
-        children.append(subprocess.Popen(["sing-box", "run", "-c", str(RUNTIME / "router.json")],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         for _ in range(100):
-            if any(child.poll() is not None for child in children):
-                raise ValueError("Tunnel process exited during startup")
-            if Path("/sys/class/net/pino-tun").exists():
-                run("systemd-notify", "--ready")
-                break
-            time.sleep(.1)
+            if child.poll() is not None:
+                raise ValueError("Xray client exited during startup")
+            try:
+                with socket.create_connection(("127.0.0.1", 10808), timeout=.1):
+                    break
+            except OSError:
+                time.sleep(.05)
         else:
-            raise ValueError("TUN interface did not start")
+            raise ValueError("Xray SOCKS listener did not start")
+        run("systemd-notify", "--ready")
         while not stopping:
-            if any(child.poll() is not None for child in children):
-                raise ValueError("Tunnel process exited")
+            if child.poll() is not None:
+                raise ValueError("Xray client exited")
             time.sleep(.2)
     finally:
-        for child in reversed(children):
-            child.terminate()
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait()
-        cleanup_owned()
+        child.terminate()
+        try:
+            child.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait()
 
 
 def validate_connection(kind, name):
@@ -288,6 +255,8 @@ def main():
                 raise ValueError("connect requires kind and name")
             kind, name = args.args
             validate_connection(kind, name)
+            if kind != "xray":
+                raise ValueError("AWG must use the direct AmneziaWG service")
             path = Path(f"/etc/amneziawg/{name}.conf" if kind == "awg" else f"/etc/pino/xray-client/{name}.json")
             if not path.is_file():
                 raise ValueError("Connection is not provisioned locally")
@@ -331,7 +300,13 @@ def main():
             if action == "list" and len(args.args) <= 1:
                 print(json.dumps(policy, indent=2))
                 return 0
-            if action == "default" and len(args.args) == 2 and args.args[1] in ("vpn", "direct"):
+            if action == "on" and len(args.args) == 1:
+                policy = {"default": "direct", "apps": {"chromium": "vpn"}}
+            elif action == "off" and len(args.args) == 1:
+                policy = {"default": "vpn", "apps": {}}
+            elif action in ("vpn", "direct") and len(args.args) == 1:
+                policy["default"] = action
+            elif action == "default" and len(args.args) == 2 and args.args[1] in ("vpn", "direct"):
                 policy["default"] = args.args[1]
             elif action == "add" and len(args.args) == 3 and args.args[1] in ("vpn", "direct"):
                 application = args.args[2]
@@ -341,7 +316,8 @@ def main():
             elif action == "remove" and len(args.args) == 2:
                 policy["apps"].pop(args.args[1], None)
             else:
-                raise ValueError("split: list | default vpn/direct | add vpn/direct executable | remove executable")
+                print("Usage: pino vpn split [list | on | off | vpn | direct | default vpn/direct | add vpn/direct executable | remove executable]", file=sys.stderr)
+                return 1
             write_json(STATE / "split.json", policy)
             if run("systemctl", "is-active", "--quiet", SERVICE, check=False).returncode == 0:
                 run("systemctl", "restart", SERVICE)

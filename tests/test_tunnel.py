@@ -3,6 +3,9 @@ import json
 from pathlib import Path
 import re
 import tempfile
+import sys
+import os
+import subprocess
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -14,6 +17,54 @@ spec.loader.exec_module(tunnel)
 
 
 class TunnelTests(unittest.TestCase):
+    def test_desktop_proxy_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "systemctl").write_text("#!/bin/sh\nexit 0\n")
+            (root / "gsettings").write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HOME/gsettings.log\"\n")
+            (root / "systemctl").chmod(0o755)
+            (root / "gsettings").chmod(0o755)
+            env = {**os.environ, "HOME": directory, "XDG_CONFIG_HOME": str(root / "config"),
+                   "GSETTINGS": str(root / "gsettings"), "PATH": directory + ":" + os.environ["PATH"]}
+            marker = root / "config/pino/chromium-proxy"
+            for mode in ("chromium", "on", "off"):
+                subprocess.run(["bash", str(ROOT / "modules/pino/vpn.sh"), "split", mode],
+                               env=env, check=True, capture_output=True, text=True)
+                self.assertEqual(marker.exists(), mode == "chromium")
+            log = (root / "gsettings.log").read_text()
+            self.assertIn("set org.gnome.system.proxy.socks host 127.0.0.1", log)
+            self.assertIn("set org.gnome.system.proxy mode manual", log)
+            self.assertTrue(log.rstrip().endswith("set org.gnome.system.proxy mode none"))
+
+    def test_supervisor_refuses_old_awg_selection_before_changing_routes(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(tunnel, "STATE", Path(directory)), \
+             patch.object(tunnel, "run") as run:
+            (Path(directory) / "selected.json").write_text(json.dumps({"kind": "awg", "name": "mosk"}))
+            with self.assertRaises(ValueError):
+                tunnel.serve()
+            run.assert_not_called()
+
+    def test_split_presets_replace_previous_rules(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(tunnel, "STATE", Path(directory)), \
+             patch.object(tunnel.os, "geteuid", return_value=0), \
+             patch.object(tunnel, "run", return_value=SimpleNamespace(returncode=1)):
+            for command, expected in (("on", {"default": "direct", "apps": {"chromium": "vpn"}}),
+                                      ("off", {"default": "vpn", "apps": {}})):
+                with patch.object(sys, "argv", ["pino-tunnel", "split", command]):
+                    self.assertEqual(tunnel.main(), 0)
+                self.assertEqual(json.loads((Path(directory) / "split.json").read_text()), expected)
+            regex = tunnel.app_rule("chromium", "vpn")["process_path_regex"][0]
+            self.assertRegex("/nix/store/hash-chromium-unwrapped/libexec/chromium/chromium", regex)
+
+    def test_split_short_commands_update_default(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(tunnel, "STATE", Path(directory)), \
+             patch.object(tunnel.os, "geteuid", return_value=0), \
+             patch.object(tunnel, "run", return_value=SimpleNamespace(returncode=1)):
+            for value in ("direct", "vpn"):
+                with patch.object(sys, "argv", ["pino-tunnel", "split", value]):
+                    self.assertEqual(tunnel.main(), 0)
+                self.assertEqual(json.loads((Path(directory) / "split.json").read_text())["default"], value)
+
     def test_cleanup_never_touches_network_without_ownership_marker(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(tunnel, "RUNTIME", Path(directory)), patch.object(tunnel, "run") as run:
             tunnel.cleanup_owned()

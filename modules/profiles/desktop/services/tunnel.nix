@@ -2,7 +2,7 @@
 let
   supervisor = pkgs.writeShellApplication {
     name = "pino-tunnel";
-    runtimeInputs = with pkgs; [ python3 iproute2 systemd amneziawg-tools sing-box xray ];
+    runtimeInputs = with pkgs; [ python3 iproute2 systemd amneziawg-tools xray ];
     text = ''exec python3 ${../../../../scripts/tunnel.py} "$@"'';
   };
   tunnel = "${supervisor}/bin/pino-tunnel";
@@ -14,7 +14,7 @@ in {
 
   systemd.tmpfiles.rules = [ "d /etc/pino/xray-client 0700 root root -" ];
   systemd.services.pino-tunnel = {
-    description = "Pino system tunnel with application routing";
+    description = "Pino Xray local SOCKS proxy";
     wants = [ "network-online.target" ];
     after = [ "network-online.target" "amneziawg-autostart.service" ];
     wantedBy = [ "multi-user.target" ];
@@ -37,23 +37,12 @@ in {
       RestartSec = 5;
     };
   };
-  # Application rules apply to this host, never to forwarded hotspot traffic.
-  networking.nftables.tables.pino_tunnel_forward_guard = {
-    family = "inet";
-    content = ''
-      chain forward {
-        type filter hook forward priority -25; policy accept;
-        oifname "pino-tun" drop
-      }
-    '';
-  };
-
   pino.subcommands.vpn.commands.split = {
-    description = "Shared AWG/Xray application rules; default is all applications through VPN";
-    usage = "[list | default vpn/direct | add vpn/direct executable | remove executable]";
+    description = "Set GNOME or Chromium proxy mode for Xray";
+    usage = "<on|off|chromium>";
   };
   pino.subcommands.xray = {
-    description = "Xray users and full-system desktop connections";
+    description = "Xray users and local proxy connections";
     commands = {
       add-client = {
         description = "Save a client and VLESS URI in Bitwarden, then deploy the server";
@@ -63,13 +52,13 @@ in {
         description = "Revoke a server user and trash its client records";
         usage = "<mosk|halos> <name> [--yes]";
       };
-      connect = { description = "Select and autostart a full-system Xray connection"; usage = "<name>"; };
+      connect = { description = "Select and autostart a local Xray proxy"; usage = "<name>"; };
       disconnect.description = "Stop the selected system tunnel and disable autostart";
       status.description = "Show the selected system tunnel";
       list.description = "List provisioned Xray connections";
       split = {
-        description = "Shared application routing; same policy as pino vpn split";
-        usage = "[list | default vpn/direct | add vpn/direct executable | remove executable]";
+        description = "Set GNOME or Chromium proxy mode";
+        usage = "<on|off|chromium>";
       };
     };
     script = ''
@@ -91,7 +80,7 @@ in {
         disconnect) exec pino vpn disconnect all ;;
         status) exec sudo ${tunnel} status ;;
         list) exec sudo ${tunnel} list xray ;;
-        split) shift; exec sudo ${tunnel} split "$@" ;;
+        split) shift; exec pino vpn split "$@" ;;
         *) echo "Run 'pino xray help' for usage." >&2; exit 1 ;;
       esac
     '';

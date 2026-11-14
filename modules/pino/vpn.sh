@@ -54,7 +54,6 @@ guard_restore() {
 }
 
 active_connection() {
-  if sudo "$PINO_TUNNEL" active-awg 2>/dev/null; then return; fi
   local unit name
   mapfile -t units < <(systemctl list-units --type=service --state=active --plain --no-legend 'amneziawg@*.service' | awk '{print $1}')
   [ "${#units[@]}" -eq 1 ] || { echo "VPN sharing requires exactly one active connection." >&2; return 1; }
@@ -102,10 +101,6 @@ share_start() {
   printf '%s\n' "$previous" | sudo tee "$share_state/ip_forward" >/dev/null
   sudo nft -f - <<EOF
 table inet $share_table {
-  chain prerouting {
-    type filter hook prerouting priority mangle; policy accept;
-    iifname "$wifi" meta mark set 2025
-  }
   chain forward {
     type filter hook forward priority -20; policy accept;
     iifname "$wifi" oifname "$vpn" accept
@@ -130,7 +125,14 @@ EOF
 case "${1:-}" in
   list)
     echo 'AWG:'
-    sudo "$PINO_TUNNEL" list awg
+    selected="$(sudo cat "$marker" 2>/dev/null || true)"
+    printf '%-18s %-10s %s\n' CONNECTION ACTIVE AUTOSTART
+    while IFS= read -r name; do
+      active=no; autostart=no
+      systemctl is-active --quiet "amneziawg@$name.service" && active=yes
+      [ "$selected" = "$name" ] && autostart=yes
+      printf '%-18s %-10s %s\n' "$name" "$active" "$autostart"
+    done < <(connections)
     echo 'Xray:'
     sudo "$PINO_TUNNEL" list xray
     ;;
@@ -139,7 +141,7 @@ case "${1:-}" in
     case "$kind" in
       awg|xray) name="${3:-}" ;;
       '')
-        echo 'AWG:'; sudo "$PINO_TUNNEL" list awg
+        echo 'AWG:'; connections
         echo 'Xray:'; sudo "$PINO_TUNNEL" list xray
         [ -t 0 ] || { echo 'Specify <awg|xray> <name>.' >&2; exit 1; }
         read -r -p 'Type (awg/xray): ' kind
@@ -155,10 +157,19 @@ case "${1:-}" in
       sudo test -f "/etc/pino/xray-client/$name.json" || { echo "Xray connection is not installed: $name" >&2; exit 1; }
     fi
     share_stop
+    sudo "$PINO_TUNNEL" disconnect
     stop_active
     sudo rm -f "$marker"
-    sudo "$PINO_TUNNEL" connect "$kind" "$name"
-    if [ "$kind" = awg ]; then guard_apply "$name"; else guard_clear; fi
+    if [ "$kind" = awg ]; then
+      sudo install -d -m 0700 /var/lib/amneziawg
+      printf '%s\n' "$name" | sudo tee "$marker" >/dev/null
+      sudo chmod 0600 "$marker"
+      sudo systemctl start "amneziawg@$name.service"
+      guard_apply "$name"
+    else
+      sudo "$PINO_TUNNEL" connect xray "$name"
+      guard_clear
+    fi
     echo "VPN connection active: $kind $name"
     ;;
   disconnect)
@@ -182,7 +193,7 @@ case "${1:-}" in
     name="${2:-}"
     if [ -n "$name" ]; then
       valid_name "$name" || { echo "Invalid VPN connection name: $name" >&2; exit 1; }
-      systemctl status pino-tunnel.service --no-pager
+      systemctl status "amneziawg@$name.service" --no-pager
     else
       systemctl list-units --all --plain 'amneziawg@*.service'
       echo
@@ -190,8 +201,31 @@ case "${1:-}" in
     fi
     ;;
   split)
-    shift
-    exec sudo "$PINO_TUNNEL" split "$@"
+    proxy_marker="${XDG_CONFIG_HOME:-$HOME/.config}/pino/chromium-proxy"
+    case "${2:-}" in
+      on|chromium)
+        systemctl is-active --quiet pino-tunnel.service || { echo 'Connect Xray first.' >&2; exit 1; }
+        "$GSETTINGS" set org.gnome.system.proxy mode none
+        if [ "$2" = on ]; then
+          rm -f "$proxy_marker"
+          "$GSETTINGS" set org.gnome.system.proxy.http host ''
+          "$GSETTINGS" set org.gnome.system.proxy.https host ''
+          "$GSETTINGS" set org.gnome.system.proxy.socks host '127.0.0.1'
+          "$GSETTINGS" set org.gnome.system.proxy.socks port 10808
+          "$GSETTINGS" set org.gnome.system.proxy mode manual
+        else
+          mkdir -p "$(dirname "$proxy_marker")"
+          : > "$proxy_marker"
+        fi
+        echo 'Proxy mode updated. Fully restart Chromium to apply.'
+        ;;
+      off)
+        "$GSETTINGS" set org.gnome.system.proxy mode none
+        rm -f "$proxy_marker"
+        echo 'Proxy disabled. Fully restart Chromium to apply.'
+        ;;
+      *) echo 'Usage: pino vpn split <on|off|chromium>' >&2; exit 1 ;;
+    esac
     ;;
   share)
     case "${2:-}" in

@@ -101,6 +101,18 @@ in
       Type = "oneshot";
       ExecStart = pkgs.writeShellScript "amneziawg-autostart" ''
         marker=/var/lib/amneziawg/autostart
+        selected=/var/lib/pino/tunnel/selected.json
+        if [ -f "$selected" ]; then
+          name="$(${pkgs.python3}/bin/python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); print(x.get("name", "") if x.get("kind") == "awg" else "")' "$selected")"
+          if [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,14}$ ]] && [ -f "/etc/amneziawg/$name.conf" ]; then
+            if [ ! -f "$marker" ]; then
+              ${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/amneziawg
+              ${pkgs.coreutils}/bin/printf '%s\n' "$name" > "$marker"
+              ${pkgs.coreutils}/bin/chmod 0600 "$marker"
+            fi
+            ${pkgs.coreutils}/bin/rm -f "$selected"
+          fi
+        fi
         [ -f "$marker" ] || exit 0
         name="$(${pkgs.coreutils}/bin/cat "$marker")"
         if [ -z "$name" ] && [ -f /etc/amneziawg/awg0.conf ]; then
@@ -164,7 +176,8 @@ in
     helpText = ''
       Store complete configs as uniquely named Bitwarden Secure Notes, then run
       `pino os provision install` to install the files declared by this profile.
-      Pino selects one full-route connection at a time to avoid route conflicts.
+      Pino selects one connection at a time. Xray provides a local SOCKS proxy;
+      AWG uses the routes in its profile.
       `share` only affects the dedicated `${share.connection}` connection. A hotspot
       created normally in GNOME keeps NetworkManager's normal routing behaviour.
       After provisioning the `${share.connection}.nmconnection` Secure Note,
@@ -183,6 +196,7 @@ in
       VPN_SHARE_CONNECTION=${lib.escapeShellArg share.connection}
       VPN_GUARD=${vpnGuard}
       PINO_TUNNEL=${pinoTunnel}
+      GSETTINGS=${pkgs.glib}/bin/gsettings
       ${builtins.readFile ../../../pino/vpn.sh}
     '';
   };
