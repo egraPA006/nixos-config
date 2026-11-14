@@ -129,16 +129,37 @@ EOF
 
 case "${1:-}" in
   list)
-    exec sudo "$PINO_TUNNEL" list awg
+    echo 'AWG:'
+    sudo "$PINO_TUNNEL" list awg
+    echo 'Xray:'
+    sudo "$PINO_TUNNEL" list xray
     ;;
   connect)
-    name="$(select_name "${2:-}")"
+    kind="${2:-}"
+    case "$kind" in
+      awg|xray) name="${3:-}" ;;
+      '')
+        echo 'AWG:'; sudo "$PINO_TUNNEL" list awg
+        echo 'Xray:'; sudo "$PINO_TUNNEL" list xray
+        [ -t 0 ] || { echo 'Specify <awg|xray> <name>.' >&2; exit 1; }
+        read -r -p 'Type (awg/xray): ' kind
+        read -r -p 'Connection name: ' name
+        case "$kind" in awg|xray) ;; *) echo 'Invalid connection type.' >&2; exit 1 ;; esac
+        ;;
+      *) name="$kind"; kind=awg ;;
+    esac
+    valid_name "$name" || { echo 'Specify a valid connection name.' >&2; exit 1; }
+    if [ "$kind" = awg ]; then
+      [ -f "$config_dir/$name.conf" ] || { echo "VPN connection is not installed: $name" >&2; exit 1; }
+    else
+      sudo test -f "/etc/pino/xray-client/$name.json" || { echo "Xray connection is not installed: $name" >&2; exit 1; }
+    fi
     share_stop
     stop_active
     sudo rm -f "$marker"
-    sudo "$PINO_TUNNEL" connect awg "$name"
-    guard_apply "$name"
-    echo "VPN connection active: $name"
+    sudo "$PINO_TUNNEL" connect "$kind" "$name"
+    if [ "$kind" = awg ]; then guard_apply "$name"; else guard_clear; fi
+    echo "VPN connection active: $kind $name"
     ;;
   disconnect)
     name="${2:-all}"

@@ -793,15 +793,15 @@ After rebuilding the desktop, install its named Xray configuration and connect:
 
 ```bash
 pino os provision install pino-xray-client-re-1-halos /etc/pino/xray-client/halos.json
-pino xray connect halos
-pino xray status
-pino xray disconnect
+pino vpn connect xray halos
+pino vpn status
+pino vpn disconnect
 ```
 
 `pino os provision install` also declares Xray notes for the current hostname
-on both Mosk and Halos. `pino xray list` shows locally provisioned connections.
-Only one Pino system tunnel is selected at a time: `pino vpn connect halos`
-selects AWG and `pino xray connect halos` selects Xray. The selected connection
+on both Mosk and Halos. `pino vpn list` shows both connection types.
+Only one Pino system tunnel is selected at a time: `pino vpn connect awg halos`
+selects AWG and `pino vpn connect xray halos` selects Xray. The selected connection
 autostarts after reboot; disconnect disables autostart. Existing legacy AWG
 autostart is migrated when the connection is next selected with `pino vpn connect`.
 
@@ -828,9 +828,11 @@ executable path (`readlink /proc/<pid>/exe`), not a symlink or desktop launcher.
 Changes restart the tunnel; restart existing application connections as well.
 
 The shared TUN routes application traffic through AWG or a loopback-only Xray
-SOCKS listener. The system resolver and configured DNS servers are preserved;
-port 53 uses the direct network path without interception or forced DoH. AWG
-continues applying the DNS field from its profile through awg-quick, as before.
+SOCKS listener. With full AWG routing, a DNS server specified in the AWG profile
+is used through the VPN. With split rules, the AWG DNS field is ignored and the
+system resolver is used directly. Without a profile DNS, and for Xray, the system
+resolver is used directly. DNS-over-HTTPS configured by applications follows their
+own application routing rules.
 Bootstrap resolution of the server name happens before connection. AWG profiles are IPv4-only, so IPv6 for their
 VPN-routed applications is rejected instead of leaking directly. Direct apps
 may use native IPv6; Xray carries IPv6 if the server has IPv6 connectivity.

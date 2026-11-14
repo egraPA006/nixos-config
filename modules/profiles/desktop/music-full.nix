@@ -1,5 +1,10 @@
 # Full music production: Reaper, Wine and yabridge.
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = config.pino.profiles.musicFull;
   user = config.pino.user;
@@ -13,22 +18,22 @@ let
     export PATH=${lib.makeBinPath [ pkgs.pipewire ]}:"$PATH"
     exec ${pkgs.python3}/bin/python3 ${../../../scripts/reaper-connect.py} ${connectionConfig} "$@"
   '';
-  reaperMcp = pkgs.python3Packages.buildPythonApplication rec {
-    pname = "twelvetake-reaper-mcp";
-    version = "1.7.3";
-    pyproject = true;
-    src = pkgs.fetchPypi {
-      pname = "twelvetake_reaper_mcp";
-      inherit version;
-      hash = "sha256-q8n4DXRSmRyu7d0fh2UIi8dHPt5muyr1fWCG1F7muaU=";
-    };
-    build-system = [ pkgs.python3Packages.hatchling ];
-    dependencies = [ pkgs.python3Packages.mcp ];
-    postInstall = ''
-      install -Dm444 reaper_mcp_bridge.lua "$out/share/reaper-mcp/reaper_mcp_bridge.lua"
-    '';
-    pythonImportsCheck = [ "reaper_mcp_server" ];
-  };
+  # reaperMcp = pkgs.python3Packages.buildPythonApplication rec {
+  #   pname = "twelvetake-reaper-mcp";
+  #   version = "1.7.3";
+  #   pyproject = true;
+  #   src = pkgs.fetchPypi {
+  #     pname = "twelvetake_reaper_mcp";
+  #     inherit version;
+  #     hash = "sha256-q8n4DXRSmRyu7d0fh2UIi8dHPt5muyr1fWCG1F7muaU=";
+  #   };
+  #   build-system = [ pkgs.python3Packages.hatchling ];
+  #   # dependencies = [ pkgs.python3Packages.mcp ];
+  #   # postInstall = ''
+  #   #   install -Dm444 reaper_mcp_bridge.lua "$out/share/reaper-mcp/reaper_mcp_bridge.lua"
+  #   # '';
+  #   # pythonImportsCheck = [ "reaper_mcp_server" ];
+  # };
   offlineWine = pkgs.writeShellScriptBin "music-wine-offline" ''
     # Plain bind mounts are nodev; Wine needs GPU devices for plugin editors.
     exec ${pkgs.bubblewrap}/bin/bwrap --unshare-net --bind / / --dev-bind /dev /dev -- ${wine}/bin/wine "$@"
@@ -41,35 +46,64 @@ let
     export PIPEWIRE_LATENCY="''${PIPEWIRE_LATENCY:-${toString config.pino.profiles.music.quantum}/48000}"
     exec ${reaperPackage}/bin/reaper "$@"
   '';
-  declaredDependencies = lib.unique (lib.concatMap (plugin: plugin.winetricks) (lib.attrValues cfg.windowsPlugins));
-  dependencyCommands = lib.concatMapStringsSep "\n" (verb:
-    "${pkgs.winetricks}/bin/winetricks -q ${lib.escapeShellArg verb} || return 1"
+  declaredDependencies = lib.unique (
+    lib.concatMap (plugin: plugin.winetricks) (lib.attrValues cfg.windowsPlugins)
+  );
+  dependencyCommands = lib.concatMapStringsSep "\n" (
+    verb: "${pkgs.winetricks}/bin/winetricks -q ${lib.escapeShellArg verb} || return 1"
   ) declaredDependencies;
   installers = lib.mapAttrsToList (name: plugin: { inherit name plugin; }) cfg.windowsPlugins;
-  linkedInstallerPatterns = lib.concatStringsSep "|" (map (item: lib.escapeShellArg item.name)
-    (lib.filter (item: item.plugin.method == "link") installers));
-  orderedInstallers = lib.filter (item: item.plugin.method != "link") installers
+  linkedInstallerPatterns = lib.concatStringsSep "|" (
+    map (item: lib.escapeShellArg item.name) (
+      lib.filter (item: item.plugin.method == "link") installers
+    )
+  );
+  orderedInstallers =
+    lib.filter (item: item.plugin.method != "link") installers
     ++ lib.filter (item: item.plugin.method == "link") installers;
-  declaredInstallers = lib.concatStringsSep "\n" (map ({ name, plugin }:
-    let
-      hook = if plugin.postInstall == "" then "" else pkgs.writeShellScript "music-plugin-post-install" ''
-        set -euo pipefail
-        ${plugin.postInstall}
-      '';
-      # Preserve existing install stamps when no hook was added.
-      signatureConfig = if plugin.postInstall == "" then builtins.removeAttrs plugin [ "postInstall" ] else plugin;
-      arguments = [ name plugin.installer (if plugin.sha256 == null then "" else plugin.sha256)
-        (builtins.hashString "sha256" (builtins.toJSON signatureConfig)) plugin.method hook ]
-        ++ (if plugin.method == "wine" then plugin.args else
-          lib.concatLists (lib.mapAttrsToList (source: target: [ source target ])
-            (if plugin.method == "link" then plugin.links else plugin.extractedFiles)));
-    in ''
-      if [ -z "$ONLY_PLUGIN" ] || [ "$ONLY_PLUGIN" = ${lib.escapeShellArg name} ]; then
-        install_declared ${lib.escapeShellArgs arguments} || failed=1
-        matched=1
-      fi
-    ''
-  ) orderedInstallers);
+  declaredInstallers = lib.concatStringsSep "\n" (
+    map (
+      { name, plugin }:
+      let
+        hook =
+          if plugin.postInstall == "" then
+            ""
+          else
+            pkgs.writeShellScript "music-plugin-post-install" ''
+              set -euo pipefail
+              ${plugin.postInstall}
+            '';
+        # Preserve existing install stamps when no hook was added.
+        signatureConfig =
+          if plugin.postInstall == "" then builtins.removeAttrs plugin [ "postInstall" ] else plugin;
+        arguments = [
+          name
+          plugin.installer
+          (if plugin.sha256 == null then "" else plugin.sha256)
+          (builtins.hashString "sha256" (builtins.toJSON signatureConfig))
+          plugin.method
+          hook
+        ]
+        ++ (
+          if plugin.method == "wine" then
+            plugin.args
+          else
+            lib.concatLists (
+              lib.mapAttrsToList (source: target: [
+                source
+                target
+              ]) (if plugin.method == "link" then plugin.links else plugin.extractedFiles)
+            )
+        );
+      in
+      ''
+        if [ -z "$ONLY_PLUGIN" ] || [ "$ONLY_PLUGIN" = ${lib.escapeShellArg name} ]; then
+          install_declared ${lib.escapeShellArgs arguments} || failed=1
+          matched=1
+        fi
+      ''
+    ) orderedInstallers
+  );
 in
 {
   imports = [ ./music-base.nix ];
@@ -77,7 +111,13 @@ in
   config = {
     pino.artifacts.music-full.target = installersDir;
     pino.populate.steps.music-full = {
-      command = [ "pino" "desktop" "music-full" "plugins" "apply" ];
+      command = [
+        "pino"
+        "desktop"
+        "music-full"
+        "plugins"
+        "apply"
+      ];
       requiresSession = true;
       requiredMount = config.pino.artifacts.music-full.requiredMount;
       prerequisite = ''
@@ -93,10 +133,11 @@ in
     };
     environment.systemPackages = with pkgs; [
       reaperPackage
-      (lib.hiPrio (pkgs.writeShellScriptBin "reaper" ''
-        exec ${reaperOffline}/bin/reaper-offline "$@"
-      ''))
-      reaperMcp
+      (lib.hiPrio (
+        pkgs.writeShellScriptBin "reaper" ''
+          exec ${reaperOffline}/bin/reaper-offline "$@"
+        ''
+      ))
       surge-xt
       drumgizmo
       yabridge
@@ -112,20 +153,32 @@ in
         comment = "REAPER";
         exec = "${reaperOffline}/bin/reaper-offline %F";
         icon = "cockos-reaper";
-        categories = [ "Audio" "Video" "AudioVideo" "AudioVideoEditing" "Recorder" ];
-        mimeType = [ "application/x-reaper-project" "application/x-reaper-project-backup" "application/x-reaper-theme" ];
+        categories = [
+          "Audio"
+          "Video"
+          "AudioVideo"
+          "AudioVideoEditing"
+          "Recorder"
+        ];
+        mimeType = [
+          "application/x-reaper-project"
+          "application/x-reaper-project-backup"
+          "application/x-reaper-theme"
+        ];
       };
-      xdg.configFile = {
-        "REAPER/Scripts/reaper_mcp_bridge.lua".source = "${reaperMcp}/share/reaper-mcp/reaper_mcp_bridge.lua";
-        "REAPER/Scripts/__startup.lua".text = ''
-          local bridge = reaper.GetResourcePath() .. "/Scripts/reaper_mcp_bridge.lua"
-          local ok, err = pcall(dofile, bridge)
-          if not ok then
-            reaper.ShowConsoleMsg("REAPER MCP bridge failed: " .. tostring(err) .. "\n")
-          end
-        '';
-        "REAPER/ProjectTemplates/Metal-Sketch.RPP".source = ../../../resources/reaper/ProjectTemplates/Metal-Sketch.RPP;
-      };
+      # xdg.configFile = {
+      #   "REAPER/Scripts/reaper_mcp_bridge.lua".source =
+      #     "${reaperMcp}/share/reaper-mcp/reaper_mcp_bridge.lua";
+      #   "REAPER/Scripts/__startup.lua".text = ''
+      #     local bridge = reaper.GetResourcePath() .. "/Scripts/reaper_mcp_bridge.lua"
+      #     local ok, err = pcall(dofile, bridge)
+      #     if not ok then
+      #       reaper.ShowConsoleMsg("REAPER MCP bridge failed: " .. tostring(err) .. "\n")
+      #     end
+      #   '';
+      #   "REAPER/ProjectTemplates/Metal-Sketch.RPP".source =
+      #     ../../../resources/reaper/ProjectTemplates/Metal-Sketch.RPP;
+      # };
     };
 
     systemd.tmpfiles.rules = [
@@ -155,8 +208,14 @@ in
           '';
           commands = {
             list.description = "List saved Windows installers";
-            install = { description = "Run one saved installer or a path"; usage = "<name|path>"; };
-            apply = { description = "Install declared plugins and sync yabridge"; usage = "[name] [--force]"; };
+            install = {
+              description = "Run one saved installer or a path";
+              usage = "<name|path>";
+            };
+            apply = {
+              description = "Install declared plugins and sync yabridge";
+              usage = "[name] [--force]";
+            };
             sync.description = "Synchronize yabridge plugins";
             deps.description = "Install declared Wine dependencies";
             reset-wine.description = "Stop an obsolete Wine server after an update";
@@ -164,8 +223,14 @@ in
           };
         };
         status.description = "Show Wine and yabridge state";
-        reaper = { description = "Launch Reaper"; usage = "[samples]"; };
-        connect = { description = "Connect guitar capture_AUX1 and REAPER stereo output"; usage = "[--dry-run]"; };
+        reaper = {
+          description = "Launch Reaper";
+          usage = "[samples]";
+        };
+        connect = {
+          description = "Connect guitar capture_AUX1 and REAPER stereo output";
+          usage = "[--dry-run]";
+        };
         quantum = {
           description = "Show or change the global PipeWire quantum without restarting audio";
           usage = "[32|64|128|256|512|1024|auto]";
@@ -298,7 +363,7 @@ in
 
         install_dependencies() {
           :
-          ${lib.optionalString (declaredDependencies != []) ''
+          ${lib.optionalString (declaredDependencies != [ ]) ''
             local installed_verbs probe verb missing=0
             if ! probe=$(${wine}/bin/wine cmd.exe /c exit 2>&1); then
               if printf '%s\n' "$probe" | grep -q 'version mismatch'; then
@@ -395,7 +460,9 @@ in
             done
             prepare || exit 1
             case "$ONLY_PLUGIN" in
-              ${if linkedInstallerPatterns == "" then "__no_linked_installers__" else linkedInstallerPatterns}) ;;
+              ${
+                if linkedInstallerPatterns == "" then "__no_linked_installers__" else linkedInstallerPatterns
+              }) ;;
               *) install_dependencies || exit 1 ;;
             esac
             failed=0

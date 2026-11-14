@@ -129,7 +129,7 @@ in
   };
 
   pino.subcommands.vpn = {
-    description = "AmneziaWG VPN";
+    description = "AWG and Xray VPN connections";
     commands = {
       add-client = {
         description = "Create an AWG client in Bitwarden, export it and deploy the server peer";
@@ -142,7 +142,7 @@ in
       list.description = "List installed named VPN connections";
       connect = {
         description = "Select, start, and autostart a connection";
-        usage = "[name]";
+        usage = "[awg|xray] [name]";
       };
       disconnect = {
         description = "Stop one or all connections and disable autostart";

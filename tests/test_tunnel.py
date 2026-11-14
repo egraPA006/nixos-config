@@ -56,6 +56,19 @@ class TunnelTests(unittest.TestCase):
         self.assertEqual(config["route"]["rules"][2]["outbound"], "vpn")
         self.assertEqual(config["route"]["final"], "direct")
 
+    def test_profile_dns_only_used_for_full_awg_vpn(self):
+        full = {"default": "vpn", "apps": {}}
+        split = {"default": "vpn", "apps": {"firefox": "direct"}}
+        dns_rule = lambda kind, policy, dns: next(rule["outbound"] for rule in tunnel.router_config(kind, "halos", "eth0", policy, dns)["route"]["rules"] if rule.get("port") == 53)
+        self.assertEqual(dns_rule("awg", full, True), "vpn")
+        self.assertEqual(dns_rule("awg", full, False), "direct")
+        self.assertEqual(dns_rule("awg", split, True), "direct")
+        self.assertEqual(dns_rule("xray", full, True), "direct")
+        profile = "[Interface]\nDNS = 10.77.0.1\n[Peer]\nAllowedIPs = 0.0.0.0/0\n"
+        self.assertTrue(tunnel.has_profile_dns(profile))
+        self.assertNotIn("DNS =", tunnel.awg_config(profile, use_profile_dns=False))
+        self.assertIn("DNS =", tunnel.awg_config(profile))
+
     def test_awg_routing_fields_replaced_and_shell_hooks_refused(self):
         config = tunnel.awg_config("[Interface]\nPrivateKey = fixture\nTable = auto\nDNS = 1.1.1.1\nFwMark = 99\n[Peer]\nAllowedIPs = 0.0.0.0/0\n")
         self.assertIn("Table = off\nFwMark = 2024\n[Peer]", config)

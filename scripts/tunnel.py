@@ -44,7 +44,7 @@ def app_rule(application, outbound):
             "action": "route", "outbound": outbound}
 
 
-def router_config(kind, interface, physical, policy):
+def router_config(kind, interface, physical, policy, profile_dns=False):
     if policy.get("default") not in ("vpn", "direct") or not isinstance(policy.get("apps"), dict):
         raise ValueError("Invalid split policy")
     direct = {"type": "direct", "tag": "direct", "bind_interface": physical,
@@ -52,8 +52,13 @@ def router_config(kind, interface, physical, policy):
     vpn = ({"type": "direct", "tag": "vpn", "bind_interface": interface, "routing_mark": VPN_MARK}
            if kind == "awg" else {"type": "socks", "tag": "vpn", "server": "127.0.0.1",
                                   "server_port": 10808, "version": "5"})
-    # Leave DNS resolution to the existing system resolver and its servers.
-    rules = [{"port": 53, "action": "route", "outbound": "direct"}]
+    # In split mode the system resolver remains on the physical network.
+    full_vpn = policy["default"] == "vpn" and not policy["apps"]
+    dns_outbound = "vpn" if kind == "awg" and full_vpn and profile_dns else "direct"
+    rules = []
+    if kind == "awg" and full_vpn:
+        rules.append({"ip_version": 6, "action": "reject"})
+    rules.append({"port": 53, "action": "route", "outbound": dns_outbound})
     for application, outbound in policy["apps"].items():
         if not isinstance(application, str) or not application or outbound not in ("vpn", "direct"):
             raise ValueError("Invalid application rule")
@@ -77,7 +82,7 @@ def router_config(kind, interface, physical, policy):
     }
 
 
-def awg_config(text):
+def awg_config(text, use_profile_dns=True):
     result = []
     interface = False
     for line in text.splitlines():
@@ -90,12 +95,27 @@ def awg_config(text):
             key = clean.split("=", 1)[0].strip()
             if key in ("Table", "FwMark", "SaveConfig"):
                 continue
+            if key == "DNS" and not use_profile_dns:
+                continue
             if key in ("PreUp", "PostUp", "PreDown", "PostDown"):
                 raise ValueError("Managed AWG clients must not contain shell hooks")
         result.append(line)
     if interface:
         result.extend(["Table = off", f"FwMark = {DIRECT_MARK}"])
     return "\n".join(result) + "\n"
+
+
+def has_profile_dns(text):
+    interface = False
+    for line in text.splitlines():
+        clean = line.split("#", 1)[0].strip()
+        if clean.startswith("["):
+            interface = clean == "[Interface]"
+        elif interface and "=" in clean:
+            key, value = clean.split("=", 1)
+            if key.strip() == "DNS" and value.strip():
+                return True
+    return False
 
 
 def xray_config(config, physical, resolve=socket.getaddrinfo):
@@ -189,8 +209,13 @@ def serve():
         # Marked transport sockets bypass TUN, including kernel AWG packets.
         for family in ("-4", "-6"):
             run("ip", family, "rule", "add", "priority", "100", "fwmark", str(DIRECT_MARK), "lookup", "main")
+        policy = read_policy()
+        profile_dns = False
         if kind == "awg":
-            awg_path.write_text(awg_config(Path(f"/etc/amneziawg/{name}.conf").read_text()))
+            source = Path(f"/etc/amneziawg/{name}.conf").read_text()
+            profile_dns = has_profile_dns(source)
+            full_vpn = policy["default"] == "vpn" and not policy["apps"]
+            awg_path.write_text(awg_config(source, use_profile_dns=full_vpn))
             awg_path.chmod(0o600)
             run("awg-quick", "up", str(awg_path))
             run("ip", "-4", "route", "add", "default", "dev", name, "table", str(VPN_MARK))
@@ -211,7 +236,7 @@ def serve():
                     time.sleep(.05)
             else:
                 raise ValueError("Xray SOCKS listener did not start")
-        write_json(RUNTIME / "router.json", router_config(kind, name, physical, read_policy()))
+        write_json(RUNTIME / "router.json", router_config(kind, name, physical, policy, profile_dns))
         run("sing-box", "check", "-c", str(RUNTIME / "router.json"))
         children.append(subprocess.Popen(["sing-box", "run", "-c", str(RUNTIME / "router.json")],
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
