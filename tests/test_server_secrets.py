@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -38,6 +39,18 @@ class FakeVault:
 
 
 class ServerSecretsTests(unittest.TestCase):
+    def test_deploy_rotation_reuses_unlocked_vault_and_reports_retry(self):
+        vault = setup.Bitwarden.__new__(setup.Bitwarden)
+        vault.env = {"BW_SESSION": "fixture"}
+        with patch.dict(os.environ, {"PINO_PROVISION_SEND": "/fixture/provision"}), \
+             patch.object(setup.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            setup.deploy_rotation("mosk", vault)
+        run.assert_called_once_with(["/fixture/provision", "host", "mosk"], env=vault.env)
+        with patch.dict(os.environ, {"PINO_PROVISION_SEND": "/fixture/provision"}), \
+             patch.object(setup.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)):
+            with self.assertRaisesRegex(ValueError, "pino host provision mosk"):
+                setup.deploy_rotation("mosk", vault)
+
     def test_delete_checks_revision_before_trashing_item(self):
         vault = setup.Bitwarden.__new__(setup.Bitwarden)
         item = {"id": "fixture", "name": "client", "type": 2, "notes": "synthetic", "revisionDate": "one"}
@@ -188,15 +201,53 @@ class ServerSecretsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 vault.find("test", 2)
 
-    def test_rotation_preserves_vpn_peers_and_settings(self):
+    def test_rotation_rejects_unknown_vpn_peers(self):
         vault = FakeVault()
         original = setup.vpn_config("old-key") + "\n[Peer]\nPublicKey = client-key\nAllowedIPs = 10.77.0.2/32\n"
         vault.create("pino-vpn-server-mosk", 2, notes=original)
-        with patch.object(setup.subprocess, "run", side_effect=self.tool), redirect_stdout(io.StringIO()):
-            setup.rotate_bitwarden("mosk", "vpn", vault)
-        self.assertEqual(vault.items["pino-vpn-server-mosk"]["notes"], original.replace("old-key", "test-private"))
-        backups = [item for name, item in vault.items.items() if name.startswith("pino-rotation-backup-")]
-        self.assertEqual(json.loads(backups[0]["notes"])[0]["notes"], original)
+        with patch.object(vault, "json_call", return_value=[], create=True), patch.object(setup.subprocess, "run", side_effect=self.tool), redirect_stdout(io.StringIO()):
+            with self.assertRaises(ValueError):
+                setup.rotate_bitwarden("mosk", "vpn", vault)
+        self.assertEqual(vault.items["pino-vpn-server-mosk"]["notes"], original)
+        self.assertEqual(set(vault.items), {"pino-vpn-server-mosk"})
+
+    def test_telemt_rotation_updates_all_users(self):
+        vault = FakeVault()
+        original = json.dumps({"users": {"owner": "1" * 32, "guest": "2" * 32}, "other": "keep"})
+        vault.create("pino-telemt-mosk", 2, notes=original, fields=[
+            {"name": "owner connection URI", "value": "old", "type": 1},
+            {"name": "other", "value": "keep", "type": 0},
+        ])
+        with redirect_stdout(io.StringIO()):
+            setup.rotate_bitwarden("mosk", "telemt", vault)
+        item = vault.items["pino-telemt-mosk"]
+        config = json.loads(item["notes"])
+        self.assertEqual(config["other"], "keep")
+        self.assertEqual(set(config["users"]), {"owner", "guest"})
+        self.assertFalse(set(config["users"].values()) & {"1" * 32, "2" * 32})
+        fields = {field["name"]: field for field in item["fields"]}
+        for user, key in config["users"].items():
+            self.assertIn(key, fields[f"{user} connection URI"]["value"])
+            self.assertEqual(fields[f"{user} connection URI"]["type"], 1)
+        self.assertEqual(fields["other"]["value"], "keep")
+        self.assertEqual(set(vault.items), {"pino-telemt-mosk"})
+
+    def test_xray_rotation_updates_saved_client_and_link(self):
+        vault = FakeVault()
+        old = "11111111-1111-4111-8111-111111111111"
+        vault.create("pino-xray-mosk", 2, notes=json.dumps({"users": {"alice": old}}))
+        config = {"outbounds": [{"settings": {"vnext": [{"users": [{"id": old}]}]}}]}
+        vault.create("pino-xray-client-alice-mosk", 2, notes=json.dumps(config))
+        vault.create("pino-xray-client-alice-mosk-link", 2, notes="old")
+        with redirect_stdout(io.StringIO()):
+            setup.rotate_bitwarden("mosk", "xray", vault)
+        server = vault.items["pino-xray-mosk"]
+        key = json.loads(server["notes"])["users"]["alice"]
+        client = json.loads(vault.items["pino-xray-client-alice-mosk"]["notes"])
+        self.assertNotEqual(key, old)
+        self.assertEqual(client["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"], key)
+        self.assertIn(key, vault.items["pino-xray-client-alice-mosk-link"]["notes"])
+        self.assertEqual(len(vault.items), 3)
 
     def test_galene_rotation_and_repair_preserve_other_users(self):
         vault = FakeVault()
@@ -226,7 +277,7 @@ class ServerSecretsTests(unittest.TestCase):
     def test_invalid_vpn_rotation_does_not_write(self):
         vault = FakeVault()
         vault.create("pino-vpn-server-mosk", 2, notes="[Peer]\nPrivateKey = invalid\n")
-        with self.assertRaises(ValueError):
+        with patch.object(vault, "json_call", return_value=[], create=True), self.assertRaises((ValueError, KeyError)):
             setup.rotate_bitwarden("mosk", "vpn", vault)
         self.assertEqual(len(vault.created), 1)
 

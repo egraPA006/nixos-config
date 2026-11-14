@@ -5,7 +5,7 @@
     "port": 10080
   },
   "telemt": {
-    "publicHost": "vpn.egrapa.com",
+    "publicHost": "mosk.egrapa.com",
     "port": 2443,
     "tlsDomain": "www.microsoft.com"
   }

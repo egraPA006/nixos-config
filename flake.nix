@@ -48,6 +48,8 @@
       text = ''
         export PINO_PROXY_SETTINGS=${./resources/mosk-proxies.json}
         export PINO_HALOS_PROXY_SETTINGS=${./resources/halos-proxies.json}
+        export PINO_VPN_CLIENT=${./scripts/vpn-client.py}
+        export PINO_SERVER_SECRETS=${./scripts/server-secrets.py}
         exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${./scripts/server-secrets.py} "$@"
       '';
     };

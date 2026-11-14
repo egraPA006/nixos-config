@@ -63,16 +63,23 @@ runs can be retried: an already-created Login is reused. SSH records are untouch
 Secret payloads are passed through stdin, never command arguments or terminal
 output. Bitwarden CLI still maintains its normal encrypted local vault cache.
 
-Rotate existing secrets explicitly (each operation asks for confirmation):
+Rotate existing secrets and apply them to the server (each operation asks for confirmation):
 
 ```bash
+pino host rotate mosk
+pino host rotate mosk xray
+# Explicitly restore named VPN clients before rotating, if records disagree:
+pino host rotate mosk --reconcile la1n,re-1
+# Low-level commands below only update Bitwarden:
 nix run path:.#server-secrets -- mosk --bitwarden --rotate galene
 nix run path:.#server-secrets -- mosk --bitwarden --rotate vpn
+nix run path:.#server-secrets -- mosk --bitwarden --rotate telemt
+nix run path:.#server-secrets -- mosk --bitwarden --rotate xray
+nix run path:.#server-secrets -- mosk --bitwarden --rotate all
 ```
 
-Before editing, rotation saves the original records in a uniquely named Secure
-Note `pino-rotation-backup-<host>-<scope>-…`. Galene rotation preserves room
-settings and other users, updating the admin Login and password hash. These two
+Galene rotation preserves room settings and other users, updating the admin
+Login and password hash. These two
 Bitwarden writes are not atomic: if interrupted, repair the room hash from the
 saved Login without generating another password:
 
@@ -80,15 +87,19 @@ saved Login without generating another password:
 nix run path:.#server-secrets -- mosk --bitwarden --repair-galene
 ```
 
-VPN rotation changes only the server private key; peers, addresses and AWG
-parameters are preserved. Update the server public key on all clients when
-deploying. Rotating records does not alter the running server. Log in to
-Bitwarden on the server and run `pino os provision` there.
+VPN rotation changes the server and managed client keys, preserving addresses and
+AWG parameters. It stops if a peer cannot be matched to a saved client. Saved
+client profiles and Amnezia links are updated; previously exported or installed
+profiles must be replaced after deployment.
+Xray rotation updates saved client records and Telegram rotation replaces the
+secrets and hidden connection links for all users. Reinstall or distribute client
+configurations after provisioning. `all` performs these operations sequentially;
+if one fails, inspect the records before retrying. SSH keys are not rotated.
+`pino host rotate` provisions the server and restarts the declared services.
+If deployment fails after rotation, retry with `pino host provision mosk`
+without rotating the credentials again.
 
-Keep the recovery snapshot until the server and clients have been verified.
-Restoring it means restoring each original record's fields from the snapshot
-and provisioning the old configuration again. Retire obsolete snapshots manually
-once they are no longer needed. Do not run preparation/rotation concurrently:
+Do not run preparation/rotation concurrently:
 the CLI checks for changes before writing, but Bitwarden provides no multi-item
 transaction here. After a timeout, inspect saved records before retrying rotation;
 for Galene, prefer `--repair-galene` to avoid generating another password.
@@ -602,12 +613,12 @@ Weekly GC removes generations older than 14 days, and journals are capped at
 
 | Service | Public endpoint | Runtime secret |
 | --- | --- | --- |
-| SSH | TCP 22, `vincent@vpn.egrapa.com` | Public half of `pino-ssh-server-mosk` installed as authorized key |
+| SSH | TCP 22, `vincent@mosk.egrapa.com` | Public half of `pino-ssh-server-mosk` installed as authorized key |
 | Website | `https://egrapa.com`, TCP 80/443 | Caddy obtains certificates automatically |
 | Galene | `https://meet.egrapa.com/group/main/` | `pino-galene-mosk-main` → `/etc/pino/galene/main.json` |
 | AmneziaWG 3.1 | UDP 585, normally `10.77.0.1/24` | `pino-vpn-server-mosk` → `/etc/pino/vpn/awg0.conf` |
 | Xray/XHTTP | `https://egrapa.com/pino-xhttp`, TCP 443 | `pino-xray-mosk` → `/etc/pino/xray/users.json` |
-| telemt/FakeTLS | `vpn.egrapa.com:2443`, TCP | `pino-telemt-mosk` → `/etc/pino/telemt/users.json` |
+| telemt/FakeTLS | `mosk.egrapa.com:2443`, TCP | `pino-telemt-mosk` → `/etc/pino/telemt/users.json` |
 
 Halos uses `halos.egrapa.com` for SSH, HTTPS/Xray, AmneziaWG and telemt, with
 the same ports as Mosk. Its profiles exclude Galene and its media/TURN ports.
@@ -636,7 +647,7 @@ use `10.77.0.0/24`; select one full-route desktop connection at a time.
 
 Galene additionally needs TCP/UDP 1194 for TURN and UDP 49152–65535 for media.
 Allow these ports both in NixOS and in any provider firewall. Point `egrapa.com`,
-`meet.egrapa.com` and `vpn.egrapa.com` at the VPS public IPv4 address. Remove stale
+`meet.egrapa.com` and `mosk.egrapa.com` at the VPS public IPv4 address. Remove stale
 AAAA records if the new VPS has no working IPv6. Use direct DNS for VPN/telemt;
 an ordinary HTTP CDN proxy cannot carry their protocols. Telemt binds IPv4 only.
 Website/Xray TLS issuance needs public DNS and access to ports 80/443. The FakeTLS

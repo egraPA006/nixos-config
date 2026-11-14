@@ -38,8 +38,79 @@ class Vault:
         name = next(name for name, item in self.items.items() if item == original)
         del self.items[name]
 
+    def json_call(self, *args):
+        return [{"name": name, "type": 2} for name in self.items]
+
 
 class ClientTests(unittest.TestCase):
+    def test_reconcile_restores_saved_client_and_replaces_orphan_peer(self):
+        vault = Vault()
+        self.prepare(vault, "la1n")
+        server = vault.items["pino-vpn-server-mosk"]
+        server["notes"] = server["notes"].replace("# la1n\nPublicKey = public-client-secret", "# re-1\nPublicKey = public-orphan")
+        server["notes"] += "\n[Peer]\n# re-1\nPublicKey = public-old-orphan\nAllowedIPs = 10.77.0.3/32\n"
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
+             patch.object(client.subprocess, "run", return_value=SimpleNamespace(stdout="re1-secret\n")), \
+             redirect_stdout(io.StringIO()):
+            client.reconcile_clients(vault, "mosk", ["la1n", "re-1"])
+        server_text = vault.items["pino-vpn-server-mosk"]["notes"]
+        self.assertNotIn("public-orphan", server_text)
+        self.assertNotIn("public-old-orphan", server_text)
+        self.assertIn("public-client-secret", server_text)
+        self.assertIn("public-re1-secret", server_text)
+        self.assertIn("pino-vpn-client-re-1-mosk", vault.items)
+
+    def test_reconcile_rejects_named_peer_owned_by_another_client(self):
+        vault = Vault()
+        self.prepare(vault, "la1n")
+        server = vault.items["pino-vpn-server-mosk"]
+        server["notes"] = server["notes"].replace("# la1n", "# re-1")
+        before = copy.deepcopy(vault.items)
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key):
+            with self.assertRaisesRegex(ValueError, "belongs to client la1n"):
+                client.reconcile_clients(vault, "mosk", ["re-1"])
+        self.assertEqual(vault.items, before)
+
+    def test_rotation_replaces_server_and_client_credentials(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
+             patch.object(client.subprocess, "run", side_effect=[SimpleNamespace(stdout="new-server\n"), SimpleNamespace(stdout="new-client\n")]), \
+             redirect_stdout(io.StringIO()):
+            client.rotate_credentials(vault, "mosk")
+        server = vault.items["pino-vpn-server-mosk"]["notes"]
+        profile = vault.items["pino-vpn-client-phone-mosk"]["notes"]
+        self.assertIn("PrivateKey = new-server", server)
+        self.assertIn("PublicKey = public-new-client", server)
+        self.assertIn("PrivateKey = new-client", profile)
+        self.assertIn("PublicKey = public-new-server", profile)
+        self.assertIn("Endpoint = mosk.egrapa.com:585", profile)
+        link = vault.items["pino-vpn-client-phone-mosk-amnezia"]["notes"]
+        self.assertTrue(link.startswith("vpn://"))
+
+    def test_rotation_accepts_stale_server_key_for_matching_client(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        item = vault.items["pino-vpn-client-phone-mosk"]
+        item["notes"] = item["notes"].replace("public-server-secret", "public-old-server")
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key), \
+             patch.object(client.subprocess, "run", side_effect=[SimpleNamespace(stdout="new-server\n"), SimpleNamespace(stdout="new-client\n")]), \
+             redirect_stdout(io.StringIO()):
+            client.rotate_credentials(vault, "mosk")
+        self.assertIn("PublicKey = public-new-server", vault.items["pino-vpn-client-phone-mosk"]["notes"])
+
+    def test_rotation_rejects_client_without_matching_peer(self):
+        vault = Vault()
+        self.prepare(vault, "phone")
+        vault.items["pino-vpn-server-mosk"]["notes"] = vault.items["pino-vpn-server-mosk"]["notes"].replace("public-client-secret", "public-unknown")
+        before = copy.deepcopy(vault.items)
+        with patch.object(client, "public_key", side_effect=lambda key: "public-" + key):
+            with self.assertRaisesRegex(ValueError, "saved clients without a matching server peer: phone") as error:
+                client.rotate_credentials(vault, "mosk")
+        self.assertIn("server peers without a matching saved client: phone", str(error.exception))
+        self.assertNotIn("public-unknown", str(error.exception))
+        self.assertEqual(vault.items, before)
+
     def test_user_list_compares_awg_without_printing_keys(self):
         vault = Vault()
         vault.items["pino-vpn-server-mosk"]["notes"] += "\n[Peer]\n# phone\nPublicKey = public-fixture\nAllowedIPs = 10.77.0.2/32\n"
@@ -212,7 +283,7 @@ class ClientTests(unittest.TestCase):
         last = json.loads(protocol["last_config"])
         self.assertEqual(last["config"], config)
         self.assertEqual(last["client_priv_key"], "client-secret")
-        self.assertEqual(last["hostName"], "vpn.egrapa.com")
+        self.assertEqual(last["hostName"], "mosk.egrapa.com")
         self.assertEqual(last["port"], 585)
         self.assertEqual(last["allowed_ips"], ["0.0.0.0/0"])
         self.assertEqual(last["S1"], "50")

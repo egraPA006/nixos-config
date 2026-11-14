@@ -26,7 +26,7 @@
       IdentitiesOnly yes
 
     Host mosk
-      HostName vpn.egrapa.com
+      HostName mosk.egrapa.com
       User vincent
       IdentityAgent none
       IdentityFile ${config.pino.user.home}/.ssh/mosk

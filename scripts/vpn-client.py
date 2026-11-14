@@ -45,6 +45,165 @@ def public_key(private):
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
+def reconcile_clients(vault, host, names):
+    """Restore explicitly named clients without touching the running server."""
+    names = list(dict.fromkeys(names))
+    if not names:
+        raise ValueError("Specify the clients to reconcile")
+    for name in names:
+        validate_client(host, name)
+    server = vault.find(f"pino-vpn-server-{host}", 2)
+    if not server:
+        raise ValueError("VPN server note is missing")
+    text = server["notes"]
+    lines = text.splitlines(keepends=True)
+    starts = [i for i, line in enumerate(lines) if line.split("#", 1)[0].strip() == "[Peer]"]
+    blocks = []
+    for start, end in zip(starts, starts[1:] + [len(lines)]):
+        block = lines[start:end]
+        _, peers = sections("[Interface]\n" + "".join(block))
+        label = next((line.strip()[1:].strip() for line in block
+                      if line.strip().startswith("#") and line.strip()[1:].strip()), "")
+        blocks.append((start, end, label, peers[0]))
+    owners = {}
+    prefix, suffix = "pino-vpn-client-", f"-{host}"
+    for item in vault.json_call("list", "items", "--search", prefix):
+        item_name = item.get("name", "")
+        if item.get("deletedDate") or not item_name.startswith(prefix) or not item_name.endswith(suffix):
+            continue
+        owner = item_name[len(prefix):-len(suffix)]
+        validate_client(host, owner)
+        client = vault.find(item_name, 2)
+        client_interface, _ = sections(client["notes"])
+        key = public_key(client_interface["PrivateKey"])
+        if key in owners:
+            raise ValueError("Duplicate VPN client key; no records changed")
+        owners[key] = owner
+    to_remove = []
+    for name in names:
+        matches = [(start, end, peer) for start, end, label, peer in blocks if label == name]
+        client = vault.find(f"pino-vpn-client-{name}-{host}", 2)
+        if matches:
+            for start, end, peer in matches:
+                owner = owners.get(peer.get("PublicKey"))
+                if owner and owner != name:
+                    raise ValueError(f"A server peer named {name} belongs to client {owner}; no records changed")
+                to_remove.append((start, end))
+            if client:
+                client_interface, _ = sections(client["notes"])
+                client_key = public_key(client_interface["PrivateKey"])
+                if any(other.get("PublicKey") == client_key and label != name for _, _, label, other in blocks):
+                    raise ValueError(f"Client {name} belongs to another server peer; no records changed")
+        elif not client:
+            raise ValueError(f"Client {name} has no saved profile or named server peer; no records changed")
+    changed = copy.deepcopy(server)
+    for start, end in sorted(to_remove, reverse=True):
+        del lines[start:end]
+    changed["notes"] = "".join(lines)
+    try:
+        if changed != server:
+            vault.edit(server, changed)
+        for name in names:
+            prepare_client(vault, host, name, force=True)
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        print("VPN reconciliation interrupted; inspect Bitwarden before retrying. The server was not changed.", file=sys.stderr)
+        raise
+    print("VPN clients reconciled in Bitwarden: " + ", ".join(names))
+
+
+def rotate_credentials(vault, host):
+    """Replace server and all managed peer keys after validating every peer."""
+    server = vault.find(f"pino-vpn-server-{host}", 2)
+    if not server:
+        raise ValueError("VPN server note is missing")
+    interface, peers = sections(server["notes"])
+    public_key(interface["PrivateKey"])
+    prefix, suffix = "pino-vpn-client-", f"-{host}"
+    records = vault.json_call("list", "items", "--search", prefix)
+    clients = {}
+    for item in records:
+        name = item.get("name", "")
+        if item.get("deletedDate") or not name.startswith(prefix) or not name.endswith(suffix):
+            continue
+        user = name[len(prefix):-len(suffix)]
+        validate_client(host, user)
+        if user in clients or item.get("type") != 2:
+            raise ValueError("Duplicate or invalid VPN client record; no records changed")
+        item = vault.find(name, 2)
+        client_interface, destinations = sections(item["notes"])
+        if len(destinations) != 1 or not destinations[0].get("PublicKey"):
+            raise ValueError(f"VPN client {user} must have exactly one server peer with a public key; no records changed")
+        key = public_key(client_interface["PrivateKey"])
+        if key in clients:
+            raise ValueError("Duplicate VPN client key; no records changed")
+        clients[key] = (user, item, client_interface, destinations[0])
+    peer_keys = [peer.get("PublicKey") for peer in peers]
+    if len(peer_keys) != len(set(peer_keys)):
+        raise ValueError("VPN server has duplicate peer keys; no records changed")
+    missing_clients = set(peer_keys) - set(clients)
+    inactive_clients = set(clients) - set(peer_keys)
+    if missing_clients or inactive_clients:
+        issues = []
+        if inactive_clients:
+            names = sorted(clients[key][0] for key in inactive_clients)
+            issues.append("saved clients without a matching server peer: " + ", ".join(names))
+        if missing_clients:
+            blocks = re.split(r"(?m)^[ \t]*\[Peer\][ \t]*(?:#.*)?$", server["notes"])[1:]
+            labels = []
+            for index, (block, peer) in enumerate(zip(blocks, peers), 1):
+                if peer.get("PublicKey") not in missing_clients:
+                    continue
+                label = next((line.strip()[1:].strip() for line in block.splitlines()
+                              if line.strip().startswith("#") and line.strip()[1:].strip()), "")
+                labels.append(label if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}", label) else f"peer-{index}")
+            issues.append("server peers without a matching saved client: " + ", ".join(labels or ["unknown"]))
+        raise ValueError("VPN records differ: " + "; ".join(issues) + ". No records changed")
+    new_server_private = subprocess.run(["awg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
+    if not new_server_private:
+        raise ValueError("Could not generate VPN server key")
+    new_server_public = public_key(new_server_private)
+    server_text = secrets.replace_vpn_key(server["notes"], new_server_private)
+    updates = []
+    generated = set(peer_keys)
+    for old_public, (user, item, client_interface, peer) in clients.items():
+        private = subprocess.run(["awg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
+        if not private:
+            raise ValueError("Could not generate VPN client key")
+        new_public = public_key(private)
+        if new_public in generated:
+            raise ValueError("Generated duplicate VPN client key")
+        generated.add(new_public)
+        server_text, count = re.subn(r"(?m)^([ \t]*PublicKey[ \t]*=[ \t]*)" + re.escape(old_public) + r"[ \t]*$", lambda m: m.group(1) + new_public, server_text)
+        if count != 1:
+            raise ValueError("Cannot update VPN server peer safely")
+        client_text = secrets.replace_vpn_key(item["notes"], private)
+        client_text, count = re.subn(r"(?m)^([ \t]*PublicKey[ \t]*=[ \t]*)" + re.escape(peer["PublicKey"]) + r"[ \t]*$", lambda m: m.group(1) + new_server_public, client_text)
+        if count != 1:
+            raise ValueError("Cannot update VPN client server key safely")
+        endpoint = "mosk.egrapa.com" if host == "mosk" else "halos.egrapa.com"
+        client_text, count = re.subn(r"(?m)^([ \t]*Endpoint[ \t]*=[ \t]*)[^\s:]+:(\d+)[ \t]*$", lambda m: m.group(1) + endpoint + ":" + m.group(2), client_text)
+        if count != 1:
+            raise ValueError("Cannot update VPN client endpoint safely")
+        updated = copy.deepcopy(item)
+        updated["notes"] = client_text
+        updates.append((item, updated))
+        link = vault.find(f"{prefix}{user}{suffix}-amnezia", 2)
+        if link:
+            changed = copy.deepcopy(link)
+            changed["notes"] = amnezia_link(client_text, f"{host}-{user}")
+            updates.append((link, changed))
+    changed_server = copy.deepcopy(server)
+    changed_server["notes"] = server_text
+    try:
+        for original, changed in updates:
+            vault.edit(original, changed)
+        vault.edit(server, changed_server)
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        print("VPN rotation interrupted; check server and client records in Bitwarden before retrying.", file=sys.stderr)
+        raise
+    print(f"Updated VPN server and {len(clients)} client credentials in Bitwarden. Reinstall client profiles after provisioning.")
+
+
 def peer_networks(peers, excluding=None):
     try:
         return [ipaddress.ip_network(value.strip()) for peer in peers
@@ -229,7 +388,7 @@ def prepare_client(vault, host, name, force=False):
         port = interface.get("ListenPort", "585")
         if not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
             raise ValueError("Invalid server ListenPort")
-        endpoint = "vpn.egrapa.com" if host == "mosk" else "halos.egrapa.com"
+        endpoint = "mosk.egrapa.com" if host == "mosk" else "halos.egrapa.com"
         config += (f"\n[Peer]\nPublicKey = {server_public}\n"
                    f"Endpoint = {endpoint}:{port}\n"
                    "AllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n")

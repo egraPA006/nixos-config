@@ -5,6 +5,7 @@ import argparse
 import base64
 import copy
 import getpass
+import importlib.util
 import json
 import os
 import re
@@ -111,6 +112,13 @@ def replace_vpn_key(config, private):
 
 
 def rotate_bitwarden(host, scope, vault, repair=False):
+    if scope == "vpn":
+        source = Path(os.environ.get("PINO_VPN_CLIENT", Path(__file__).with_name("vpn-client.py")))
+        spec = importlib.util.spec_from_file_location("pino_vpn_client", source)
+        vpn_client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(vpn_client)
+        vpn_client.rotate_credentials(vault, host)
+        return
     if scope == "galene" and host != "mosk":
         raise ValueError("Galene is only configured on mosk")
     if scope == "galene":
@@ -132,36 +140,128 @@ def rotate_bitwarden(host, scope, vault, repair=False):
         room["users"]["admin"]["password"] = room_config(password)["users"]["admin"]["password"]
         updated = copy.deepcopy(note)
         updated["notes"] = json.dumps(room, indent=2)
-        originals = [login, note]
-    else:
-        note = vault.find(f"pino-vpn-server-{host}", 2)
-        if not note or not isinstance(note.get("notes"), str):
-            raise ValueError("Create the VPN server note before rotating")
-        # Validate the existing note before generating a replacement key.
-        replace_vpn_key(note["notes"], "validation")
-        private = subprocess.run(["awg", "genkey"], capture_output=True, text=True, check=True).stdout.strip()
-        if not private:
-            raise ValueError("awg did not generate a private key")
+    elif scope == "xray":
+        name = f"pino-xray-{host}"
+        note = vault.find(name, 2)
+        if not note:
+            raise ValueError("Create the Xray server note before rotating")
+        validate_proxy_note(name, note.get("notes"))
+        config = json.loads(note["notes"])
+        settings_path = Path(os.environ.get(
+            "PINO_PROXY_SETTINGS" if host == "mosk" else "PINO_HALOS_PROXY_SETTINGS",
+            Path(__file__).resolve().parents[1] / f"resources/{host}-proxies.json"))
+        settings = json.loads(settings_path.read_text())["xray"]
         updated = copy.deepcopy(note)
-        updated["notes"] = replace_vpn_key(note["notes"], private)
-        originals = [note]
-    backup = f"pino-rotation-backup-{host}-{scope}-{secrets.token_hex(8)}"
-    vault.create(backup, 2, notes=json.dumps(originals))
-    print(f"Recovery snapshot saved in Bitwarden: {backup}")
+        fields = updated.get("fields") or []
+        client_updates = []
+        for user, old_key in config["users"].items():
+            key = str(uuid.uuid4())
+            config["users"][user] = key
+            uri = f"vless://{key}@{settings['domain']}:443?" + urlencode({
+                "encryption": "none", "security": "tls", "sni": settings["domain"],
+                "type": "xhttp", "path": settings["path"], "mode": "auto", "alpn": "h2",
+            }) + f"#{host}-{user}"
+            fields = [field for field in fields if field.get("name") != f"{user} connection URI"]
+            fields.append({"name": f"{user} connection URI", "value": uri, "type": 1})
+            client_name = f"pino-xray-client-{user}-{host}"
+            client = vault.find(client_name, 2)
+            link = vault.find(client_name + "-link", 2)
+            if client:
+                try:
+                    client_config = json.loads(client["notes"])
+                    entry = client_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]
+                    if entry["id"] != old_key:
+                        raise ValueError()
+                    entry["id"] = key
+                except (ValueError, KeyError, TypeError, IndexError):
+                    raise ValueError(f"Xray client {user} does not match the server; records preserved") from None
+                changed = copy.deepcopy(client)
+                changed["notes"] = json.dumps(client_config, indent=2) + "\n"
+                client_updates.append((client, changed))
+            if link:
+                changed = copy.deepcopy(link)
+                changed["notes"] = uri
+                client_updates.append((link, changed))
+        updated["notes"] = json.dumps(config, indent=2)
+        updated["fields"] = fields
+    elif scope == "telemt":
+        name = f"pino-telemt-{host}"
+        note = vault.find(name, 2)
+        if not note:
+            raise ValueError("Create the Telegram proxy note before rotating")
+        validate_proxy_note(name, note.get("notes"))
+        config = json.loads(note["notes"])
+        used = set(config["users"].values())
+        settings_path = Path(os.environ.get(
+            "PINO_PROXY_SETTINGS" if host == "mosk" else "PINO_HALOS_PROXY_SETTINGS",
+            Path(__file__).resolve().parents[1] / f"resources/{host}-proxies.json"))
+        settings = json.loads(settings_path.read_text())["telemt"]
+        updated = copy.deepcopy(note)
+        fields = updated.get("fields") or []
+        for user in config["users"]:
+            key = secrets.token_hex(16)
+            while key in used or key == "0" * 32:
+                key = secrets.token_hex(16)
+            used.add(key)
+            config["users"][user] = key
+            link = "tg://proxy?" + urlencode({
+                "server": settings["publicHost"], "port": settings["port"],
+                "secret": "ee" + key + settings["tlsDomain"].encode().hex(),
+            })
+            fields = [field for field in fields if field.get("name") != f"{user} connection URI"]
+            fields.append({"name": f"{user} connection URI", "value": link, "type": 1})
+        updated["notes"] = json.dumps(config, indent=2)
+        updated["fields"] = fields
+    else:
+        raise ValueError("Unknown rotation scope")
     if scope == "galene" and not repair:
         changed_login = copy.deepcopy(login)
         changed_login["login"]["password"] = password
         vault.edit(login, changed_login)
     try:
+        completed = []
+        if scope == "xray":
+            for original, changed in client_updates:
+                vault.edit(original, changed)
+                completed.append((original, changed))
         vault.edit(note, updated)
     except (ValueError, OSError, subprocess.CalledProcessError):
         if scope == "galene":
             print("Rotation incomplete. Rerun with --bitwarden --repair-galene to match the note to the saved Login.", file=sys.stderr)
+        if scope == "xray":
+            for original, changed in reversed(completed):
+                try:
+                    current = vault.json_call("get", "item", original["id"])
+                    if any(current.get(field) != changed.get(field) for field in ("name", "type", "notes", "fields", "login")):
+                        raise ValueError("Item changed after rotation")
+                    restored = copy.deepcopy(current)
+                    for field in ("notes", "fields", "login"):
+                        if field in original:
+                            restored[field] = copy.deepcopy(original[field])
+                        else:
+                            restored.pop(field, None)
+                    vault.edit(current, restored)
+                except (KeyError, ValueError, OSError, subprocess.CalledProcessError):
+                    print("Could not restore an Xray client record; inspect Bitwarden before retrying.", file=sys.stderr)
+            print("Xray rotation incomplete. Check server and client records before retrying; a timed-out write may have succeeded.", file=sys.stderr)
         raise
     print(f"Updated {scope} in Bitwarden only; the running server has NOT changed.")
     if scope == "vpn":
         print("Peers and network settings were preserved. Update the server public key on every client when deploying.")
-    print("Run pino os provision on the server; retain the recovery snapshot until verified.")
+    if scope == "telemt":
+        print("All Telegram users need their new connection URI after deployment.")
+    if scope == "xray":
+        print("All Xray users need their updated client configuration after deployment.")
+    print("Run pino host provision to apply the server secrets.")
+
+
+def deploy_rotation(host, vault):
+    sender = os.environ.get("PINO_PROVISION_SEND")
+    if not sender:
+        raise ValueError("Server provisioner is unavailable")
+    result = subprocess.run([sender, "host", host], env=vault.env)
+    if result.returncode:
+        raise ValueError(f"Server provisioning failed; Bitwarden was already updated. Retry with pino host provision {host}, not rotation")
 
 
 def prepare_bitwarden(host, vault):
@@ -352,14 +452,20 @@ def main():
     parser.add_argument("host", choices=["mosk", "halos"])
     parser.add_argument("output", nargs="?", type=Path)
     parser.add_argument("--bitwarden", action="store_true", help="Create missing Bitwarden records directly, without local exports")
+    parser.add_argument("--deploy", action="store_true", help="Apply rotated secrets to the server after updating Bitwarden")
+    parser.add_argument("--reconcile", metavar="CLIENTS", help="Restore these comma-separated VPN clients before rotation")
     operations = parser.add_mutually_exclusive_group()
-    operations.add_argument("--rotate", choices=["galene", "vpn"], help="Rotate selected existing Bitwarden secrets, preserving a recovery snapshot")
+    operations.add_argument("--rotate", choices=["galene", "vpn", "telemt", "xray", "all"], help="Rotate selected existing Bitwarden secrets")
     operations.add_argument("--repair-galene", action="store_true", help="Repair the Galene note using the current Login password after an interrupted rotation")
     args = parser.parse_args()
     output = args.output or Path(tempfile.gettempdir()) / f"pino-{args.host}-{secrets.token_hex(8)}"
     os.umask(0o077)
     password = None
     try:
+        if args.deploy and (not args.bitwarden or not args.rotate or not os.environ.get("PINO_PROVISION_SEND")):
+            raise ValueError("Deployment requires rotation and a configured server provisioner")
+        if args.reconcile and (not args.bitwarden or args.rotate not in ("all", "vpn")):
+            raise ValueError("VPN client reconciliation requires VPN or all rotation")
         if (args.rotate or args.repair_galene) and not args.bitwarden:
             raise ValueError("Rotation and repair require --bitwarden")
         if args.bitwarden:
@@ -370,10 +476,35 @@ def main():
                 if not sys.stdin.isatty():
                     raise ValueError("Run rotation in a terminal to confirm the change")
                 confirmation = f"{args.host} {scope}"
-                print("This changes Bitwarden records, not the running server. VPN rotation requires updating clients.")
+                print("This changes Bitwarden records and " + ("applies them to the server." if args.deploy else "does not apply them to the server."))
+                print("Rotated credentials require updating clients after deployment.")
                 if input(f"Type '{confirmation}' to continue: ") != confirmation:
                     raise ValueError("Cancelled; no secrets changed")
-                rotate_bitwarden(args.host, scope, Bitwarden(), repair=args.repair_galene)
+                vault = Bitwarden()
+                if args.reconcile:
+                    names = args.reconcile.split(",")
+                    source = Path(os.environ.get("PINO_VPN_CLIENT", Path(__file__).with_name("vpn-client.py")))
+                    spec = importlib.util.spec_from_file_location("pino_vpn_client", source)
+                    vpn_client = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(vpn_client)
+                    vpn_client.reconcile_clients(vault, args.host, names)
+                if scope == "all":
+                    scopes = ["vpn", "xray", "telemt"] + (["galene"] if args.host == "mosk" else [])
+                    completed_scopes = []
+                    for current in scopes:
+                        try:
+                            rotate_bitwarden(args.host, current, vault)
+                        except (ValueError, OSError, subprocess.CalledProcessError):
+                            if completed_scopes:
+                                print(f"Rotation stopped at {current}; completed: {', '.join(completed_scopes)}. Review Bitwarden before retrying.", file=sys.stderr)
+                            else:
+                                print(f"Rotation stopped at {current}; no earlier service was rotated.", file=sys.stderr)
+                            raise
+                        completed_scopes.append(current)
+                else:
+                    rotate_bitwarden(args.host, scope, vault, repair=args.repair_galene)
+                if args.deploy:
+                    deploy_rotation(args.host, vault)
             else:
                 prepare_bitwarden(args.host, Bitwarden())
             return 0

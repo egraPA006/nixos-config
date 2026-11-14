@@ -1,10 +1,37 @@
 { config, lib, pkgs, pinoProvisionSend, ... }:
 {
   pino.subcommands.host = {
-    description = "Run Pino on a configured host using its SSH alias";
+    description = "Manage configured hosts and run Pino over SSH";
     runWithoutArgs = true;
     usage = "[host] [pino-command ...]";
     commands = {
+      exec = {
+        description = "Run a Pino command on a configured host over SSH";
+        usage = "<host> <pino-command ...>";
+      };
+      rotate = {
+        description = "Rotate credentials and apply them to the server";
+        usage = "<mosk|halos> [all|vpn|xray|telemt|galene] [--reconcile client,...]";
+        script = ''
+          [ "$#" -ge 1 ] && [ "$#" -le 4 ] || { echo 'Usage: pino host rotate <mosk|halos> [all|vpn|xray|telemt|galene] [--reconcile client,...]' >&2; exit 1; }
+          host="$1"
+          shift
+          scope=all
+          if [ "$#" -gt 0 ] && [ "$1" != --reconcile ]; then scope="$1"; shift; fi
+          extra=()
+          if [ "$#" -gt 0 ]; then
+            [ "$#" -eq 2 ] && [ "$1" = --reconcile ] || { echo 'Expected --reconcile client,...' >&2; exit 1; }
+            extra=("$1" "$2")
+          fi
+          export PINO_PROXY_SETTINGS=${../../resources/mosk-proxies.json}
+          export PINO_HALOS_PROXY_SETTINGS=${../../resources/halos-proxies.json}
+          export PINO_VPN_CLIENT=${../../scripts/vpn-client.py}
+          export PINO_SERVER_SECRETS=${../../scripts/server-secrets.py}
+          export PINO_PROVISION_SEND=${pinoProvisionSend}
+          export PATH=${lib.makeBinPath [ pkgs.amneziawg-tools pkgs.bitwarden-cli pkgs.git pkgs.openssh pkgs.nix pkgs.jq ]}:"$PATH"
+          exec ${pkgs.python3.withPackages (p: [ p.bcrypt ])}/bin/python3 ${../../scripts/server-secrets.py} "$host" --bitwarden --rotate "$scope" --deploy "''${extra[@]}"
+        '';
+      };
       install = {
         description = "Install and provision a server via SSH and kexec";
         usage = "<mosk|halos> <user@address> <public-key-file>";
@@ -40,10 +67,10 @@
       };
     };
     helpText = ''
-      Examples: pino host mosk server status
-                pino host mosk server vpn mode set private
-                pino host mosk server xray status
-                pino host mosk os rebuild
+      Examples: pino host exec mosk server status
+                pino host exec mosk server vpn mode set private
+                pino host exec mosk os rebuild
+                pino host rotate mosk
       Uses your configured SSH identity and normal host-key verification.
       Hosts are discovered from nixosConfigurations in this checkout. Configure
       an SSH alias for any host you want to reach.
@@ -51,6 +78,7 @@
       install/rescue require an SSH public-key file and ask before erasing /dev/vda.
     '';
     script = ''
+      if [ "''${1:-}" = exec ]; then shift; fi
       hosts="$(${pkgs.nix}/bin/nix eval --json --apply builtins.attrNames ${lib.escapeShellArg "path:${config.pino.configDir}#nixosConfigurations"})" || {
         echo 'Cannot read hosts from the configured NixOS checkout.' >&2; exit 1
       }
