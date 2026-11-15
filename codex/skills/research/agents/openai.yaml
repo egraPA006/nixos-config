@@ -1,0 +1,4 @@
+interface:
+  display_name: "Independent Research"
+  short_description: "Исследование с независимыми вопросами и проверкой"
+  default_prompt: "Используй $research: исследуй вопрос с независимой проверкой."

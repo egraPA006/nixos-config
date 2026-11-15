@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop with Review"
+  short_description: "Разработка с независимыми тестами и ревью"
+  default_prompt: "Используй $develop: реализуй задачу с независимыми тестами и ревью."

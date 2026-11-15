@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "verified_on": "2026-11-12",
+  "source": "Historical subscription candidate IDs from the original bootstrap; availability on the target runtime is unverified",
+  "notes": [
+    "Candidates are historical and must be checked against the target runtime; no availability or quality guarantee."
+  ],
+  "models": [
+    {
+      "id": "gpt-6-luna",
+      "route": "subscription",
+      "tiers": [
+        "simple"
+      ],
+      "usd_per_million_tokens": null
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "route": "subscription",
+      "tiers": [
+        "standard-code"
+      ],
+      "usd_per_million_tokens": null
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "route": "subscription",
+      "tiers": [
+        "standard",
+        "deep",
+        "coordinator",
+        "reviewer"
+      ],
+      "usd_per_million_tokens": null
+    },
+    {
+      "id": "gpt-6-astra",
+      "route": "subscription",
+      "tiers": [
+        "deep",
+        "expert"
+      ],
+      "usd_per_million_tokens": null
+    }
+  ],
+  "defaults": {
+    "coordinator": "gpt-6.1-sol",
+    "reviewer": "gpt-6.1-sol",
+    "expert": "gpt-6-astra",
+    "reasoning_effort": "medium",
+    "runner_reasoning_effort": "low"
+  }
+}
