@@ -42,6 +42,7 @@
       { services.hardware.openrgb.package = nixpkgs-openrgb.legacyPackages.x86_64-linux.openrgb; }
     ];
   in {
+    packages.x86_64-linux.clashmi = pkgs.callPackage ./pkgs/clashmi.nix { };
     packages.x86_64-linux.server-secrets = pkgs.writeShellApplication {
       name = "pino-server-secrets";
       runtimeInputs = [ pkgs.amneziawg-tools pkgs.git pkgs.bitwarden-cli ];

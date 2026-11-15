@@ -284,6 +284,12 @@ For `re-1`, `pino os provision` currently retrieves these records:
 | Secure Note `pino-vpn-client-re-1-mosk` | `/etc/amneziawg/mosk.conf` |
 | Secure Note `pino-vpn-client-re-1-halos` | `/etc/amneziawg/halos.conf` |
 | Secure Note `pino-hotspot-re-1` | `/etc/NetworkManager/system-connections/pino-vpn-share.nmconnection` |
+| Secure Note `pino-clashmi-subscription` | `~/.config/pino/clashmi-subscription` |
+
+For Clash Mi on either desktop, save the Clash/Mihomo subscription URL as the
+entire Notes value of `pino-clashmi-subscription`. After `pino os provision`,
+Clash Mi creates or updates the `Pino` profile on its next full launch. Existing
+profiles and the current selection are retained. Subscription URLs are private.
 
 These must already exist; provisioning does not generate a new client identity
 or register SSH public keys with GitHub. Browser, Steam, Bitwarden Desktop, Codex

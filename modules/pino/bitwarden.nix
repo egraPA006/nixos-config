@@ -13,13 +13,16 @@ let
   };
   secrets = config.pino.provision.secrets;
   sshKeys = config.pino.provision.sshKeys;
+  userSecrets = config.pino.provision.userSecrets;
   installCommands = lib.concatMapStringsSep "\n" (key:
     "provision_step ${lib.escapeShellArg key.item} install_ssh_key ${lib.escapeShellArg key.item} ${lib.escapeShellArg key.target}"
   ) sshKeys + "\n" + lib.concatMapStringsSep "\n" (secret:
     "provision_step ${lib.escapeShellArg secret.item} install_note ${lib.concatStringsSep " " (map lib.escapeShellArg ([ secret.item secret.target ] ++ secret.units))}"
-  ) secrets;
+  ) secrets + "\n" + lib.concatMapStringsSep "\n" (secret:
+    "provision_step ${lib.escapeShellArg secret.item} install_user_note ${lib.escapeShellArg secret.item} ${lib.escapeShellArg secret.target}"
+  ) userSecrets;
   provisionScript = builtins.replaceStrings [ "@declaredCount@" "@declaredSecrets@" "@afterDeclared@" "@configDir@" "@cmp@" ]
-    [ (toString (builtins.length secrets + builtins.length sshKeys)) installCommands "" (lib.escapeShellArg config.pino.configDir) "${pkgs.diffutils}/bin/cmp" ]
+    [ (toString (builtins.length secrets + builtins.length sshKeys + builtins.length userSecrets)) installCommands "" (lib.escapeShellArg config.pino.configDir) "${pkgs.diffutils}/bin/cmp" ]
     (builtins.readFile ./bitwarden.sh);
   provisionSend = pkgs.writeShellScript "pino-provision-send-internal" provisionScript;
 in
@@ -28,6 +31,11 @@ in
     type = lib.types.listOf secretType;
     default = [ ];
     description = "Runtime files installed locally from Bitwarden for active profiles";
+  };
+  options.pino.provision.userSecrets = lib.mkOption {
+    type = lib.types.listOf secretType;
+    default = [ ];
+    description = "Runtime secret files owned by the local user";
   };
   options.pino.provision.sshKeys = lib.mkOption {
     type = lib.types.listOf (lib.types.submodule {

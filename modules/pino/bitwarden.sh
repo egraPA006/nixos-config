@@ -114,6 +114,19 @@ install_ssh_key() {
   chmod 0644 "$target.pub" || return 1
 }
 
+install_user_note() {
+  local item="$1" target="$2" payload parent
+  [[ "$item" =~ ^[A-Za-z0-9_.-]+$ ]] || return 1
+  validate_target "$target" || return 1
+  [[ "$target" == "$HOME/"* ]] || return 1
+  parent="$(dirname "$target")"
+  [ ! -L "$target" ] || return 1
+  payload="$(stream_note "$item")" || return 1
+  [ -n "$payload" ] || return 1
+  install -d -m 0700 "$parent" || return 1
+  printf '%s\n' "$payload" | install -m 0600 /dev/stdin "$target"
+}
+
 provision_step() {
   local item="$1"
   shift

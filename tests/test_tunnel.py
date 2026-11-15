@@ -61,6 +61,24 @@ class TunnelTests(unittest.TestCase):
             self.assertIn("set org.gnome.system.proxy mode manual", log)
             self.assertTrue(log.rstrip().endswith("set org.gnome.system.proxy mode none"))
 
+    def test_split_off_works_when_awg_is_active(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "systemctl").write_text("#!/bin/sh\n[ \"$1\" = list-units ] && echo amneziawg@mosk.service\nexit 0\n")
+            (root / "gsettings").write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HOME/gsettings.log\"\n")
+            (root / "systemctl").chmod(0o755)
+            (root / "gsettings").chmod(0o755)
+            env = {**os.environ, "HOME": directory, "XDG_CONFIG_HOME": str(root / "config"),
+                   "GSETTINGS": str(root / "gsettings"), "PATH": directory + ":" + os.environ["PATH"]}
+            marker = root / "config/pino/chromium-proxy"
+            marker.parent.mkdir(parents=True)
+            marker.touch()
+            result = subprocess.run(["bash", str(ROOT / "modules/pino/vpn.sh"), "split", "off"],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(marker.exists())
+            self.assertIn("set org.gnome.system.proxy mode none", (root / "gsettings.log").read_text())
+
     def test_supervisor_refuses_old_awg_selection_before_changing_routes(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(tunnel, "STATE", Path(directory)), \
              patch.object(tunnel, "run") as run:

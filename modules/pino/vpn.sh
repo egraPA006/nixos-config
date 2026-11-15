@@ -9,6 +9,11 @@ share_state=/run/pino-vpn-share
 
 valid_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,14}$ ]]; }
 
+proxy_off() {
+  "$GSETTINGS" set org.gnome.system.proxy mode none
+  rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/pino/chromium-proxy"
+}
+
 connections() {
   local config
   shopt -s nullglob
@@ -166,6 +171,7 @@ case "${1:-}" in
     else
       sudo test -f "/etc/pino/xray-client/$name.json" || { echo "Xray connection is not installed: $name" >&2; exit 1; }
     fi
+    proxy_off
     share_stop
     sudo "$PINO_TUNNEL" disconnect
     stop_active
@@ -184,6 +190,7 @@ case "${1:-}" in
     ;;
   disconnect)
     name="${2:-all}"
+    proxy_off
     share_stop
     if [ "$name" = all ]; then
       sudo "$PINO_TUNNEL" disconnect
@@ -211,13 +218,13 @@ case "${1:-}" in
     fi
     ;;
   split)
-    if active_connection >/dev/null 2>&1; then
-      echo 'Split modes apply to Xray only; AWG uses its own routes.' >&2
-      exit 1
-    fi
     proxy_marker="${XDG_CONFIG_HOME:-$HOME/.config}/pino/chromium-proxy"
     case "${2:-}" in
       on|chromium)
+        if active_connection >/dev/null 2>&1; then
+          echo 'Split modes apply to Xray only; AWG uses its own routes.' >&2
+          exit 1
+        fi
         systemctl is-active --quiet pino-tunnel.service || { echo 'Connect Xray first.' >&2; exit 1; }
         "$GSETTINGS" set org.gnome.system.proxy mode none
         if [ "$2" = on ]; then
@@ -231,12 +238,11 @@ case "${1:-}" in
           mkdir -p "$(dirname "$proxy_marker")"
           : > "$proxy_marker"
         fi
-        echo 'Proxy mode updated. Fully restart Chromium to apply.'
+        echo 'Proxy mode updated.'
         ;;
       off)
-        "$GSETTINGS" set org.gnome.system.proxy mode none
-        rm -f "$proxy_marker"
-        echo 'Proxy disabled. Fully restart Chromium to apply.'
+        proxy_off
+        echo 'Proxy disabled.'
         ;;
       *) echo 'Usage: pino vpn split <on|off|chromium>' >&2; exit 1 ;;
     esac
