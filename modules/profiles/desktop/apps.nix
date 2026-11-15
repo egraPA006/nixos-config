@@ -22,7 +22,10 @@ in
   '';
   programs.chromium = {
     enable = true;
-    extensions = [ "nngceckbapebfimnlniiiahkandclblb" ];
+    extensions = [
+      "nngceckbapebfimnlniiiahkandclblb"
+      "eimadpbcbfnmbkopoojfekhnkhdbieeh"
+    ];
   };
 
   pino.provision.sshKeys = [

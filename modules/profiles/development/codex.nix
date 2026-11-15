@@ -3,6 +3,7 @@
 {
   home-manager.users.${config.pino.user.name}.programs.codex = {
     enable = true;
+    mutableSettings = true;
 
     # New cargo setup hooks require system AWS-LC, but codex only supplies
     # OpenSSL. Build the crate's bundled, matching AWS-LC after that hook.
@@ -15,6 +16,7 @@
     else pkgs.codex;
 
     settings = {
+      model = "gpt-6.1-terra";
       model_reasoning_effort = "medium";
 
       approval_policy = "on-request";
